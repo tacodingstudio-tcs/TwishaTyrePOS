@@ -114,7 +114,7 @@ export const tyreSalesRoutes: FastifyPluginAsync = async (app) => {
     const cfg  = await branchConfig(req)
 
     const run_ = () => createSale(req, body, cfg)
-    const headerKey = req.headers['idempotency-key'] as string | undefined
+    const headerKey = (req.headers['idempotency-key'] as string | undefined)?.trim() || undefined
     // Without a client key a double-click must still not sell (and deduct) twice: key on the content
     // plus a 20-second window. A deliberate repeat of the *same* sale a minute later is a new sale.
     const derivedKey = 'tsale:' + createHash('sha1').update(
@@ -267,7 +267,9 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
     ?? (due && regNo ? addDays(date, due.days) : undefined)
   const nextServiceFor = nextServiceDate ? (body.nextServiceDate ? 'Tyre check' : due?.label) : undefined
 
-  const invoice = await createInvoice({
+  let invoice: Awaited<ReturnType<typeof createInvoice>>
+  try {
+  invoice = await createInvoice({
     txnType: 'sale_invoice',
     partyId,
     date,
@@ -308,6 +310,12 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
     db: req.db, branchId: req.branchId, schemaName: req.schemaName,
     userId: req.userId, role: req.role, branchDomainType: 'tyre',
   })
+  } catch (err) {
+    // Two counters sold the last unit at the same moment: the core's row lock lets one through and
+    // rejects the other with a plain Error — report it as a conflict, not a server fault.
+    if (/insufficient stock/i.test((err as Error).message)) throw httpError(409, (err as Error).message)
+    throw err
+  }
 
   // ── After-sale records — never allowed to lose a sale that is already on the books ─────────
   const result: Record<string, unknown> = { invoice, warnings }
@@ -360,6 +368,7 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
            "nextServiceDate" = COALESCE(EXCLUDED."nextServiceDate", ${tbl(req.schemaName, 'tyre_vehicles')}."nextServiceDate"),
            "nextServiceKm"   = COALESCE(EXCLUDED."nextServiceKm", ${tbl(req.schemaName, 'tyre_vehicles')}."nextServiceKm"),
            "nextServiceFor"  = CASE WHEN EXCLUDED."nextServiceDate" IS NOT NULL THEN EXCLUDED."nextServiceFor" ELSE ${tbl(req.schemaName, 'tyre_vehicles')}."nextServiceFor" END,
+           "isActive"        = true,
            "updatedAt"       = NOW()
          RETURNING *`,
         req.branchId, regNo, partyId ?? null, vehicleType ?? 'car', body.makeModel ?? null,

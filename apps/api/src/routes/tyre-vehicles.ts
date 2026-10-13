@@ -75,8 +75,14 @@ export const tyreVehicleRoutes: FastifyPluginAsync = async (app) => {
   app.post('/vehicles', async (req, reply) => {
     requireWrite(req)
     const body = VehicleBody.parse(req.body)
-    const dup = await q1(req, `SELECT id FROM ${tbl(req.schemaName, 'tyre_vehicles')} WHERE "branchId" = $1::uuid AND "regNo" = $2`, req.branchId, body.regNo)
-    if (dup) throw httpError(409, `Vehicle ${body.regNo} is already saved`)
+    const dup = await q1<any>(req, `SELECT id, "isActive" FROM ${tbl(req.schemaName, 'tyre_vehicles')} WHERE "branchId" = $1::uuid AND "regNo" = $2`, req.branchId, body.regNo)
+    if (dup?.isActive) throw httpError(409, `Vehicle ${body.regNo} is already saved`)
+    if (dup) {
+      // deleted earlier — bring it back with the details just entered
+      const { regNo: _r, ...fields } = body
+      const back = await updateRow(req, 'tyre_vehicles', dup.id, { ...fields, isActive: true })
+      return reply.status(200).send(back)
+    }
     const row = await insertRow(req, 'tyre_vehicles', { ...body, branchId: req.branchId })
     return reply.status(201).send(row)
   })

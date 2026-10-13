@@ -12,7 +12,7 @@ docker compose -f docker/docker-compose.yml up -d postgres redis   # PG :5435, R
 cp .env.example apps/api/.env && pnpm db:migrate:prod
 pnpm --filter @billing/api dev      # API :3200        pnpm --filter @billing/web dev   # Web :5175
 pnpm seed                           # demo shop: owner 9200000001 / 1111
-pnpm test:api                       # 48 integration tests — needs the API running
+pnpm test:api                       # 197 integration tests (3 suites) — needs the API running
 pnpm provision:all                  # re-apply tenant DDL to existing tenants after tyre-ddl.ts changes
 (cd apps/api && npx tsc --noEmit)   # typecheck (tests are excluded from the build; ts-jest checks them)
 (cd apps/web && npx tsc --noEmit)
@@ -53,9 +53,20 @@ pnpm provision:all                  # re-apply tenant DDL to existing tenants af
    add the `::uuid/::date/::timestamptz` casts (add new columns to `COL_CAST`).
 10. Domain-data / item-meta Zod schemas in the registry are `.strict()` — a new bill field must be added there.
 11. Single business: don't add branch pickers; `POST /api/branches` is intentionally 403.
-12. Automatic WhatsApp sends are opt-in per business (`notify_*` in branch config). Never switch one on by default.
+12. **Viewers are read-only globally**: a `preHandler` in `server.ts` returns 403 for every non-GET from a
+    viewer behind the login. Don't rely on (or add) per-route checks for that.
+13. NUL characters in any query/body string are rejected up front (`preValidation` hook) — Postgres would
+    otherwise throw a 500.
+14. Automatic WhatsApp sends are opt-in per business (`notify_*` in branch config). Never switch one on by default.
 
 ## Testing notes
+
+Three suites in `apps/api/src/__tests__`: `tyre.test.ts` (the module), `tyre-edge.test.ts` (auth/roles,
+validation, hostile strings, cross-business access, races, idempotency, the daily alert job) and
+`tyre-core.test.ts` (the billing-core flows a shop uses: purchasing, payments, returns, expenses, staff,
+reports). To test the production image rather than dev:
+`docker build -f docker/Dockerfile.api -t tyre-api:test .`, run it with `FORCE_SEARCH_PATH=true` against the
+local Postgres/Redis (`host.docker.internal`), then `TEST_API_PORT=<mapped port> npx jest --runInBand`.
 
 `tyre.test.ts` registers its own tenants (phones `7xxxxxxxxx`, purged by `global-setup.ts`), so it never
 depends on seed data. The jest harness adds a unique `Idempotency-Key` to POSTs; pass an explicit header

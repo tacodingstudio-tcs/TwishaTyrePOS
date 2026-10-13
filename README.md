@@ -59,7 +59,7 @@ repo can run at once.
 ## Tests
 
 ```bash
-pnpm test:api     # 48 integration tests against the running API (self-provisioning throwaway tenants)
+pnpm test:api     # 197 integration tests against the running API (self-provisioning throwaway tenants)
 (cd apps/api && npx tsc --noEmit)
 (cd apps/web && npx tsc --noEmit)
 ```
