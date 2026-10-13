@@ -1,0 +1,10 @@
+{
+  "framework": null,
+  "installCommand": "pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm --filter @billing/web build",
+  "outputDirectory": "apps/web/dist",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://tyre-api.onrender.com/api/:path*" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
