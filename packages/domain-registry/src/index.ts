@@ -100,7 +100,18 @@ const TyreItemMeta = z.object({
   warranty_months: z.number().int().min(0).max(120).optional(),
   warranty_until:  z.string().max(10).optional(),
   service_type:  z.enum(SERVICE_TYPES).optional(),
+  // service jobs: how many wheels were done, and alignment / balancing readings (free keys, short values)
+  wheels:        z.number().int().min(1).max(30).optional(),
+  readings:      z.object({
+    before: z.record(z.string().max(30), z.string().max(20)).optional(),
+    after:  z.record(z.string().max(30), z.string().max(20)).optional(),
+  }).strict().optional(),
 }).strict()
+
+/** Reading names offered on the alignment form (the keys are what get stored / printed). */
+export const ALIGNMENT_READING_KEYS = [
+  'Front toe', 'Rear toe', 'Camber L', 'Camber R', 'Caster L', 'Caster R',
+] as const
 
 // =============================================================================
 // DOMAIN REGISTRY — the single config object all layers read from
@@ -121,8 +132,12 @@ export const DOMAIN_REGISTRY = {
       allow_below_cost:       false,      // false = warn when a line is sold under purchase price
       // After-sales
       default_warranty_months: 0,         // used when the product itself has none
-      service_reminder_days:  180,        // remind to rotate / align this long after a fitting
+      service_reminder_days:  180,        // remind this long after a fitting / rotation / puncture
       service_reminder_km:    10000,
+      alignment_reminder_days: 180,       // wheel alignment: typically every 6 months / 10,000 km
+      alignment_reminder_km:  10000,
+      balancing_reminder_days: 90,        // wheel balancing: typically every 3 months / 5,000 km
+      balancing_reminder_km:  5000,
       warranty_alert_days:    30,
       // Stock
       dead_stock_days:        90,         // no sale for this long = "dead stock"

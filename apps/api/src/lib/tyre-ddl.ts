@@ -34,6 +34,9 @@ export const TYRE_DDL: string[] = [
   UNIQUE ("branchId", "regNo")
 )`,
 
+  // What the next check is for ("Wheel alignment", "Wheel balancing", …) — shown on reminders.
+  `ALTER TABLE "tyre_vehicles" ADD COLUMN IF NOT EXISTS "nextServiceFor" TEXT`,
+
   // ── Warranty register ───────────────────────────────────────────────────────
   // One row per tyre unit sold with a serial number or a warranty period. Created by the
   // sale endpoint, so a claim is a lookup by serial / DOT / vehicle / phone.

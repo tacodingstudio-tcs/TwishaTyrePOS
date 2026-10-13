@@ -17,6 +17,7 @@ payments, aging, GST reports, purchase orders, stock, staff) inherited from the 
 | Area | Screens (sidebar) | Notes |
 |---|---|---|
 | **Counter** | Home · New Sale · Tyre Stock · All Bills · Customers | **New Sale** is one screen: vehicle no (known vehicles auto-fill), customer by name/mobile, size search (`205/55 R16`, `205 55 16`, `2055516` all match), fitting services as one-tap chips, serial / DOT / fitted position per tyre, old-tyre exchange, split cash/UPI/card, credit with due date. **Tyre Stock** is the size finder with brand/vehicle filters and margin (owner/manager only) |
+| **Alignment & balancing** | Alignment & Balancing (sidebar) | A service-only visit with no tyre: pick the services, wheels done, optional before/after alignment readings (printed on the bill). Each service has its own reminder interval — balancing 90 days / 5,000 km, alignment 180 days / 10,000 km, tyre fitting 180 days — set under *Edit business* |
 | **After-sales** | Vehicles · Warranty · Service Reminders · WhatsApp Messages | Every vehicle fitted, with tyre size and next check; warranty register searchable by serial / vehicle / mobile / bill, with claims (replaced / pro-rata / repaired / rejected); due-for-check list with one-tap WhatsApp; delivery log with retry |
 | **Money** | Money to Collect · Shop Costs · Sales & Margin · GST Reports · Charts | Sales and margin by size / brand / item / vehicle type, dead stock (money sitting on the shelf) |
 | **Stores (core)** | Stock levels · Items · Suppliers · Purchase orders · Goods receipts · Adjustments | Unchanged billing-platform modules; tyres are items with tyre attributes |
@@ -58,7 +59,7 @@ repo can run at once.
 ## Tests
 
 ```bash
-pnpm test:api     # 42 integration tests against the running API (self-provisioning throwaway tenants)
+pnpm test:api     # 48 integration tests against the running API (self-provisioning throwaway tenants)
 (cd apps/api && npx tsc --noEmit)
 (cd apps/web && npx tsc --noEmit)
 ```

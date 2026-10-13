@@ -12,7 +12,7 @@ docker compose -f docker/docker-compose.yml up -d postgres redis   # PG :5435, R
 cp .env.example apps/api/.env && pnpm db:migrate:prod
 pnpm --filter @billing/api dev      # API :3200        pnpm --filter @billing/web dev   # Web :5175
 pnpm seed                           # demo shop: owner 9200000001 / 1111
-pnpm test:api                       # 42 integration tests — needs the API running
+pnpm test:api                       # 48 integration tests — needs the API running
 pnpm provision:all                  # re-apply tenant DDL to existing tenants after tyre-ddl.ts changes
 (cd apps/api && npx tsc --noEmit)   # typecheck (tests are excluded from the build; ts-jest checks them)
 (cd apps/web && npx tsc --noEmit)

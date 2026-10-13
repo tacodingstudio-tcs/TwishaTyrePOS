@@ -11,6 +11,8 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { PartyCombobox, type PickedParty } from '@/components/ui/PartyCombobox'
 import { inr, num, VEHICLE_TYPE_LABEL, POSITION_LABEL, dotInfo } from '@/components/tyre/format'
 
+const ALIGNMENT_KEYS = ['Front toe', 'Rear toe', 'Camber L', 'Camber R', 'Caster L', 'Caster R']
+
 const POSITIONS = ['FL', 'FR', 'RL', 'RR', 'SP'] as const
 const PAY_METHODS: Array<[string, string]> = [['cash', 'Cash'], ['upi', 'UPI'], ['card', 'Card'], ['bank_transfer', 'Bank'], ['cheque', 'Cheque']]
 const DEFAULT_GST = 18
@@ -33,7 +35,14 @@ interface Line {
   dots: string
   positions: string[]
   warrantyMonths?: number
+  serviceType?: string
+  readingsBefore: Record<string, string>
+  readingsAfter: Record<string, string>
 }
+
+const cleanReadings = (r: Record<string, string>): Record<string, string> =>
+  Object.fromEntries(Object.entries(r).map(([k, v]) => [k, v.trim()]).filter(([, v]) => v !== ''))
+const nonEmpty = (r: Record<string, string>) => (Object.keys(r).length ? r : undefined)
 
 const splitList = (s: string) => s.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean)
 let seq = 0
@@ -48,6 +57,8 @@ function lineFromProduct(p: any, qty = 1): Line {
     qty, rate: Number(p.salePrice ?? 0), mrp: p.mrp ?? null, discountPct: 0,
     gstRate: p.gstRate > 0 ? Number(p.gstRate) : DEFAULT_GST,
     serials: '', dots: '', positions: [], warrantyMonths: Number(a.warranty_months ?? 0) || undefined,
+    serviceType: kind === 'service' ? a.service_type : undefined,
+    readingsBefore: {}, readingsAfter: {},
   }
 }
 
@@ -56,6 +67,7 @@ export function QuickSalePage() {
   const [sp] = useSearchParams()
   const role = useAuthStore((s) => s.user?.role)
   const readOnly = role === 'viewer'
+  const serviceMode = sp.get('mode') === 'service'      // alignment / balancing / fitting without selling a tyre
 
   // customer + vehicle
   const [party, setParty] = useState<PickedParty>({ name: '' })
@@ -142,7 +154,9 @@ export function QuickSalePage() {
     const perTyre = /tyre|wheel/.test(String(p.unit))
     setLines((ls) => {
       if (ls.some((l) => l.productId === p.id)) return ls
-      return [...ls, lineFromProduct(p, perTyre ? Math.max(1, tyreUnits) : 1)]
+      // per-wheel services default to the tyres in the basket, or 4 wheels on a service-only visit
+      const qty = perTyre ? Math.max(1, tyreUnits || (serviceMode ? 4 : 1)) : 1
+      return [...ls, lineFromProduct(p, qty)]
     })
   }
 
@@ -152,6 +166,7 @@ export function QuickSalePage() {
       return tyreApi.createSale({
         partyId: party.id,
         customer: !party.id && party.name.trim() ? { name: party.name.trim(), phone: phone.replace(/\D/g, '') || undefined } : undefined,
+        saleKind: serviceMode && !lines.some((l) => l.kind !== 'service') ? 'service_only' : undefined,
         vehicleNo: regNo.trim() || undefined,
         vehicleType: regNo.trim() ? vehicleType : undefined,
         odometer: odometer ? Number(odometer) : undefined,
@@ -162,6 +177,9 @@ export function QuickSalePage() {
           serialNos: splitList(l.serials), dotCodes: splitList(l.dots),
           positions: l.positions.filter(Boolean),
           warrantyMonths: l.warrantyMonths,
+          wheels: l.kind === 'service' && /wheel|tyre/.test(l.unit) ? Math.max(1, Math.round(l.qty)) : undefined,
+          readings: l.kind === 'service' && (Object.keys(cleanReadings(l.readingsBefore)).length > 0 || Object.keys(cleanReadings(l.readingsAfter)).length > 0)
+            ? { before: nonEmpty(cleanReadings(l.readingsBefore)), after: nonEmpty(cleanReadings(l.readingsAfter)) } : undefined,
         })),
         exchange: exch > 0 && Number(exchQty) > 0 ? { qty: Number(exchQty), value: exch } : undefined,
         payments,
@@ -189,7 +207,8 @@ export function QuickSalePage() {
 
   return (
     <div>
-      <PageHeader title="New sale" subtitle="Tyres, fitting and payment — one bill with warranty card" />
+      <PageHeader title={serviceMode ? 'Alignment, balancing & fitting' : 'New sale'}
+        subtitle={serviceMode ? 'Service visit — record the job and readings, take payment' : 'Tyres, fitting and payment — one bill with warranty card'} />
       <div className="p-6 grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
 
         <div className="xl:col-span-2 space-y-6">
@@ -226,7 +245,7 @@ export function QuickSalePage() {
           </section>
 
           {/* Finder */}
-          <section className="card p-5">
+          {!serviceMode && <section className="card p-5">
             <h2 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2"><Search className="w-4 h-4 text-gray-400" /> Find tyres</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
@@ -272,7 +291,7 @@ export function QuickSalePage() {
                 })}
               </div>
             )}
-          </section>
+          </section>}
 
           {/* Basket */}
           <section className="card">
@@ -281,7 +300,7 @@ export function QuickSalePage() {
               <span className="text-xs text-gray-500">{tyreUnits > 0 ? `${tyreUnits} tyre${tyreUnits === 1 ? '' : 's'}` : ''}</span>
             </div>
             {lines.length === 0 ? (
-              <p className="p-8 text-center text-sm text-gray-400">Search a size above, or add a fitting service below.</p>
+              <p className="p-8 text-center text-sm text-gray-400">{serviceMode ? 'Pick the services done on this vehicle below.' : 'Search a size above, or add a fitting service below.'}</p>
             ) : (
               <ul className="divide-y divide-gray-100">
                 {lines.map((l) => {
@@ -311,6 +330,24 @@ export function QuickSalePage() {
                         <div><label className="label">GST %</label>
                           <input type="number" min="0" max="28" className="input" value={l.gstRate} onChange={(e) => setLine(l.key, { gstRate: Number(e.target.value) })} /></div>
                       </div>
+                      {l.kind === 'service' && l.serviceType === 'alignment' && (
+                        <details className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                          <summary className="text-xs font-medium text-gray-700 cursor-pointer">Alignment readings (optional) — printed on the bill</summary>
+                          <div className="mt-3 grid grid-cols-[auto,1fr,1fr] gap-x-3 gap-y-2 items-center text-xs">
+                            <span />
+                            <span className="text-gray-500">Before</span><span className="text-gray-500">After</span>
+                            {ALIGNMENT_KEYS.map((k) => (
+                              <div key={k} className="contents">
+                                <span className="text-gray-600">{k}</span>
+                                <input className="input py-1 text-xs" value={l.readingsBefore[k] ?? ''} placeholder="reading"
+                                  onChange={(e) => setLine(l.key, { readingsBefore: { ...l.readingsBefore, [k]: e.target.value } })} />
+                                <input className="input py-1 text-xs" value={l.readingsAfter[k] ?? ''} placeholder="reading"
+                                  onChange={(e) => setLine(l.key, { readingsAfter: { ...l.readingsAfter, [k]: e.target.value } })} />
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      )}
                       {l.kind !== 'service' && ['tyre', 'tube', 'alloy_wheel', 'battery'].includes(l.kind) && (
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                           <div className="md:col-span-2">
@@ -373,14 +410,14 @@ export function QuickSalePage() {
             </dl>
           </section>
 
-          <section className="card p-5">
+          {!serviceMode && <section className="card p-5">
             <h2 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2"><Recycle className="w-4 h-4 text-gray-400" /> Old tyre in exchange</h2>
             <div className="grid grid-cols-2 gap-3">
               <div><label className="label">How many</label><input type="number" min="0" className="input" value={exchQty} onChange={(e) => setExchQty(e.target.value)} /></div>
               <div><label className="label">Allowance (₹)</label><input type="number" min="0" className="input" value={exchValue} onChange={(e) => setExchValue(e.target.value)} /></div>
             </div>
             <p className="text-[11px] text-gray-400 mt-2">The bill stays at full value; the allowance is settled against it and the old tyres go into scrap stock.</p>
-          </section>
+          </section>}
 
           <section className="card p-5">
             <h2 className="text-sm font-semibold text-gray-900 mb-3">Payment</h2>

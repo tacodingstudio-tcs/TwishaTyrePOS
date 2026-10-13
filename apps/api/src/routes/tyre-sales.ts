@@ -37,6 +37,12 @@ const SaleItem = z.object({
   dotCodes:       z.array(z.string().trim().regex(/^\d{4}$/, 'DOT is week + year, e.g. 2325')).max(50).default([]),
   positions:      z.array(z.enum(TYRE_POSITIONS)).max(50).default([]),
   warrantyMonths: z.number().int().min(0).max(120).optional(),
+  // service lines (alignment / balancing): wheels done and the readings taken
+  wheels:         z.number().int().min(1).max(30).optional(),
+  readings:       z.object({
+    before: z.record(z.string().max(30), z.string().max(20)).optional(),
+    after:  z.record(z.string().max(30), z.string().max(20)).optional(),
+  }).optional(),
 })
 
 const SaleBody = z.object({
@@ -80,7 +86,24 @@ function addMonths(dateStrYmd: string, months: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-const SERVICES_THAT_SET_REMINDER = new Set(['fitting', 'alignment', 'rotation', 'balancing'])
+/**
+ * When is the next check due, and for what? Each line that implies a follow-up proposes (days, km, label);
+ * the earliest wins, so a bill with alignment + balancing reminds for balancing first (3 months).
+ * Puncture repair and nitrogen do not start a reminder.
+ */
+function nextDue(lines: Array<{ kind: string; a: Record<string, any> }>, conf: (k: string) => any):
+  { days: number; km: number; label: string } | null {
+  const cands: Array<{ days: number; km: number; label: string }> = []
+  for (const l of lines) {
+    const st = l.a['service_type'] as string | undefined
+    if (l.kind === 'tyre') cands.push({ days: Number(conf('service_reminder_days')), km: Number(conf('service_reminder_km')), label: 'Tyre check & alignment' })
+    else if (l.kind === 'service' && st === 'alignment') cands.push({ days: Number(conf('alignment_reminder_days')), km: Number(conf('alignment_reminder_km')), label: 'Wheel alignment' })
+    else if (l.kind === 'service' && st === 'balancing') cands.push({ days: Number(conf('balancing_reminder_days')), km: Number(conf('balancing_reminder_km')), label: 'Wheel balancing' })
+    else if (l.kind === 'service' && (st === 'fitting' || st === 'rotation')) cands.push({ days: Number(conf('service_reminder_days')), km: Number(conf('service_reminder_km')), label: 'Tyre rotation & check' })
+  }
+  if (!cands.length) return null
+  return cands.reduce((a, b) => (b.days < a.days ? b : a))
+}
 
 export const tyreSalesRoutes: FastifyPluginAsync = async (app) => {
 
@@ -239,9 +262,10 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
   // ── Create the invoice ──────────────────────────────────────────────────────
   const regNo = body.vehicleNo ? normReg(body.vehicleNo) : undefined
   const creditDays = body.creditDays ?? undefined
-  const hasFitting = lines.some((l) => l.kind === 'tyre' || SERVICES_THAT_SET_REMINDER.has(l.a['service_type']))
+  const due = nextDue(lines, conf)
   const nextServiceDate = body.nextServiceDate
-    ?? (hasFitting && regNo ? addDays(date, Number(conf('service_reminder_days'))) : undefined)
+    ?? (due && regNo ? addDays(date, due.days) : undefined)
+  const nextServiceFor = nextServiceDate ? (body.nextServiceDate ? 'Tyre check' : due?.label) : undefined
 
   const invoice = await createInvoice({
     txnType: 'sale_invoice',
@@ -253,7 +277,7 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
       sale_kind: body.saleKind,
       vehicle_no: regNo, vehicle_type: vehicleType, odometer: body.odometer, fitted_by: body.fittedBy,
       exchange_qty: body.exchange?.qty ?? 0, exchange_value: exchangeValue,
-      next_service_km: body.nextServiceKm ?? (body.odometer && hasFitting ? body.odometer + Number(conf('service_reminder_km')) : undefined),
+      next_service_km: body.nextServiceKm ?? (body.odometer && due ? body.odometer + due.km : undefined),
       next_service_date: nextServiceDate,
       credit_days: creditDays,
       payment_splits: body.payments,
@@ -275,6 +299,8 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
           brand: l.a['brand'], size: sizeLabel,
           warranty_months: l.warrantyMonths || undefined, warranty_until: warrantyUntil,
           service_type: l.kind === 'service' ? l.a['service_type'] : undefined,
+          wheels: l.kind === 'service' ? (l.it.wheels ?? undefined) : undefined,
+          readings: l.kind === 'service' ? l.it.readings : undefined,
         },
       }
     }),
@@ -320,8 +346,8 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
       result['vehicle'] = await q1(req,
         `INSERT INTO ${tbl(req.schemaName, 'tyre_vehicles')}
            ("branchId","regNo","partyId","vehicleType","makeModel","tyreSize","ownerName","ownerPhone",
-            "lastServiceDate","lastOdometer","nextServiceDate","nextServiceKm")
-         VALUES ($1::uuid,$2,$3::uuid,$4,$5,$6,$7,$8,$9::date,$10,$11::date,$12)
+            "lastServiceDate","lastOdometer","nextServiceDate","nextServiceKm","nextServiceFor")
+         VALUES ($1::uuid,$2,$3::uuid,$4,$5,$6,$7,$8,$9::date,$10,$11::date,$12,$14)
          ON CONFLICT ("branchId","regNo") DO UPDATE SET
            "partyId"         = COALESCE(EXCLUDED."partyId", ${tbl(req.schemaName, 'tyre_vehicles')}."partyId"),
            "vehicleType"     = COALESCE($13::text, ${tbl(req.schemaName, 'tyre_vehicles')}."vehicleType"),
@@ -333,12 +359,13 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
            "lastOdometer"    = COALESCE(EXCLUDED."lastOdometer", ${tbl(req.schemaName, 'tyre_vehicles')}."lastOdometer"),
            "nextServiceDate" = COALESCE(EXCLUDED."nextServiceDate", ${tbl(req.schemaName, 'tyre_vehicles')}."nextServiceDate"),
            "nextServiceKm"   = COALESCE(EXCLUDED."nextServiceKm", ${tbl(req.schemaName, 'tyre_vehicles')}."nextServiceKm"),
+           "nextServiceFor"  = CASE WHEN EXCLUDED."nextServiceDate" IS NOT NULL THEN EXCLUDED."nextServiceFor" ELSE ${tbl(req.schemaName, 'tyre_vehicles')}."nextServiceFor" END,
            "updatedAt"       = NOW()
          RETURNING *`,
         req.branchId, regNo, partyId ?? null, vehicleType ?? 'car', body.makeModel ?? null,
         tyreLine?.a['size'] ?? null, customerName, customerPhone,
         date, body.odometer ?? null, nextServiceDate ?? null,
-        (invoice as any).domainData?.next_service_km ?? null, vehicleType ?? null)
+        (invoice as any).domainData?.next_service_km ?? null, vehicleType ?? null, nextServiceFor ?? null)
     }
   } catch (err) {
     warnings.push(`Vehicle record could not be updated: ${(err as Error).message}`)

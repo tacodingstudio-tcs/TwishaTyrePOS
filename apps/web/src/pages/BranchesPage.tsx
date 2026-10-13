@@ -48,6 +48,10 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
     warrantyMonths: String(cfg['default_warranty_months'] ?? 0),
     serviceDays: String(cfg['service_reminder_days'] ?? 180),
     serviceKm:  String(cfg['service_reminder_km'] ?? 10000),
+    alignDays:  String(cfg['alignment_reminder_days'] ?? 180),
+    alignKm:    String(cfg['alignment_reminder_km'] ?? 10000),
+    balDays:    String(cfg['balancing_reminder_days'] ?? 90),
+    balKm:      String(cfg['balancing_reminder_km'] ?? 5000),
     deadDays:   String(cfg['dead_stock_days'] ?? 90),
     serialRequired: Boolean(cfg['serial_required']),
     allowBelowCost: Boolean(cfg['allow_below_cost']),
@@ -75,6 +79,10 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
         default_warranty_months: Number(form.warrantyMonths) || 0,
         service_reminder_days: Number(form.serviceDays) || 180,
         service_reminder_km: Number(form.serviceKm) || 10000,
+        alignment_reminder_days: Number(form.alignDays) || 180,
+        alignment_reminder_km: Number(form.alignKm) || 10000,
+        balancing_reminder_days: Number(form.balDays) || 90,
+        balancing_reminder_km: Number(form.balKm) || 5000,
         dead_stock_days: Number(form.deadDays) || 90,
         serial_required: form.serialRequired,
         allow_below_cost: form.allowBelowCost,
@@ -168,6 +176,12 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
             <div className="grid grid-cols-3 gap-3">
               <div><label className="label">Remind after (days)</label><input type="number" min="30" max="720" className="input" value={form.serviceDays} onChange={set('serviceDays')} /></div>
               <div><label className="label">…or (km)</label><input type="number" min="1000" className="input" value={form.serviceKm} onChange={set('serviceKm')} /></div>
+              <div><label className="label">Alignment due after (days)</label><input type="number" min="30" max="720" className="input" value={form.alignDays} onChange={set('alignDays')} /></div>
+              <div><label className="label">…or (km)</label><input type="number" min="1000" className="input" value={form.alignKm} onChange={set('alignKm')} /></div>
+              <div />
+              <div><label className="label">Balancing due after (days)</label><input type="number" min="30" max="720" className="input" value={form.balDays} onChange={set('balDays')} /></div>
+              <div><label className="label">…or (km)</label><input type="number" min="1000" className="input" value={form.balKm} onChange={set('balKm')} /></div>
+              <div />
               <div><label className="label">Dead stock after (days)</label><input type="number" min="7" max="720" className="input" value={form.deadDays} onChange={set('deadDays')} /></div>
             </div>
           </div>

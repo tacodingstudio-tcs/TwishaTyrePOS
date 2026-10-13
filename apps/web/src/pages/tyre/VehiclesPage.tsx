@@ -133,7 +133,7 @@ export function RemindersPage() {
                       <Link to={`/tyre/vehicles/${r.id}`} className="font-mono font-medium text-primary-700 hover:underline">{r.regNo}</Link>
                       <div className="text-sm text-gray-700">{r.ownerName ?? '—'} {r.ownerPhone && <span className="text-gray-400">· {r.ownerPhone}</span>}</div>
                       <div className="text-xs text-gray-500">
-                        Due {fmtDate(r.nextServiceDate)}{r.overdueDays > 0 ? ` (${r.overdueDays} days ago)` : ''}
+                        {r.nextServiceFor ? `${r.nextServiceFor} — ` : ''}due {fmtDate(r.nextServiceDate)}{r.overdueDays > 0 ? ` (${r.overdueDays} days ago)` : ''}
                         {r.lastReminded ? ` · reminded ${fmtDate(r.lastReminded)}` : ''}
                       </div>
                     </div>

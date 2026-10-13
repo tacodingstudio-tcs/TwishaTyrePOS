@@ -60,6 +60,15 @@ positions, services), optional exchange, split payments, credit days.
 5. **Idempotency:** the client's `Idempotency-Key`, else a derived key (content + 20-second window), so a
    double-click never sells or deducts twice.
 
+### Services: alignment, balancing, fitting
+Services are catalogue items (`itemType = 'service'`, `service_type` in the attrs). On a bill, a service line
+may carry `wheels` and `readings` (`{ before, after }` maps such as "Front toe" → "0.45") in its item meta; both
+print under the line on the invoice. `/tyre/sale?mode=service` is the service-only screen (no finder, no exchange).
+The vehicle's **next check** is the earliest due among the bill's lines (`nextDue()` in `tyre-sales.ts`):
+tyre → `service_reminder_*`, alignment → `alignment_reminder_*`, balancing → `balancing_reminder_*`,
+fitting / rotation → `service_reminder_*`; puncture and nitrogen start none. `tyre_vehicles.nextServiceFor`
+stores *what* is due, and the WhatsApp reminder names it.
+
 ### Old-tyre exchange
 Under GST an exchange is a supply for non-monetary + monetary consideration, so **tax stays on the full
 price**. The allowance is recorded as a payment of method `exchange` allocated to the bill (so status, party

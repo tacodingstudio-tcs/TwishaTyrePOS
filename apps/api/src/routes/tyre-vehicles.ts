@@ -26,6 +26,7 @@ const VehicleBody = z.object({
   lastOdometer:    z.number().int().nonnegative().max(2_000_000).nullable().optional(),
   nextServiceDate: dateStr.nullable().optional(),
   nextServiceKm:   z.number().int().positive().max(2_500_000).nullable().optional(),
+  nextServiceFor:  z.string().trim().max(60).nullable().optional(),
   remindersOff:    z.boolean().optional(),
   notes:           z.string().max(500).nullable().optional(),
 })
@@ -140,7 +141,7 @@ export const tyreVehicleRoutes: FastifyPluginAsync = async (app) => {
     const horizon = addDays(todayStr(), days)
     const rows = await q<any>(req,
       `SELECT v.id, v."regNo", v."vehicleType", v."makeModel", v."tyreSize", v."lastServiceDate", v."nextServiceDate",
-              v."nextServiceKm", v."lastOdometer", v."remindersOff",
+              v."nextServiceKm", v."nextServiceFor", v."lastOdometer", v."remindersOff",
               COALESCE(v."ownerName", p.name) AS "ownerName", COALESCE(v."ownerPhone", p.phone) AS "ownerPhone",
               (SELECT MAX(n."createdAt") FROM ${tbl(req.schemaName, 'tyre_notifications')} n
                 WHERE n."refType" = 'vehicle' AND n."refId" = v.id AND n.kind = 'service_due') AS "lastReminded"

@@ -171,7 +171,7 @@ export async function notifyServiceDue(ctx: Ctx, vehicleId: string, opts: { forc
   const name = v.ownerName ?? v.partyName ?? 'Customer'
   const message = [
     `*${biz.header.name}*`,
-    `Hello ${name}, your vehicle ${v.regNo} is due for a tyre check — wheel alignment / balancing / rotation.`,
+    `Hello ${name}, your vehicle ${v.regNo} is due for ${v.nextServiceFor ? String(v.nextServiceFor).toLowerCase() : 'a tyre check — wheel alignment / balancing / rotation'}.`,
     v.lastServiceDate ? `Last fitting: ${fmt(v.lastServiceDate)}.` : null,
     biz.header.phone ? `Call ${biz.header.phone} to book a slot.` : 'Drop in any time.',
   ].filter(Boolean).join('\n')

@@ -7,7 +7,7 @@ import {
   LayoutDashboard, FileText, Warehouse, Users, LogOut, Plus, Sparkles, BarChart2, Building2, ShoppingCart,
   ClipboardCheck, ArrowLeftRight, Package, ChevronDown, TrendingDown, UserCheck, GitBranch, Clock,
   RefreshCw, Wallet, TrendingUp, MessageCircle, ReceiptText, LineChart, Container,
-  CircleDot, Car, ShieldCheck, BellRing,
+  CircleDot, Car, ShieldCheck, BellRing, Wrench,
 } from 'lucide-react'
 import { usePendingApprovals } from '@/hooks/useApi'
 import { CelebrationsPanel } from '@/components/CelebrationsPanel'
@@ -19,6 +19,7 @@ const OPERATIONS: NavItem[] = [
   { to: '/',                   label: 'Home',            icon: LayoutDashboard, end: true },
   { to: '/tyre/sale',          label: 'New Sale',        icon: ReceiptText },
   { to: '/tyre/stock',         label: 'Tyre Stock',      icon: CircleDot },
+  { to: '/tyre/sale?mode=service', label: 'Alignment & Balancing', icon: Wrench },
   { to: '/invoices',           label: 'All Bills',       icon: FileText },
   { to: '/parties',            label: 'Customers',       icon: Users },
 ]
@@ -63,11 +64,22 @@ const linkCls = ({ isActive }: { isActive: boolean }) =>
   }`
 
 function Section({ title, items }: { title?: string; items: NavItem[] }) {
+  const location = useLocation()
+  // Links that differ only by query string (New Sale vs Alignment & Balancing) need their own active test.
+  const serviceMode = location.search.includes('mode=service')
   return (
     <div className="space-y-1">
       {title && <div className="px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400">{title}</div>}
       {items.map(({ to, label, icon: Icon, end }) => (
-        <NavLink key={to} to={to} end={end} className={linkCls}>
+        <NavLink key={to} to={to} end={end}
+          className={(s) => {
+            if (to.startsWith('/tyre/sale')) {
+              const wantsService = to.includes('mode=service')
+              const active = location.pathname === '/tyre/sale' && wantsService === serviceMode
+              return linkCls({ ...s, isActive: active })
+            }
+            return linkCls(s)
+          }}>
           <Icon className="w-4 h-4" />
           <span className="flex-1">{label}</span>
         </NavLink>

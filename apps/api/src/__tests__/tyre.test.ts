@@ -501,6 +501,93 @@ describe('Tyre shop', () => {
   })
 
   // ═══════════════════════════════════════════════════════════════════════════
+  describe('alignment & balancing as services', () => {
+    let balancing: any
+
+    beforeAll(async () => {
+      const svc = await find(owner, { kind: 'service', limit: 50 })
+      balancing = svc.find((p) => p.sku === 'SVC-BAL')
+    })
+
+    const plusDays = (n: number) => new Date(Date.now() + 5.5 * 3600_000 + n * 86_400_000).toISOString().slice(0, 10)
+
+    test('a service-only visit: no tyre, no stock, no warranty — readings and wheels are kept on the bill', async () => {
+      const r = await sale(owner, {
+        vehicleNo: 'GJ05SV1111', vehicleType: 'car', odometer: 30000, saleKind: 'service_only',
+        customer: { name: 'Service Only', phone: '9825101111' },
+        items: [
+          { productId: alignment.id, qty: 1, readings: { before: { 'Front toe': '0.45', 'Camber L': '-1.2' }, after: { 'Front toe': '0.02', 'Camber L': '-0.5' } } },
+          { productId: balancing.id, qty: 4, wheels: 4 },
+        ],
+        payments: [{ method: 'upi', amount: 1000 }],       // (600 + 4×100) × 1.18 = 1180
+      })
+      expect(r.status).toBe(201)
+      expect(r.data.warranty).toHaveLength(0)
+      expect(Number(r.data.invoice.grandTotal)).toBeCloseTo(1180, 0)
+      const meta = r.data.invoice.items.find((i: any) => i.itemMeta?.service_type === 'alignment')?.itemMeta
+      expect(meta.readings.before['Front toe']).toBe('0.45')
+      expect(meta.readings.after['Camber L']).toBe('-0.5')
+      const bal = r.data.invoice.items.find((i: any) => i.itemMeta?.service_type === 'balancing')?.itemMeta
+      expect(bal.wheels).toBe(4)
+    })
+
+    test('the next check is for the earliest-due service — balancing (3 months) before alignment (6 months)', async () => {
+      const v = (await owner.api.get('/api/tyre/vehicles/lookup', { params: { regNo: 'GJ05SV1111' } })).data.vehicle
+      expect(v.nextServiceFor).toBe('Wheel balancing')
+      expect(String(v.nextServiceDate).slice(0, 10)).toBe(plusDays(90))
+      expect(Number(v.nextServiceKm)).toBe(30000 + 5000)
+    })
+
+    test('alignment alone is due after the alignment interval, and the reminder says so', async () => {
+      const r = await sale(owner, {
+        vehicleNo: 'GJ05SV2222', odometer: 12000, customer: { name: 'Align Only', phone: '9825102222' },
+        items: [{ productId: alignment.id, qty: 1 }], payments: [{ method: 'cash', amount: 708 }],
+      })
+      expect(r.status).toBe(201)
+      const v = (await owner.api.get('/api/tyre/vehicles/lookup', { params: { regNo: 'GJ05SV2222' } })).data.vehicle
+      expect(v.nextServiceFor).toBe('Wheel alignment')
+      expect(String(v.nextServiceDate).slice(0, 10)).toBe(plusDays(180))
+      expect(Number(v.nextServiceKm)).toBe(12000 + 10000)
+
+      await owner.api.patch(`/api/tyre/vehicles/${v.id}`, { nextServiceDate: today(-1) })
+      const due = (await owner.api.get('/api/tyre/reminders', { params: { days: 0 } })).data
+      expect(due.find((x: any) => x.id === v.id)?.nextServiceFor).toBe('Wheel alignment')
+      await owner.api.post(`/api/tyre/vehicles/${v.id}/remind`)
+      const log = (await owner.api.get('/api/tyre/notifications', { params: { refId: v.id } })).data.data
+      expect(log[0].message).toMatch(/wheel alignment/i)
+    })
+
+    test('a puncture repair does not start a reminder', async () => {
+      const svc = await find(owner, { kind: 'service', limit: 50 })
+      const puncture = svc.find((p) => p.sku === 'SVC-PNC')
+      const r = await sale(owner, {
+        vehicleNo: 'GJ05SV3333', customer: { name: 'Puncture', phone: '9825103333' },
+        items: [{ productId: puncture.id, qty: 1 }], payments: [{ method: 'cash', amount: 177 }],
+      })
+      expect(r.status).toBe(201)
+      const v = (await owner.api.get('/api/tyre/vehicles/lookup', { params: { regNo: 'GJ05SV3333' } })).data.vehicle
+      expect(v.nextServiceDate).toBeNull()
+    })
+
+    test('the bill PDF prints the readings', async () => {
+      const bills = (await owner.api.get('/api/tyre/vehicles', { params: { search: 'GJ05SV1111' } })).data.data
+      const detail = (await owner.api.get(`/api/tyre/vehicles/${bills[0].id}`)).data
+      const pdf = await owner.api.get(`/api/tyre/invoices/${detail.bills[0].id}/pdf`, { responseType: 'arraybuffer' })
+      expect(pdf.status).toBe(200)
+      expect(Buffer.from(pdf.data).slice(0, 5).toString()).toBe('%PDF-')
+    })
+
+    test('readings with an unknown shape are refused', async () => {
+      const r = await sale(owner, {
+        vehicleNo: 'GJ05SV4444', customer: { name: 'Bad Readings', phone: '9825104444' },
+        items: [{ productId: alignment.id, qty: 1, readings: { before: { 'Front toe': 5 } } }], payments: [],
+      })
+      expect(r.status).toBeGreaterThanOrEqual(400)
+      expect(r.status).toBeLessThan(500)
+    })
+  })
+
+  // ═══════════════════════════════════════════════════════════════════════════
   describe('shared pickers', () => {
     test('supplier and customer pickers include parties of type "both"', async () => {
       const both = (await owner.api.post('/api/parties', { type: 'both', name: 'Dual Role Tyres' })).data

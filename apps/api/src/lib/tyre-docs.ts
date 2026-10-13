@@ -71,7 +71,13 @@ export async function loadInvoiceDoc(ctx: Ctx, invoiceId: string): Promise<{ dat
     vehicleNo: dd['vehicle_no'] ?? null, odometer: dd['odometer'] ?? null, fittedBy: dd['fitted_by'] ?? null,
     lines: items.map((it) => {
       const m = (it.itemMeta ?? {}) as Record<string, any>
-      const detail = [m['brand'], m['size']].filter(Boolean).join(' · ')
+      const reading = (r: Record<string, string> | undefined) => r ? Object.entries(r).map(([k, v]) => `${k} ${v}`).join(', ') : ''
+      const detail = [
+        m['brand'], m['size'],
+        m['wheels'] ? `${m['wheels']} wheel${m['wheels'] === 1 ? '' : 's'}` : null,
+        m['readings']?.before ? `Before: ${reading(m['readings'].before)}` : null,
+        m['readings']?.after ? `After: ${reading(m['readings'].after)}` : null,
+      ].filter(Boolean).join(' · ')
       return {
         description: String(it.description ?? ''),
         hsn: it.hsnSacCode ?? null, qty: Number(it.qty), unit: it.unit ?? null, rate: Number(it.rate),
