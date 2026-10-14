@@ -292,6 +292,15 @@ describe('Billing core flows in a tyre shop', () => {
       expect((await call(owner, 'POST', `/api/invoices/${paid.data.invoice.id}/cancel`, {})).status).toBe(422)
     })
 
+    test('every document tab on the Bills screen can be listed (Orders used to fail validation)', async () => {
+      for (const txnType of ['sale_invoice', 'purchase_invoice', 'quotation', 'proforma', 'sales_order', 'delivery_challan',
+        'credit_note', 'debit_note', 'sale_return', 'purchase_return']) {
+        const r = await owner.api.get('/api/invoices', { params: { txnType } })
+        expect([txnType, r.status]).toEqual([txnType, 200])
+      }
+      expect((await owner.api.get('/api/invoices', { params: { txnType: 'not_a_type' } })).status).toBe(422)
+    })
+
     test('invoice list filters and the daily / weekly summaries answer', async () => {
       for (const params of [{}, { status: 'paid' }, { txnType: 'sale_invoice' }, { partyId: customer.id }, { search: 'SHAR' }, { limit: 5, page: 2 }]) {
         const r = await owner.api.get('/api/invoices', { params })
