@@ -34,7 +34,7 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
   app.get('/', async (req) => {
     const TXN_TYPES = ['sale_invoice','purchase_invoice','credit_note','debit_note',
       'sale_return','purchase_return','proforma','quotation','sales_order','delivery_challan'] as const
-    const STATUSES  = ['draft','confirmed','partial','paid','cancelled'] as const
+    const STATUSES  = ['draft','confirmed','partial','paid','cancelled','converted'] as const
     const query = z.object({
       txnType:  z.enum(TXN_TYPES).optional(),
       status:   z.enum(STATUSES).optional(),

@@ -255,6 +255,36 @@ describe('Billing core flows in a tyre shop', () => {
       expect(tooMany.status).toBeLessThan(500)
     })
 
+    test('the generic Create Invoice screen payload (tyre details + split payment) is accepted and settles correctly', async () => {
+      const before = await stock(owner, tyre.id)
+      const r = await owner.api.post('/api/invoices', {
+        txnType: 'sale_invoice', partyId: customer.id,
+        items: [{ productId: tyre.id, description: tyre.name, qty: 2, rate: 4000, discountPct: 0, gstRate: 18, unit: 'pcs' }],
+        // exactly what CreateInvoicePage + DomainInvoiceFields send
+        domainData: {
+          is_udhaar: false, source: 'pos',
+          payment_splits: [{ method: 'cash', amount: 5000 }, { method: 'upi', amount: 4440 }],
+          sale_kind: 'wholesale', vehicle_no: 'GJ05UI0001', vehicle_type: 'car', odometer: 20000, credit_days: 15,
+        },
+        notes: 'from the generic screen',
+      }, { headers: { 'Idempotency-Key': crypto.randomUUID() } })
+      expect(r.status).toBe(201)
+      expect(r.data.status).toBe('paid')
+      expect(Number(r.data.grandTotal)).toBeCloseTo(9440, 0)
+      expect(await stock(owner, tyre.id)).toBe(before - 2)
+      // it is a normal bill: the tyre detail page and PDF work for it
+      expect((await owner.api.get(`/api/tyre/sales/${r.data.id}`)).status).toBe(200)
+      expect((await owner.api.get(`/api/tyre/invoices/${r.data.id}/pdf`)).status).toBe(200)
+      // a field the schema does not know is a clean 422, not a crash
+      const bad = await owner.api.post('/api/invoices', {
+        txnType: 'sale_invoice', partyId: customer.id,
+        items: [{ productId: tyre.id, description: tyre.name, qty: 1, rate: 4000, gstRate: 18 }],
+        domainData: { freight_type: 'paid' },
+      }, { headers: { 'Idempotency-Key': crypto.randomUUID() } })
+      expect(bad.status).toBeGreaterThanOrEqual(400)
+      expect(bad.status).toBeLessThan(500)
+    })
+
     test('quotation → sales order → invoice conversion moves stock only at the invoice', async () => {
       const before = await stock(owner, tyre.id)
       const q = await owner.api.post('/api/invoices', {
@@ -301,6 +331,14 @@ describe('Billing core flows in a tyre shop', () => {
       expect((await owner.api.get('/api/invoices', { params: { txnType: 'not_a_type' } })).status).toBe(422)
     })
 
+    test('every status offered by the Bills status filter is accepted (including "converted")', async () => {
+      for (const status of ['draft', 'confirmed', 'partial', 'paid', 'cancelled', 'converted']) {
+        const r = await owner.api.get('/api/invoices', { params: { status } })
+        expect([status, r.status]).toEqual([status, 200])
+      }
+      expect((await owner.api.get('/api/invoices', { params: { status: 'archived' } })).status).toBe(422)
+    })
+
     test('invoice list filters and the daily / weekly summaries answer', async () => {
       for (const params of [{}, { status: 'paid' }, { txnType: 'sale_invoice' }, { partyId: customer.id }, { search: 'SHAR' }, { limit: 5, page: 2 }]) {
         const r = await owner.api.get('/api/invoices', { params })
@@ -327,6 +365,7 @@ describe('Billing core flows in a tyre shop', () => {
       expect((await owner.api.get('/api/expenses/summary')).status).toBe(200)
       expect((await owner.api.patch(`/api/expenses/${e.data.id}`, { amount: 650 })).status).toBeLessThan(300)
       expect((await owner.api.delete(`/api/expenses/${e.data.id}`)).status).toBeLessThan(300)
+      expect((await owner.api.get(`/api/expenses/${e.data.id}`)).status).toBe(404)   // deleted above
       expect((await owner.api.delete(`/api/expenses/${U}`)).status).toBe(404)
     })
 
