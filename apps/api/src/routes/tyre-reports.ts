@@ -13,7 +13,8 @@ const SALE_ITEM_BASE = (s: string) => `
   JOIN ${tbl(s, 'invoices')} i ON i.id = ii."invoiceId"
   LEFT JOIN ${tbl(s, 'products')} p ON p.id = ii."productId"
   WHERE i."branchId" = $1::uuid AND i."txnType" = 'sale_invoice' AND i.status <> 'cancelled'
-    AND i."date" BETWEEN $2::date AND $3::date`
+    AND i."date" BETWEEN $2::date AND $3::date
+    AND COALESCE(ii."itemMeta"->>'item_kind','') <> 'charge'`
 
 export const tyreReportRoutes: FastifyPluginAsync = async (app) => {
 
@@ -126,5 +127,87 @@ export const tyreReportRoutes: FastifyPluginAsync = async (app) => {
                 marginPct: total.revenue > 0 ? Math.round(((total.revenue - total.cost) / total.revenue) * 1000) / 10 : 0 },
       note: 'Cost uses each item\'s current purchase price from the catalogue — an estimate, not FIFO/average cost.',
     }
+  })
+
+  // GET /api/tyre/reports/register?from=&to=&series=&format=csv|json
+  // The bill register in the order a paper/Excel register keeps it: one row per tyre line,
+  // the typed price ("Data Entry") and the four typed charges beside the computed GST columns.
+  app.get('/reports/register', async (req, reply) => {
+    const qy = z.object({
+      from:   dateStr.optional(),
+      to:     dateStr.optional(),
+      series: z.string().regex(/^[a-z_]{1,20}$/).optional(),
+      format: z.enum(['csv', 'json']).default('json'),
+    }).parse(req.query)
+    const today = todayStr()
+    const from = qy.from ?? `${today.slice(0, 4)}-04-01`
+    const to = qy.to ?? today
+    const s = req.schemaName
+
+    const bills = await q<any>(req,
+      `SELECT i.id, i.number, i.date, i.status, i."grandTotal"::float AS "grandTotal", i."domainData" AS dd,
+              p.name AS "partyName", p.phone AS "partyPhone", p.gstin AS "partyGstin", p.address AS "partyAddress"
+       FROM ${tbl(s, 'invoices')} i LEFT JOIN ${tbl(s, 'parties')} p ON p.id = i."partyId"
+       WHERE i."branchId" = $1::uuid AND i."txnType" = 'sale_invoice' AND i.status <> 'cancelled'
+         AND i.date BETWEEN $2::date AND $3::date
+         AND ($4::text IS NULL OR i."domainData"->>'bill_series' = $4)
+       ORDER BY i.date, NULLIF(substring(i.number from '[0-9]+$'), '')::bigint NULLS LAST, i.number LIMIT 5000`,
+      req.branchId, from, to, qy.series ?? null)
+
+    const ids = bills.map((b) => b.id)
+    const items = ids.length ? await q<any>(req,
+      `SELECT "invoiceId", description, "hsnSacCode" AS hsn, qty::float, rate::float, "discountAmt"::float AS disc,
+              "taxableAmt"::float AS taxable, "gstRate"::float AS "gstRate", "cgstAmt"::float AS cgst, "sgstAmt"::float AS sgst,
+              "igstAmt"::float AS igst, total::float, "itemMeta" AS meta
+       FROM ${tbl(s, 'invoice_items')} WHERE "invoiceId" = ANY($1::uuid[]) ORDER BY "invoiceId", "sortOrder", id`, ids) : []
+    const byBill = new Map<string, any[]>()
+    for (const it of items) { const a = byBill.get(it.invoiceId) ?? []; a.push(it); byBill.set(it.invoiceId, a) }
+
+    const addr = (a: any) => !a ? '' : typeof a === 'string' ? a : [a.line1, a.line2, a.city, a.pincode].filter(Boolean).join(', ')
+    const chargeOf = (list: any[], word: string) =>
+      r2(list.filter((c) => c.meta?.item_kind === 'charge' && String(c.description).toLowerCase().includes(word)).reduce((t, c) => t + c.total, 0))
+
+    const rows: Array<Record<string, string | number>> = []
+    for (const b of bills) {
+      const list = byBill.get(b.id) ?? []
+      const tyres = list.filter((l) => l.meta?.item_kind !== 'charge')
+      const chargeLines = list.filter((l) => l.meta?.item_kind === 'charge')
+      const otherCharges = r2(chargeLines.filter((c) => !/align|balanc|weight|labour/i.test(String(c.description))).reduce((t, c) => t + c.total, 0))
+      const lines = tyres.length ? tyres : [null]
+      lines.forEach((t, n) => {
+        const qty = t?.qty ?? 0
+        const unitTaxable = qty > 0 ? r2((t.taxable + t.disc) / qty) : 0
+        rows.push({
+          'Date': String(b.date).slice(0, 10), 'Bill No': b.number, 'Series': b.dd?.bill_series ?? '',
+          'Customer': b.partyName ?? '', 'Mobile': b.partyPhone ?? '', 'Address': addr(b.partyAddress),
+          'Vehicle Make': b.dd?.vehicle_make ?? '', 'Vehicle No': b.dd?.vehicle_no ?? '', 'KM': b.dd?.odometer ?? '',
+          'Tyre': t?.meta?.brand ?? t?.description ?? '', 'Size': t?.meta?.size ?? '', 'HSN': t?.hsn ?? '',
+          'Qty': qty, 'Unit Rate': unitTaxable, 'Discount': t?.disc ?? 0, 'Taxable': t?.taxable ?? 0,
+          'CGST %': t ? t.gstRate / 2 : 0, 'CGST': t?.cgst ?? 0, 'SGST %': t ? t.gstRate / 2 : 0, 'SGST': t?.sgst ?? 0,
+          'IGST': t?.igst ?? 0, 'Total GST': t ? r2(t.cgst + t.sgst + t.igst) : 0,
+          'Tyre Total': t?.total ?? 0,
+          'Data Entry': qty > 0 && b.dd?.prices_include_gst ? r2(t.total / qty) : (t?.rate ?? 0),
+          'Alignment': n === 0 ? chargeOf(chargeLines, 'align') : 0, 'Balancing': n === 0 ? chargeOf(chargeLines, 'balanc') : 0,
+          'Weight': n === 0 ? chargeOf(chargeLines, 'weight') : 0, 'Labour': n === 0 ? chargeOf(chargeLines, 'labour') : 0,
+          'Other charges': n === 0 ? otherCharges : 0,
+          'Bill Total': n === 0 ? b.grandTotal : '',
+          'Customer GST No': b.partyGstin ?? '',
+        })
+      })
+    }
+
+    if (qy.format === 'json') return { from, to, count: rows.length, rows }
+    const heads = rows[0] ? Object.keys(rows[0]) : ['Date', 'Bill No']
+    // A leading apostrophe-free CSV: quote everything with a comma/quote/newline, and neutralise formulas.
+    const cell = (v: unknown) => {
+      let t = String(v ?? '')
+      if (/^[=+\-@\t\r]/.test(t) && !/^-?\d+(\.\d+)?$/.test(t)) t = "'" + t
+      return /[",\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t
+    }
+    const csv = [heads.map(cell).join(','), ...rows.map((r) => heads.map((h) => cell(r[h])).join(','))].join('\r\n')
+    return reply
+      .header('Content-Type', 'text/csv; charset=utf-8')
+      .header('Content-Disposition', `attachment; filename="bill-register-${from}-to-${to}.csv"`)
+      .send('\uFEFF' + csv)
   })
 }

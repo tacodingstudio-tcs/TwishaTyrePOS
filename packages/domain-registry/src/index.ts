@@ -28,6 +28,7 @@ export const ITEM_KINDS = [
   'accessory',
   'service',       // fitting, balancing, alignment … (no stock)
   'scrap',         // old-tyre stock taken in on exchange
+  'charge',        // free-amount bill line: alignment, balancing, weights, labour (no stock)
 ] as const
 
 /** Which kinds are individually identified (serial / DOT) and can carry a warranty. */
@@ -87,6 +88,12 @@ const TyreInvoiceData = z.object({
   next_service_date:   z.string().max(10).optional(),
   payment_terms:       z.enum(PAYMENT_TERMS).optional(),
   credit_days:         z.number().int().min(0).max(180).optional(),
+  // register series the bill number belongs to (car / two_wheel …) and the customer's PO
+  bill_series:         z.string().max(20).optional(),
+  po_no:               z.string().max(40).optional(),
+  po_date:             z.string().max(10).optional(),
+  vehicle_make:        z.string().max(60).optional(),
+  prices_include_gst:  z.boolean().optional(),
 }).strict()
 
 // Per-line meta: what was physically fitted / handed over.
@@ -129,6 +136,8 @@ export const DOMAIN_REGISTRY = {
       default_service_sac:    '998714',   // maintenance & repair of motor vehicles
       // Selling
       serial_required:        false,      // true = refuse a tyre sale that has no serial / DOT per unit
+      prices_include_gst:     false,      // true = prices typed on a bill already contain GST (Data Entry style)
+      bill_series:            {},         // {car:{prefix:'',start:93}, two_wheel:{prefix:'2W-',start:1}} plain numbered registers
       allow_below_cost:       false,      // false = warn when a line is sold under purchase price
       // After-sales
       default_warranty_months: 0,         // used when the product itself has none

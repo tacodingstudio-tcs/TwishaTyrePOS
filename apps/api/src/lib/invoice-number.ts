@@ -77,6 +77,27 @@ export async function nextInvoiceNumber(
   // e.g. "RK-ALK-25-00001"
 }
 
+// Plain, FY-less running numbers for shops that keep their own register (e.g. 93, 94, 95…).
+// Each series (car / two-wheel) counts on its own; the next number is max(start, highest used + 1).
+export interface NumberSeries { key: string; prefix: string; start: number }
+export async function nextSeriesNumber(
+  tx: Prisma.TransactionClient,
+  branchId: string,
+  txnType: string,
+  series: NumberSeries,
+): Promise<string> {
+  const lockKey = hashLockKey(`${branchId}:${txnType}:series:${series.key}`)
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey}::bigint)`
+  const row = await tx.$queryRaw<Array<{ max_val: bigint }>>`
+    SELECT COALESCE(MAX(NULLIF(SUBSTRING("number" FROM '[0-9]+$'), '')::bigint), 0) AS max_val
+    FROM invoices
+    WHERE "branchId" = ${branchId}::uuid AND "txnType" = ${txnType}
+      AND "domainData"->>'bill_series' = ${series.key}
+  `
+  const next = Math.max(series.start, Number(row[0]?.max_val ?? 0) + 1)
+  return `${series.prefix}${next}`
+}
+
 // Deterministic hash of a string to a signed bigint for pg advisory locks
 function hashLockKey(key: string): bigint {
   let hash = 0n

@@ -26,7 +26,7 @@ import { Prisma } from '@billing/db'
 import type { PrismaClient } from '@billing/db'
 import { calculateInvoice, type GSTRate } from '@billing/gst-engine'
 import { DOMAIN_REGISTRY } from '@billing/domain-registry'
-import { nextInvoiceNumber } from '../lib/invoice-number.js'
+import { nextInvoiceNumber, nextSeriesNumber, type NumberSeries } from '../lib/invoice-number.js'
 import { pdfQueue } from '../lib/queues.js'
 import { z } from 'zod'
 
@@ -42,6 +42,8 @@ export const CreateInvoiceItemSchema = z.object({
   discountPct: z.coerce.number().min(0).max(100).default(0),
   gstRate:     z.coerce.number().min(0).max(100).default(0),
   gstExempt:   z.boolean().default(false),
+  /** rate is the GST-inclusive price per unit (retail "Data Entry" style) */
+  priceIncludesGst: z.boolean().optional(),
   hsnSacCode:  z.string().nullable().optional().transform(v => v ?? undefined),
   itemMeta:    z.record(z.unknown()).default({}),
 })
@@ -80,6 +82,8 @@ export interface RequestCtx {
   role:             string
   schemaName:       string
   branchDomainType?: string
+  /** plain running numbers for a named register instead of PREFIX-FY-00001 */
+  numberSeries?:    NumberSeries
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -206,6 +210,7 @@ export async function createInvoice(
       discountPct: item.discountPct,
       gstRate:     item.gstRate as GSTRate,
       gstExempt:   item.gstExempt,
+      priceIncludesGst: item.priceIncludesGst,
       isInterState,
     }))
   )
@@ -240,7 +245,9 @@ export async function createInvoice(
       }
 
       // 5b. Generate invoice number (uses advisory lock inside)
-      const number = await nextInvoiceNumber(tx, ctx.branchId, input.txnType)
+      const number = ctx.numberSeries
+        ? await nextSeriesNumber(tx, ctx.branchId, input.txnType, ctx.numberSeries)
+        : await nextInvoiceNumber(tx, ctx.branchId, input.txnType)
 
       // 5c. Status: proforma and quotation are not financially confirmed
       const status = (input.txnType === 'proforma' || input.txnType === 'quotation')

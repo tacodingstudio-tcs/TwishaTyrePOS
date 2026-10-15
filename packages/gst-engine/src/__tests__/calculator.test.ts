@@ -145,3 +145,43 @@ describe('validateAIExtraction', () => {
     expect(result.lines).toHaveLength(2)
   })
 })
+
+// Shakti Enterprise "Data Entry": the typed price already contains GST.
+describe('GST-inclusive price entry', () => {
+  const inc = (qty: number, rate: number, discountPct = 0) =>
+    calculateLineItem({ qty, rate, discountPct, gstRate: 18, isInterState: false, priceIncludesGst: true })
+
+  test('₹10,400 × 4 gives ₹41,600 total, taxable 35,254.24, CGST = SGST 3,172.88', () => {
+    const r = inc(4, 10400)
+    expect(r.total).toBe(41600)
+    expect(r.taxableAmt).toBe(35254.24)
+    expect(r.cgstAmt).toBe(3172.88)
+    expect(r.sgstAmt).toBe(3172.88)
+  })
+
+  test('total always equals price × qty, and taxable + CGST + SGST = total', () => {
+    for (const [q, p] of [[2, 7800], [3, 6666], [4, 6390], [4, 7462.5], [1, 1], [7, 3333.33]] as const) {
+      const r = inc(q, p)
+      expect(r.total).toBe(Math.round(q * p * 100) / 100)
+      expect(Math.round((r.taxableAmt + r.cgstAmt + r.sgstAmt) * 100) / 100).toBe(r.total)
+    }
+  })
+
+  test('discount comes off the inclusive price; gross − discount = taxable', () => {
+    const r = inc(2, 5000, 10)          // pays 9,000
+    expect(r.total).toBe(9000)
+    expect(Math.round((r.grossAmt - r.discountAmt) * 100) / 100).toBe(r.taxableAmt)
+  })
+
+  test('exempt lines and inter-state lines stay consistent', () => {
+    const e = calculateLineItem({ qty: 1, rate: 200, discountPct: 0, gstRate: 0, isInterState: false, priceIncludesGst: true })
+    expect([e.total, e.taxableAmt, e.cgstAmt]).toEqual([200, 200, 0])
+    const i = calculateLineItem({ qty: 1, rate: 118, discountPct: 0, gstRate: 18, isInterState: true, priceIncludesGst: true })
+    expect([i.total, i.taxableAmt, i.igstAmt, i.cgstAmt]).toEqual([118, 100, 18, 0])
+  })
+
+  test('exclusive pricing is unchanged', () => {
+    const r = calculateLineItem({ qty: 1, rate: 100, discountPct: 0, gstRate: 18, isInterState: false })
+    expect(r.total).toBe(118)
+  })
+})

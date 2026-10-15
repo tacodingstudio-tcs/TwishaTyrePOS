@@ -31,6 +31,7 @@ export async function loadBusiness(ctx: Ctx): Promise<{ header: BusinessHeader; 
       address: addrText(b?.address) || null,
       gstin: b?.gstin ?? null,
       phone: config['business_phone'] ?? owner?.phone ?? null,
+      email: config['business_email'] ?? null,
     },
   }
 }
@@ -68,7 +69,8 @@ export async function loadInvoiceDoc(ctx: Ctx, invoiceId: string): Promise<{ dat
     number: inv.number, date: inv.date, dueDate: inv.dueDate, status: inv.status,
     partyName: inv.partyName ?? '', partyPhone: inv.partyPhone ?? null, partyGstin: inv.partyGstin ?? null,
     partyAddress: addrText(inv.partyAddress) || null,
-    vehicleNo: dd['vehicle_no'] ?? null, odometer: dd['odometer'] ?? null, fittedBy: dd['fitted_by'] ?? null,
+    vehicleNo: dd['vehicle_no'] ?? null, vehicleMake: dd['vehicle_make'] ?? null,
+    poNo: dd['po_no'] ?? null, poDate: dd['po_date'] ?? null, odometer: dd['odometer'] ?? null, fittedBy: dd['fitted_by'] ?? null,
     lines: items.map((it) => {
       const m = (it.itemMeta ?? {}) as Record<string, any>
       const reading = (r: Record<string, string> | undefined) => r ? Object.entries(r).map(([k, v]) => `${k} ${v}`).join(', ') : ''
@@ -80,7 +82,11 @@ export async function loadInvoiceDoc(ctx: Ctx, invoiceId: string): Promise<{ dat
       ].filter(Boolean).join(' · ')
       return {
         description: String(it.description ?? ''),
-        hsn: it.hsnSacCode ?? null, qty: Number(it.qty), unit: it.unit ?? null, rate: Number(it.rate),
+        hsn: it.hsnSacCode ?? null, qty: Number(it.qty), unit: it.unit ?? null,
+        // GST-inclusive entry: print the rate before GST so Rate × Qty − Disc = Taxable
+        rate: dd['prices_include_gst'] && Number(it.qty) > 0
+          ? Math.round(((Number(it.taxableAmt) + Number(it.discountAmt ?? 0)) / Number(it.qty)) * 100) / 100
+          : Number(it.rate),
         discountAmt: Number(it.discountAmt ?? 0), taxable: Number(it.taxableAmt), gstRate: Number(it.gstRate), total: Number(it.total),
         detail: detail || null,
         serials: Array.isArray(m['serial_nos']) ? m['serial_nos'] : [],

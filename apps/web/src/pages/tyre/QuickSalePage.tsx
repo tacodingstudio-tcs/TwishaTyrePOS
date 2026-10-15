@@ -5,7 +5,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { Search, Plus, Trash2, Car, Wrench, Recycle, AlertTriangle } from 'lucide-react'
-import { tyreApi, apiError } from '@/lib/api'
+import { tyreApi, branchApi, apiError } from '@/lib/api'
 import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { PartyCombobox, type PickedParty } from '@/components/ui/PartyCombobox'
@@ -16,6 +16,8 @@ const ALIGNMENT_KEYS = ['Front toe', 'Rear toe', 'Camber L', 'Camber R', 'Caster
 const POSITIONS = ['FL', 'FR', 'RL', 'RR', 'SP'] as const
 const PAY_METHODS: Array<[string, string]> = [['cash', 'Cash'], ['upi', 'UPI'], ['card', 'Card'], ['bank_transfer', 'Bank'], ['cheque', 'Cheque']]
 const DEFAULT_GST = 18
+const CHARGE_LABELS = ['Alignment', 'Balancing', 'Weight', 'Labour'] as const
+const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
 
 interface Line {
   key: string
@@ -84,6 +86,18 @@ export function QuickSalePage() {
   const [pay, setPay] = useState<Record<string, string>>({})
   const [creditDays, setCreditDays] = useState('15')
   const [notes, setNotes] = useState('')
+  // Data Entry style billing: the price typed is what the customer pays per tyre, GST inside it
+  const [inclusive, setInclusive] = useState<boolean | null>(null)
+  const [billSeries, setBillSeries] = useState('')
+  const [makeModel, setMakeModel] = useState('')
+  const [address, setAddress] = useState('')
+  const [poNo, setPoNo] = useState('')
+  const [charges, setCharges] = useState<Record<string, string>>({})
+  const { data: branches } = useQuery({ queryKey: ['branches'], queryFn: () => branchApi.list(), staleTime: 60_000 })
+  const shopCfg: Record<string, any> = (branches as any[])?.[0]?.domainConfig ?? {}
+  const seriesKeys = Object.keys(shopCfg['bill_series'] ?? {})
+  const isInclusive = inclusive ?? !!shopCfg['prices_include_gst']
+  useEffect(() => { if (!billSeries && seriesKeys.length) setBillSeries(seriesKeys[0]!) }, [seriesKeys.join(',')]) // eslint-disable-line
   // finder
   const [size, setSize] = useState('')
   const [text, setText] = useState('')
@@ -128,14 +142,17 @@ export function QuickSalePage() {
 
   // totals (preview — the server is the authority)
   const totals = useMemo(() => {
-    let taxable = 0, gst = 0
+    let taxable = 0, gst = 0, cgst = 0
     for (const l of lines) {
-      const t = l.qty * l.rate * (1 - l.discountPct / 100)
-      taxable += t; gst += t * l.gstRate / 100
+      const amt = r2(l.qty * l.rate * (1 - l.discountPct / 100))
+      const g = isInclusive ? r2(amt * l.gstRate / (100 + l.gstRate)) : r2(amt * l.gstRate / 100)
+      taxable += isInclusive ? amt - g : amt
+      gst += g; cgst += r2(g / 2)
     }
-    const grand = Math.round(taxable + gst)
-    return { taxable, gst, grand }
-  }, [lines])
+    const extra = CHARGE_LABELS.reduce((sum, k) => sum + (Number(charges[k]) || 0), 0)
+    const grand = Math.round(taxable + gst + extra)
+    return { taxable, gst, cgst, sgst: gst - cgst, extra, grand }
+  }, [lines, isInclusive, charges])
   const paid = Object.values(pay).reduce((s, v) => s + (Number(v) || 0), 0)
   const exch = Number(exchValue) || 0
   const balance = Math.round((totals.grand - paid - exch) * 100) / 100
@@ -165,7 +182,12 @@ export function QuickSalePage() {
       const payments = PAY_METHODS.map(([m]) => ({ method: m, amount: Number(pay[m]) || 0 })).filter((p) => p.amount > 0)
       return tyreApi.createSale({
         partyId: party.id,
-        customer: !party.id && party.name.trim() ? { name: party.name.trim(), phone: phone.replace(/\D/g, '') || undefined } : undefined,
+        customer: !party.id && party.name.trim() ? { name: party.name.trim(), phone: phone.replace(/\D/g, '') || undefined, address: address.trim() || undefined } : undefined,
+        pricesIncludeGst: isInclusive,
+        billSeries: billSeries || undefined,
+        makeModel: makeModel.trim() || undefined,
+        poNo: poNo.trim() || undefined,
+        charges: CHARGE_LABELS.map((label) => ({ label, amount: Number(charges[label]) || 0 })).filter((c) => c.amount > 0),
         saleKind: serviceMode && !lines.some((l) => l.kind !== 'service') ? 'service_only' : undefined,
         vehicleNo: regNo.trim() || undefined,
         vehicleType: regNo.trim() ? vehicleType : undefined,
@@ -229,6 +251,10 @@ export function QuickSalePage() {
                 </select>
               </div>
               <div>
+                <label className="label" htmlFor="mk">Vehicle make / model</label>
+                <input id="mk" className="input" placeholder="Hyundai Creta" value={makeModel} onChange={(e) => setMakeModel(e.target.value)} />
+              </div>
+              <div>
                 <label className="label" htmlFor="odo">Odometer (km)</label>
                 <input id="odo" type="number" min="0" className="input" value={odometer} onChange={(e) => setOdometer(e.target.value)} />
               </div>
@@ -240,6 +266,16 @@ export function QuickSalePage() {
               <div>
                 <label className="label" htmlFor="ph">Mobile {party.id ? '' : '(for the bill & reminders)'}</label>
                 <input id="ph" className="input" inputMode="numeric" maxLength={13} disabled={!!party.id} value={phone} onChange={(e) => setPhone(e.target.value)} />
+              </div>
+              {!party.id && (
+                <div className="md:col-span-2">
+                  <label className="label" htmlFor="addr">Address (printed on the bill)</label>
+                  <input id="addr" className="input" value={address} onChange={(e) => setAddress(e.target.value)} />
+                </div>
+              )}
+              <div>
+                <label className="label" htmlFor="po">PO number (optional)</label>
+                <input id="po" className="input" value={poNo} onChange={(e) => setPoNo(e.target.value)} />
               </div>
             </div>
           </section>
@@ -322,7 +358,7 @@ export function QuickSalePage() {
                         <div><label className="label">Qty</label>
                           <input type="number" min="1" step={l.kind === 'service' ? 'any' : 1} className="input" value={l.qty}
                             onChange={(e) => setLine(l.key, { qty: Math.max(0, Number(e.target.value)) })} /></div>
-                        <div><label className="label">Rate (₹)</label>
+                        <div><label className="label">{isInclusive ? 'Price incl. GST (₹)' : 'Rate (₹)'}</label>
                           <input type="number" min="0" className="input" value={l.rate} onChange={(e) => setLine(l.key, { rate: Number(e.target.value) })} />
                           {l.mrp ? <span className="text-[11px] text-gray-400">MRP {inr(l.mrp)}</span> : null}</div>
                         <div><label className="label">Disc %</label>
@@ -403,11 +439,37 @@ export function QuickSalePage() {
         <div className="space-y-6 xl:sticky xl:top-4">
           <section className="card p-5">
             <h2 className="text-sm font-semibold text-gray-900 mb-3">Bill</h2>
+            {seriesKeys.length > 0 && (
+              <div className="mb-3">
+                <label className="label" htmlFor="series">Bill register</label>
+                <select id="series" className="input" value={billSeries} onChange={(e) => setBillSeries(e.target.value)}>
+                  {seriesKeys.map((k) => <option key={k} value={k}>{k.replace(/_/g, ' ')}</option>)}
+                </select>
+              </div>
+            )}
+            <label className="flex items-center gap-2 text-xs text-gray-600 mb-3">
+              <input type="checkbox" checked={isInclusive} onChange={(e) => setInclusive(e.target.checked)} />
+              Prices already include GST (Data Entry)
+            </label>
             <dl className="text-sm space-y-1.5">
               <div className="flex justify-between"><dt className="text-gray-500">Taxable</dt><dd>{inr(totals.taxable, 2)}</dd></div>
-              <div className="flex justify-between"><dt className="text-gray-500">GST</dt><dd>{inr(totals.gst, 2)}</dd></div>
+              {totals.extra > 0 && <div className="flex justify-between"><dt className="text-gray-500">Charges (no GST)</dt><dd>{inr(totals.extra, 2)}</dd></div>}
+              <div className="flex justify-between"><dt className="text-gray-500">CGST</dt><dd>{inr(totals.cgst, 2)}</dd></div>
+              <div className="flex justify-between"><dt className="text-gray-500">SGST</dt><dd>{inr(totals.sgst, 2)}</dd></div>
               <div className="flex justify-between text-base font-semibold border-t border-gray-100 pt-2"><dt>Total</dt><dd>{inr(totals.grand)}</dd></div>
             </dl>
+          </section>
+
+          <section className="card p-5">
+            <h2 className="text-sm font-semibold text-gray-900 mb-1">Other charges</h2>
+            <p className="text-xs text-gray-500 mb-3">Typed amounts added to the bill — no GST on these.</p>
+            <div className="grid grid-cols-2 gap-3">
+              {CHARGE_LABELS.map((k) => (
+                <div key={k}><label className="label" htmlFor={`ch-${k}`}>{k} (₹)</label>
+                  <input id={`ch-${k}`} type="number" min="0" className="input" value={charges[k] ?? ''}
+                    onChange={(e) => setCharges((c) => ({ ...c, [k]: e.target.value }))} /></div>
+              ))}
+            </div>
           </section>
 
           {!serviceMode && <section className="card p-5">

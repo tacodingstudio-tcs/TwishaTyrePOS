@@ -60,6 +60,11 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
     bankAcc:   String(cfg['bank_account_no'] ?? ''),
     bankIfsc:  String(cfg['bank_ifsc'] ?? ''),
     terms:     String(cfg['invoice_terms'] ?? ''),
+    email:     String(cfg['business_email'] ?? ''),
+    inclusive: Boolean(cfg['prices_include_gst']),
+    carStart:  String(cfg['bill_series']?.car?.start ?? ''),
+    twStart:   String(cfg['bill_series']?.two_wheel?.start ?? ''),
+    twPrefix:  String(cfg['bill_series']?.two_wheel?.prefix ?? '2W-'),
   })
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm({ ...form, [k]: e.target.value })
@@ -89,6 +94,13 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
         pan: form.pan.trim().toUpperCase(),
         bank_name: form.bankName.trim(), bank_account_no: form.bankAcc.trim(), bank_ifsc: form.bankIfsc.trim().toUpperCase(),
         invoice_terms: form.terms.trim(),
+        business_email: form.email.trim(),
+        prices_include_gst: form.inclusive,
+        // two plain-numbered registers (e.g. Car from 93, Two wheel 2W-1…); blank = one FY-style series
+        bill_series: {
+          ...(Number(form.carStart) > 0 ? { car: { prefix: '', start: Math.floor(Number(form.carStart)) } } : {}),
+          ...(Number(form.twStart) > 0 ? { two_wheel: { prefix: form.twPrefix.trim(), start: Math.floor(Number(form.twStart)) } } : {}),
+        },
       },
     })
     onClose()
@@ -123,6 +135,21 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
           <div className="grid grid-cols-2 gap-3">
             <div><label className="label">City</label><input className="input" value={form.city} onChange={set('city')} /></div>
             <div><label className="label">Pincode</label><input className="input" value={form.pincode} onChange={set('pincode')} /></div>
+          </div>
+
+          <div className="border-t border-gray-100 pt-4">
+            <h4 className="text-sm font-semibold text-gray-900 mb-1">Billing style</h4>
+            <p className="text-xs text-gray-500 mb-3">For shops that type one price per tyre with GST inside it, and number bills in their own register.</p>
+            <label className="flex items-center gap-2 text-sm text-gray-700 mb-3">
+              <input type="checkbox" checked={form.inclusive} onChange={(e) => setForm({ ...form, inclusive: e.target.checked })} />
+              Prices I type already include GST
+            </label>
+            <div className="grid grid-cols-3 gap-3">
+              <div><label className="label">Car bills start at</label><input type="number" min="1" className="input" placeholder="e.g. 93" value={form.carStart} onChange={set('carStart')} /></div>
+              <div><label className="label">Two-wheel start at</label><input type="number" min="1" className="input" placeholder="e.g. 1" value={form.twStart} onChange={set('twStart')} /></div>
+              <div><label className="label">Two-wheel prefix</label><input className="input" maxLength={6} value={form.twPrefix} onChange={set('twPrefix')} /></div>
+            </div>
+            <div className="mt-3"><label className="label">Email (printed on bills)</label><input className="input" value={form.email} onChange={set('email')} /></div>
           </div>
 
           <div className="border-t border-gray-100 pt-4">

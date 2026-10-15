@@ -50,6 +50,8 @@ const SaleBody = z.object({
   customer:   z.object({
     name:  z.string().trim().min(1).max(120),
     phone: z.string().trim().max(15).optional(),
+    address: z.string().trim().max(300).optional(),
+    gstin: z.string().trim().toUpperCase().max(15).optional(),
   }).optional(),
   vehicleNo:  z.string().trim().max(20).optional(),
   vehicleType: z.enum(TYRE_VEHICLE_TYPES).optional(),
@@ -57,6 +59,17 @@ const SaleBody = z.object({
   odometer:   z.number().int().nonnegative().max(2_000_000).optional(),
   fittedBy:   z.string().trim().max(80).optional(),
   saleKind:   z.enum(SALE_KINDS).default('retail'),
+  /** true = every price typed is what the customer pays per unit, GST included (Data Entry style) */
+  pricesIncludeGst: z.boolean().optional(),
+  /** register the bill number comes from, e.g. 'car' | 'two_wheel' (see config bill_series) */
+  billSeries: z.string().trim().regex(/^[a-z_]{1,20}$/).optional(),
+  poNo:       z.string().trim().max(40).optional(),
+  poDate:     dateStr.optional(),
+  /** free-amount lines added to the bill with no GST: alignment, balancing, weight, labour … */
+  charges:    z.array(z.object({
+    label:  z.string().trim().min(1).max(60),
+    amount: z.number().nonnegative().max(1e6),
+  })).max(10).default([]),
   date:       dateStr.optional(),
   creditDays: z.number().int().min(0).max(180).optional(),
   items:      z.array(SaleItem).min(1).max(60),
@@ -209,6 +222,9 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
 
   // ── Pricing / GST ───────────────────────────────────────────────────────────
   const vehicleType = body.vehicleType
+  const inclusive = body.pricesIncludeGst ?? !!conf('prices_include_gst')
+  const chargeLines = body.charges.filter((c) => c.amount > 0)
+  const chargesTotal = r2(chargeLines.reduce((s, c) => s + c.amount, 0))
   const lines = body.items.map((it) => {
     const p = byId.get(it.productId)
     const a = (p.domainAttrs ?? {}) as Record<string, any>
@@ -218,7 +234,8 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
     const gstRate = p.gstExempt ? 0 : p.gstRate > 0 ? p.gstRate
       : Number(kind === 'service' ? conf('default_service_gst') : conf('default_tyre_gst'))
     const warrantyMonths = it.warrantyMonths ?? (Number(a['warranty_months'] ?? 0) || Number(conf('default_warranty_months') ?? 0))
-    const net = rate * (1 - it.discountPct / 100)
+    // net = what one unit costs the shop to compare against purchase price, i.e. without GST
+    const net = rate * (1 - it.discountPct / 100) / (inclusive && gstRate > 0 ? 1 + gstRate / 100 : 1)
     return { it, p, a, kind, rate, gstRate, warrantyMonths, net }
   })
 
@@ -243,14 +260,16 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
     const existing = await q1<any>(req, `SELECT id, name FROM ${tbl(req.schemaName, 'parties')} WHERE phone = $1 AND "isActive" = true`, customerPhone)
     if (existing) { partyId = existing.id; customerName = existing.name }
     else {
-      const created = await createParty({ type: 'customer', name: body.customer.name, phone: customerPhone, creditLimit: 0, meta: {} },
+      const created = await createParty({ type: 'customer', name: body.customer.name, phone: customerPhone, creditLimit: 0, meta: {},
+          ...(body.customer.address ? { address: { line1: body.customer.address } } : {}),
+          ...(body.customer.gstin?.length === 15 ? { gstin: body.customer.gstin } : {}) },
         { db: req.db, branchId: req.branchId, userId: req.userId, role: req.role } as any)
       partyId = created.id
     }
   }
 
   // Cheap pre-check so a credit sale never lands on "no customer" — rounding is the core's job.
-  const approxTotal = r2(lines.reduce((s, l) => s + l.it.qty * l.net * (1 + l.gstRate / 100), 0))
+  const approxTotal = r2(lines.reduce((s, l) => s + l.it.qty * l.net * (1 + l.gstRate / 100), 0) + chargesTotal)
   const paidNow = r2(body.payments.reduce((s, p) => s + p.amount, 0))
   const exchangeValue = body.exchange?.value ?? 0
   if (exchangeValue > approxTotal + 1) throw httpError(422, `Old-tyre allowance (₹${exchangeValue}) is more than the bill (₹${approxTotal})`)
@@ -266,6 +285,14 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
   const nextServiceDate = body.nextServiceDate
     ?? (due && regNo ? addDays(date, due.days) : undefined)
   const nextServiceFor = nextServiceDate ? (body.nextServiceDate ? 'Tyre check' : due?.label) : undefined
+
+  let numberSeries: { key: string; prefix: string; start: number } | undefined
+  if (body.billSeries) {
+    const all = (conf('bill_series') ?? {}) as Record<string, { prefix?: string; start?: number }>
+    const one = all[body.billSeries]
+    if (!one) throw httpError(422, `Bill series "${body.billSeries}" is not set up — add it in settings (bill_series)`)
+    numberSeries = { key: body.billSeries, prefix: one.prefix ?? '', start: Math.max(1, Number(one.start ?? 1)) }
+  }
 
   let invoice: Awaited<ReturnType<typeof createInvoice>>
   try {
@@ -284,16 +311,18 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
       credit_days: creditDays,
       payment_splits: body.payments,
       source: 'tyre_counter',
+      bill_series: body.billSeries, po_no: body.poNo, po_date: body.poDate,
+      vehicle_make: body.makeModel, prices_include_gst: inclusive || undefined,
     },
     aiMeta: {},
-    items: lines.map((l) => {
+    items: [...lines.map((l) => {
       const warrantyUntil = l.warrantyMonths > 0 && l.kind !== 'service' ? addMonths(date, l.warrantyMonths) : undefined
       const sizeLabel = l.a['size'] ? String(l.a['size']) : undefined
       return {
         productId: l.p.id,
         description: l.p.name,
         qty: l.it.qty, unit: l.p.unit ?? 'pcs', rate: l.rate,
-        discountPct: l.it.discountPct, gstRate: l.gstRate, gstExempt: !!l.p.gstExempt,
+        discountPct: l.it.discountPct, gstRate: l.gstRate, gstExempt: !!l.p.gstExempt, priceIncludesGst: inclusive,
         hsnSacCode: l.p.hsnSacCode ?? defaultHsn(l.kind, vehicleType ?? l.a['vehicle_type'], String(conf('default_service_sac'))),
         itemMeta: {
           item_kind: l.kind,
@@ -305,10 +334,13 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
           readings: l.kind === 'service' ? l.it.readings : undefined,
         },
       }
-    }),
+    }), ...chargeLines.map((c) => ({
+      description: c.label, qty: 1, unit: 'job', rate: c.amount, discountPct: 0, gstRate: 0, gstExempt: true,
+      priceIncludesGst: false, itemMeta: { item_kind: 'charge' },
+    }))],
   } as Parameters<typeof createInvoice>[0], {
     db: req.db, branchId: req.branchId, schemaName: req.schemaName,
-    userId: req.userId, role: req.role, branchDomainType: 'tyre',
+    userId: req.userId, role: req.role, branchDomainType: 'tyre', numberSeries,
   })
   } catch (err) {
     // Two counters sold the last unit at the same moment: the core's row lock lets one through and

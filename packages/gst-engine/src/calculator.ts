@@ -18,6 +18,8 @@ export interface LineItemInput {
   gstRate: GSTRate
   gstExempt?: boolean
   isInterState: boolean // true → IGST only, false → CGST + SGST split
+  /** true → `rate` already contains GST (a retail "Data Entry" price); tax is taken OUT of it. */
+  priceIncludesGst?: boolean
 }
 
 export interface LineItemResult {
@@ -54,6 +56,7 @@ function round2(n: number): number {
 // Calculates tax amounts for a single invoice line item.
 // =============================================================================
 export function calculateLineItem(input: LineItemInput): LineItemResult {
+  if (input.priceIncludesGst) return calculateInclusiveLine(input)
   const grossAmt   = round2(input.qty * input.rate)
   const discountAmt = round2(grossAmt * (input.discountPct / 100))
   const taxableAmt  = round2(grossAmt - discountAmt)
@@ -79,6 +82,30 @@ export function calculateLineItem(input: LineItemInput): LineItemResult {
   return { grossAmt, discountAmt, taxableAmt, gstRate: input.gstRate,
            cgstAmt, sgstAmt, igstAmt: 0,
            total: round2(taxableAmt + cgstAmt + sgstAmt) }
+}
+
+// GST-inclusive entry: the typed price is what the customer pays per unit.
+//   payable = qty × rate − discount          (discount comes off the inclusive price)
+//   gst     = payable × r / (100 + r)        (taken out, never added on top)
+//   taxable = payable − gst
+// Reported gross/discount are ex-GST so that gross − discount = taxable on the printed bill.
+function calculateInclusiveLine(input: LineItemInput): LineItemResult {
+  const inclGross = round2(input.qty * input.rate)
+  const inclDiscount = round2(inclGross * (input.discountPct / 100))
+  const payable = round2(inclGross - inclDiscount)
+  const exempt = input.gstExempt || input.gstRate === 0
+  const gstAmount = exempt ? 0 : round2(payable * input.gstRate / (100 + input.gstRate))
+  const taxableAmt = round2(payable - gstAmount)
+  const discountAmt = exempt ? inclDiscount : round2(inclDiscount * 100 / (100 + input.gstRate))
+  const grossAmt = round2(taxableAmt + discountAmt)
+  const rate = exempt ? 0 : input.gstRate
+  if (exempt || input.isInterState) {
+    return { grossAmt, discountAmt, taxableAmt, gstRate: rate, cgstAmt: 0, sgstAmt: 0,
+             igstAmt: gstAmount, total: payable }
+  }
+  const cgstAmt = round2(gstAmount / 2)
+  const sgstAmt = round2(gstAmount - cgstAmt)
+  return { grossAmt, discountAmt, taxableAmt, gstRate: rate, cgstAmt, sgstAmt, igstAmt: 0, total: payable }
 }
 
 // =============================================================================

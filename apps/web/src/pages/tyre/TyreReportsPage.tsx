@@ -1,7 +1,8 @@
 // Sales & margin by size / brand / item, and dead stock.
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { tyreApi } from '@/lib/api'
+import toast from 'react-hot-toast'
+import { tyreApi, apiError } from '@/lib/api'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { inr, num, fmtDate } from '@/components/tyre/format'
 
@@ -25,7 +26,16 @@ export function TyreReportsPage() {
 
   return (
     <div>
-      <PageHeader title="Reports" subtitle="What sells, what it earns, and what is sitting on the shelf" />
+      <PageHeader title="Reports" subtitle="What sells, what it earns, and what is sitting on the shelf"
+        action={<button type="button" className="btn-ghost border border-gray-200 text-sm" onClick={async () => {
+          try {
+            const blob = await tyreApi.pdfBlob(`/reports/register?format=csv&from=${from}&to=${to}`)
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url; a.download = `bill-register-${from}-to-${to}.csv`; a.click()
+            setTimeout(() => URL.revokeObjectURL(url), 5000)
+          } catch (e) { toast.error(apiError(e)) }
+        }}>Download bill register (Excel)</button>} />
       <div className="p-6 space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           {TABS.map(([k, label]) => (

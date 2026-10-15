@@ -16,6 +16,7 @@ export interface BusinessHeader {
   address?: string | null
   gstin?: string | null
   phone?: string | null
+  email?: string | null
 }
 
 const INK = '#111827'
@@ -73,7 +74,7 @@ function letterhead(doc: PDFKit.PDFDocument, biz: BusinessHeader, title: string,
   let ly = y + 19
   doc.font('Helvetica').fontSize(8).fillColor(MUTED)
   if (biz.address) { doc.text(biz.address, x, ly, { width: w * 0.62 }); ly = doc.y }
-  const meta = [biz.gstin && `GSTIN: ${biz.gstin}`, biz.phone && `Ph: ${biz.phone}`].filter(Boolean).join('   ')
+  const meta = [biz.gstin && `GSTIN: ${biz.gstin}`, biz.phone && `Ph: ${biz.phone}`, biz.email && biz.email].filter(Boolean).join('   ')
   if (meta) { doc.text(meta, x, ly, { width: w * 0.62 }); ly = doc.y }
   doc.fillColor(INK).font('Helvetica-Bold').fontSize(12).text(title.toUpperCase(), x + w * 0.62, y, { width: w * 0.38, align: 'right' })
   doc.font('Helvetica').fontSize(7.5).fillColor(MUTED).text(subtitle, x + w * 0.62, y + 16, { width: w * 0.38, align: 'right' })
@@ -121,6 +122,9 @@ export interface InvoicePdfData {
   partyGstin?: string | null
   partyAddress?: string | null
   vehicleNo?: string | null
+  vehicleMake?: string | null
+  poNo?: string | null
+  poDate?: unknown
   odometer?: number | null
   fittedBy?: string | null
   lines: InvoiceLine[]
@@ -145,10 +149,10 @@ export async function renderInvoicePdf(b: InvoicePdfData, biz: BusinessHeader): 
   const X = 30, W = doc.page.width - 60
   const pageBottom = () => doc.page.height - 40
 
-  let y = letterhead(doc, biz, 'Tax Invoice', 'Tyres, tubes & fitting services', X, 30, W)
+  let y = letterhead(doc, biz, 'Tax Invoice', 'Original for recipient · Tyres, tubes & fitting services', X, 30, W)
 
   // Bill-to / meta
-  doc.lineWidth(0.5).strokeColor(LINE).rect(X, y, W * 0.58, 78).stroke().rect(X + W * 0.58, y, W * 0.42, 78).stroke()
+  doc.lineWidth(0.5).strokeColor(LINE).rect(X, y, W * 0.58, 86).stroke().rect(X + W * 0.58, y, W * 0.42, 86).stroke()
   doc.fillColor(MUTED).font('Helvetica').fontSize(6.5).text('BILL TO', X + 5, y + 4)
   doc.fillColor(INK).font('Helvetica-Bold').fontSize(10).text(b.partyName || 'Walk-in customer', X + 5, y + 14, { width: W * 0.58 - 10 })
   doc.font('Helvetica').fontSize(8).fillColor(MUTED)
@@ -159,14 +163,15 @@ export async function renderInvoicePdf(b: InvoicePdfData, biz: BusinessHeader): 
   const meta: Array<[string, string]> = [
     ['Invoice no.', b.number], ['Date', date(b.date)],
     ...(b.dueDate ? [['Due date', date(b.dueDate)] as [string, string]] : []),
-    ...(b.vehicleNo ? [['Vehicle', b.vehicleNo] as [string, string]] : []),
+    ...(b.vehicleNo ? [['Vehicle', [b.vehicleMake, b.vehicleNo].filter(Boolean).join(' · ')] as [string, string]] : []),
+    ...(b.poNo || b.poDate ? [['PO', [b.poNo, b.poDate ? date(b.poDate) : ''].filter(Boolean).join(' / ')] as [string, string]] : []),
     ...(b.odometer ? [['Odometer', `${num(b.odometer)} km`] as [string, string]] : []),
   ]
-  meta.slice(0, 5).forEach(([k, v], i) => {
+  meta.slice(0, 6).forEach(([k, v], i) => {
     doc.fillColor(MUTED).font('Helvetica').fontSize(8).text(k, mx, y + 6 + i * 14, { lineBreak: false })
     doc.fillColor(INK).font('Helvetica-Bold').text(v, mx, y + 6 + i * 14, { width: mw, align: 'right', lineBreak: false })
   })
-  y += 86
+  y += 94
 
   // Lines table
   const cols = [20, W - 20 - 52 - 30 - 56 - 46 - 62 - 34 - 66, 52, 30, 56, 46, 62, 34, 66]
@@ -216,7 +221,7 @@ export async function renderInvoicePdf(b: InvoicePdfData, biz: BusinessHeader): 
   y += 8
   const tw = 240, tx = X + W - tw
   const trows: Array<[string, string, boolean?]> = []
-  trows.push(['Taxable value', rs(b.subtotal)])
+  trows.push([b.lines.some((l) => l.gstRate === 0 && l.total > 0 && !l.hsn) ? 'Sub total (incl. charges)' : 'Taxable value', rs(b.subtotal)])
   if (b.discountTotal > 0) trows.push(['Discount given', rs(b.discountTotal)])
   if (b.igstTotal > 0) trows.push(['IGST', rs(b.igstTotal)])
   if (b.cgstTotal > 0) trows.push(['CGST', rs(b.cgstTotal)], ['SGST', rs(b.sgstTotal)])
