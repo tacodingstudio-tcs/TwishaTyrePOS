@@ -175,10 +175,26 @@ export function QuickSalePage() {
     price: p, discountPct: l.rate > 0 && p < l.rate ? Math.round(((l.rate - p) / l.rate) * 10000) / 100 : 0,
   })
   const setLine = (key: string, patch: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)))
+  // Cash memo (no GST): the customer is not charged the tax, so the price drops by the GST that was
+  // inside it. Switching back adds it again. Only applies when prices are typed GST-inclusive.
+  const strip = (v: number, g: number) => price2(v / (1 + g / 100))
+  const addBack = (v: number, g: number) => price2(v * (1 + g / 100))
+  const memoPrice = (l: Line): Line => (!withGst && isInclusive && l.gstRate > 0)
+    ? { ...l, rate: strip(l.rate, l.gstRate), price: strip(l.price, l.gstRate) } : l
+  const switchGst = (on: boolean) => {
+    if (on === withGst) return
+    if (isInclusive) {
+      setLines((ls) => ls.map((l) => l.gstRate > 0
+        ? (on ? { ...l, rate: addBack(l.rate, l.gstRate), price: addBack(l.price, l.gstRate) }
+              : { ...l, rate: strip(l.rate, l.gstRate), price: strip(l.price, l.gstRate) })
+        : l))
+    }
+    setWithGst(on)
+  }
   const addProduct = (p: any) => {
     setLines((ls) => {
       const existing = ls.find((l) => l.productId === p.id)
-      return existing ? ls.map((l) => (l.productId === p.id ? { ...l, qty: l.qty + 1 } : l)) : [...ls, lineFromProduct(p, 1)]
+      return existing ? ls.map((l) => (l.productId === p.id ? { ...l, qty: l.qty + 1 } : l)) : [...ls, memoPrice(lineFromProduct(p, 1))]
     })
   }
   const addService = (p: any) => {
@@ -188,7 +204,7 @@ export function QuickSalePage() {
       if (ls.some((l) => l.productId === p.id)) return ls
       // per-wheel services default to the tyres in the basket, or 4 wheels on a service-only visit
       const qty = perTyre ? Math.max(1, tyreUnits || (serviceMode ? 4 : 1)) : 1
-      return [...ls, lineFromProduct(p, qty)]
+      return [...ls, memoPrice(lineFromProduct(p, qty))]
     })
   }
 
@@ -467,7 +483,7 @@ export function QuickSalePage() {
               </div>
             )}
             <label className="flex items-center gap-2 text-sm font-medium text-gray-800 mb-1">
-              <input type="checkbox" checked={withGst} onChange={(e) => setWithGst(e.target.checked)} />
+              <input type="checkbox" checked={withGst} onChange={(e) => switchGst(e.target.checked)} />
               GST bill
             </label>
             {!withGst && (
