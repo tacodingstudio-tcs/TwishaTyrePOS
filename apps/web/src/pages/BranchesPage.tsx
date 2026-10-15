@@ -32,6 +32,9 @@ const ROLE_COLORS: Record<string, string> = {
 
 // ── Business profile editor ───────────────────────────────────────────────────
 
+/** A number box: blank → the default, 0 stays 0. */
+const num0 = (v: string, d: number): number => (v.trim() === '' || Number.isNaN(Number(v)) ? d : Math.max(0, Number(v)))
+
 function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }) {
   const updateBranch = useUpdateBranch()
   const cfg = (branch.domainConfig ?? {}) as Record<string, any>
@@ -86,12 +89,13 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
         default_service_gst: Number(form.serviceGst) || 18,
         default_service_sac: form.serviceSac.trim() || '998714',
         default_warranty_months: Number(form.warrantyMonths) || 0,
-        service_reminder_days: Number(form.serviceDays) || 180,
-        service_reminder_km: Number(form.serviceKm) || 10000,
-        alignment_reminder_days: Number(form.alignDays) || 180,
-        alignment_reminder_km: Number(form.alignKm) || 10000,
-        balancing_reminder_days: Number(form.balDays) || 90,
-        balancing_reminder_km: Number(form.balKm) || 5000,
+        // 0 = no reminder for that job (a blank box falls back to the default)
+        service_reminder_days: num0(form.serviceDays, 180),
+        service_reminder_km: num0(form.serviceKm, 10000),
+        alignment_reminder_days: num0(form.alignDays, 180),
+        alignment_reminder_km: num0(form.alignKm, 10000),
+        balancing_reminder_days: num0(form.balDays, 90),
+        balancing_reminder_km: num0(form.balKm, 5000),
         dead_stock_days: Number(form.deadDays) || 90,
         serial_required: form.serialRequired,
         allow_below_cost: form.allowBelowCost,
@@ -223,15 +227,16 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
           </div>
 
           <div className="border-t border-gray-100 pt-4">
-            <h4 className="text-sm font-semibold text-gray-900 mb-3">After-sales &amp; stock</h4>
+            <h4 className="text-sm font-semibold text-gray-900 mb-1">After-sales &amp; stock</h4>
+            <p className="text-xs text-gray-500 mb-3">Put 0 in a days box to switch that reminder off.</p>
             <div className="grid grid-cols-3 gap-3">
-              <div><label className="label">Remind after (days)</label><input type="number" min="30" max="720" className="input" value={form.serviceDays} onChange={set('serviceDays')} /></div>
-              <div><label className="label">…or (km)</label><input type="number" min="1000" className="input" value={form.serviceKm} onChange={set('serviceKm')} /></div>
-              <div><label className="label">Alignment due after (days)</label><input type="number" min="30" max="720" className="input" value={form.alignDays} onChange={set('alignDays')} /></div>
-              <div><label className="label">…or (km)</label><input type="number" min="1000" className="input" value={form.alignKm} onChange={set('alignKm')} /></div>
+              <div><label className="label">Remind after (days)</label><input type="number" min="0" max="720" className="input" value={form.serviceDays} onChange={set('serviceDays')} /></div>
+              <div><label className="label">…or (km)</label><input type="number" min="0" className="input" value={form.serviceKm} onChange={set('serviceKm')} /></div>
+              <div><label className="label">Alignment due after (days)</label><input type="number" min="0" max="720" className="input" value={form.alignDays} onChange={set('alignDays')} /></div>
+              <div><label className="label">…or (km)</label><input type="number" min="0" className="input" value={form.alignKm} onChange={set('alignKm')} /></div>
               <div />
-              <div><label className="label">Balancing due after (days)</label><input type="number" min="30" max="720" className="input" value={form.balDays} onChange={set('balDays')} /></div>
-              <div><label className="label">…or (km)</label><input type="number" min="1000" className="input" value={form.balKm} onChange={set('balKm')} /></div>
+              <div><label className="label">Balancing due after (days)</label><input type="number" min="0" max="720" className="input" value={form.balDays} onChange={set('balDays')} /></div>
+              <div><label className="label">…or (km)</label><input type="number" min="0" className="input" value={form.balKm} onChange={set('balKm')} /></div>
               <div />
               <div><label className="label">Dead stock after (days)</label><input type="number" min="7" max="720" className="input" value={form.deadDays} onChange={set('deadDays')} /></div>
             </div>

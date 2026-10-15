@@ -119,8 +119,10 @@ function nextDue(lines: Array<{ kind: string; a: Record<string, any> }>, conf: (
     else if (l.kind === 'service' && st === 'balancing') cands.push({ days: Number(conf('balancing_reminder_days')), km: Number(conf('balancing_reminder_km')), label: 'Wheel balancing' })
     else if (l.kind === 'service' && (st === 'fitting' || st === 'rotation')) cands.push({ days: Number(conf('service_reminder_days')), km: Number(conf('service_reminder_km')), label: 'Tyre rotation & check' })
   }
-  if (!cands.length) return null
-  return cands.reduce((a, b) => (b.days < a.days ? b : a))
+  // 0 (or blank) days in the settings means "no reminder for this" — never "due today"
+  const live = cands.filter((c) => Number.isFinite(c.days) && c.days > 0)
+  if (!live.length) return null
+  return live.reduce((a, b) => (b.days < a.days ? b : a))
 }
 
 export const tyreSalesRoutes: FastifyPluginAsync = async (app) => {
@@ -316,7 +318,7 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
       sale_kind: body.saleKind,
       vehicle_no: regNo, vehicle_type: vehicleType, odometer: body.odometer, fitted_by: body.fittedBy,
       exchange_qty: body.exchange?.qty ?? 0, exchange_value: exchangeValue,
-      next_service_km: body.nextServiceKm ?? (body.odometer && due ? body.odometer + due.km : undefined),
+      next_service_km: body.nextServiceKm ?? (body.odometer && due && due.km > 0 ? body.odometer + due.km : undefined),
       next_service_date: nextServiceDate,
       credit_days: creditDays,
       payment_splits: body.payments,

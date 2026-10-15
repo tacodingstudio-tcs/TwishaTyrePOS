@@ -275,3 +275,34 @@ describe('Data Entry price drives the discount', () => {
     expect(Number(plain.grandTotal)).toBe(11000)
   })
 })
+
+describe('Reminder rules: 0 days switches a reminder off', () => {
+  test('0 for alignment = no next-service date after an alignment; other jobs keep their rule', async () => {
+    const owner = await newShopTenant('Shakti Rules Tyres')
+    const p = (await owner.api.post('/api/products', {
+      itemType: 'product', gstRate: 18, unit: 'pcs', trackStock: true, name: 'Yokohama 155/65 R13', sku: 'YOK-155',
+      salePrice: 4000, openingStock: 20, domainAttrs: { item_kind: 'tyre', brand: 'Yokohama', size: '155/65 R13', vehicle_type: 'car' },
+    })).data
+    const svc = ((await owner.api.get('/api/tyre/finder', { params: { kind: 'service', limit: 50 } })).data.data as any[]).find((s) => s.sku === 'SVC-ALN')
+    const b = (await owner.api.get('/api/branches')).data[0]
+    await owner.api.patch(`/api/branches/${b.id}`, { domainConfig: { alignment_reminder_days: 0, service_reminder_days: 120 } })
+    const sale = async (items: any[], vehicleNo: string, phone: string) => {
+      const r = await owner.api.post('/api/tyre/sales', { customer: { name: 'R', phone }, vehicleNo, vehicleType: 'car', odometer: 40000, items,
+        payments: [{ method: 'cash', amount: 100000 }] }, { headers: { 'Idempotency-Key': crypto.randomUUID() } })
+      if (r.status === 422) return owner.api.post('/api/tyre/sales', { customer: { name: 'R', phone }, vehicleNo, vehicleType: 'car', odometer: 40000, items }, { headers: { 'Idempotency-Key': crypto.randomUUID() } })
+      return r
+    }
+    const vehicle = async (reg: string) => (await owner.api.get('/api/tyre/vehicles', { params: { search: reg } })).data.data[0]
+
+    const a = await sale([{ productId: svc.id, qty: 4 }], 'GJ01AA0001', '9876544001')
+    expect(a.status).toBe(201)
+    const va = await vehicle('GJ01AA0001')
+    expect(va.nextServiceDate ?? null).toBeNull()           // alignment reminder switched off
+    expect(va.nextServiceKm ?? null).toBeNull()
+
+    const t = await sale([{ productId: p.id, qty: 2 }], 'GJ01AA0002', '9876544002')
+    expect(t.status).toBe(201)
+    const vt = await vehicle('GJ01AA0002')
+    expect(String(vt.nextServiceDate).slice(0, 10)).toBe(new Date(Date.now() + 5.5 * 3600000 + 120 * 86400000).toISOString().slice(0, 10))
+  })
+})
