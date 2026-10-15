@@ -10,6 +10,29 @@
 // on Indian invoices.
 
 import PDFDocument from 'pdfkit'
+import { existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+
+// pdfkit's built-in Helvetica has no Gujarati glyphs. Noto Sans Gujarati (SIL OFL, assets/fonts/OFL.txt)
+// is embedded for any string that contains Gujarati letters; everything else stays in Helvetica.
+const GUJARATI_FONT = fileURLToPath(new URL('../../assets/fonts/NotoSansGujarati.ttf', import.meta.url))
+const GUJARATI = /[઀-૿]/
+function enableGujarati(doc: PDFKit.PDFDocument): void {
+  if (!existsSync(GUJARATI_FONT)) return
+  doc.registerFont('Gujarati', GUJARATI_FONT)
+  const d = doc as any
+  const withFont = <T>(text: unknown, fn: () => T): T => {
+    if (typeof text !== 'string' || !GUJARATI.test(text)) return fn()
+    const prev = d._font?.name ?? 'Helvetica'
+    const prevSize = d._fontSize
+    doc.font('Gujarati')
+    try { return fn() } finally { doc.font(prev); doc.fontSize(prevSize) }
+  }
+  const text = d.text.bind(doc)
+  d.text = (t: unknown, ...a: unknown[]) => withFont(t, () => text(t, ...a))
+  const height = d.heightOfString.bind(doc)
+  d.heightOfString = (t: unknown, ...a: unknown[]) => withFont(t, () => height(t, ...a))
+}
 
 export interface BusinessHeader {
   name: string
@@ -145,6 +168,7 @@ export interface InvoicePdfData {
 
 export async function renderInvoicePdf(b: InvoicePdfData, biz: BusinessHeader): Promise<Buffer> {
   const doc = new PDFDocument({ size: 'A4', margin: 30, info: { Title: `Invoice ${b.number}`, Author: biz.name } })
+  enableGujarati(doc)
   const done = collect(doc)
   const X = 30, W = doc.page.width - 60
   const pageBottom = () => doc.page.height - 40

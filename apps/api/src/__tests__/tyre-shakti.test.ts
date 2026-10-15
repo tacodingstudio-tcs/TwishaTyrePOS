@@ -184,3 +184,24 @@ describe('Old register import', () => {
     expect((await run(owner, { series: 'car', rows: [{ ...rows[0], billNo: 'X1', qty: -1 }] })).status).toBe(422)
   })
 })
+
+describe('Gujarati on the bill', () => {
+  test('a bill with a Gujarati name and address renders with the Gujarati font embedded; plain bills do not', async () => {
+    const owner = await newShopTenant('Shakti Gujarati Tyres')
+    const p = (await owner.api.post('/api/products', {
+      itemType: 'product', gstRate: 18, unit: 'pcs', trackStock: true, name: 'Yokohama 175/65 R14', sku: 'YOK-175',
+      salePrice: 5000, openingStock: 10, domainAttrs: { item_kind: 'tyre', brand: 'Yokohama', size: '175/65 R14', vehicle_type: 'car' },
+    })).data
+    const sale = async (name: string, address: string) => (await owner.api.post('/api/tyre/sales', {
+      customer: { name, phone: '9876543' + String(Math.floor(100 + Math.random() * 899)), address },
+      items: [{ productId: p.id, qty: 2 }], payments: [{ method: 'cash', amount: 11800 }],
+    }, { headers: { 'Idempotency-Key': crypto.randomUUID() } })).data.invoice.id
+    const pdfOf = async (id: string) => Buffer.from((await owner.api.get(`/api/tyre/invoices/${id}/pdf`, { responseType: 'arraybuffer' })).data)
+
+    const guj = await pdfOf(await sale('વિજયસિંહ બારડ', 'કોડીનાર, ગીર સોમનાથ'))
+    expect(guj.subarray(0, 4).toString()).toBe('%PDF')
+    expect(guj.toString('latin1')).toContain('NotoSansGujarati')
+    const plain = await pdfOf(await sale('Plain Customer', 'Kodinar'))
+    expect(plain.toString('latin1')).not.toContain('NotoSansGujarati')
+  })
+})
