@@ -700,6 +700,16 @@ export const tyreApi = {
   claimWarranty: (id: string, data: unknown) => api.post(`/tyre/warranty/${id}/claim`, data).then((r) => r.data),
   voidWarranty:  (id: string, reason: string) => api.post(`/tyre/warranty/${id}/void`, { reason }).then((r) => r.data),
 
+  // Team & salary
+  teamStaff:       (params?: Record<string, unknown>) => api.get('/tyre/team/staff', { params }).then((r) => r.data),
+  teamAddStaff:    (data: unknown) => api.post('/tyre/team/staff', data).then((r) => r.data),
+  teamUpdateStaff: (id: string, data: unknown) => api.patch(`/tyre/team/staff/${id}`, data).then((r) => r.data),
+  teamDays:        (params?: Record<string, unknown>) => api.get('/tyre/team/days', { params }).then((r) => r.data),
+  teamMark:        (data: unknown) => api.put('/tyre/team/days', data).then((r) => r.data),
+  teamPayroll:     (month: string) => api.get('/tyre/team/payroll', { params: { month } }).then((r) => r.data),
+  teamLedger:      (data: unknown) => api.post('/tyre/team/ledger', data).then((r) => r.data),
+  teamPay:         (data: unknown) => api.post('/tyre/team/payroll/pay', data).then((r) => r.data),
+
   // Reports
   salesReport: (params?: Record<string, unknown>) => api.get('/tyre/reports/sales', { params }).then((r) => r.data),
 

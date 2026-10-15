@@ -43,7 +43,7 @@ const OTHER: NavItem[] = [
   { to: '/pipeline',  label: 'Quotations', icon: GitBranch },
   { to: '/contracts', label: 'Contracts',  icon: RefreshCw },
   { to: '/broadcast', label: 'Broadcast',  icon: MessageCircle },
-  { to: '/staff',     label: 'Staff',      icon: UserCheck },
+  { to: '/tyre/team', label: 'Team & Salary', icon: UserCheck },
   { to: '/ai',        label: 'AI Assistant', icon: Sparkles },
   { to: '/branches',  label: 'My Business & Staff', icon: Building2 },
 ]

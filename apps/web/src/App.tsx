@@ -36,6 +36,7 @@ import { TyreDashboardPage }     from './pages/tyre/TyreDashboardPage'
 import { QuickSalePage }         from './pages/tyre/QuickSalePage'
 import { StockFinderPage }       from './pages/tyre/StockFinderPage'
 import { VehiclesPage, RemindersPage } from './pages/tyre/VehiclesPage'
+import { TeamPage } from './pages/tyre/TeamPage'
 import { VehicleDetailPage }     from './pages/tyre/VehicleDetailPage'
 import { WarrantyPage }          from './pages/tyre/WarrantyPage'
 import { TyreReportsPage }       from './pages/tyre/TyreReportsPage'
@@ -61,6 +62,7 @@ export default function App() {
           <Route path="/tyre/sale"            element={<QuickSalePage />} />
           <Route path="/tyre/stock"           element={<StockFinderPage />} />
           <Route path="/tyre/vehicles"        element={<VehiclesPage />} />
+          <Route path="/tyre/team"            element={<TeamPage />} />
           <Route path="/tyre/vehicles/:id"    element={<VehicleDetailPage />} />
           <Route path="/tyre/reminders"       element={<RemindersPage />} />
           <Route path="/tyre/warranty"        element={<WarrantyPage />} />

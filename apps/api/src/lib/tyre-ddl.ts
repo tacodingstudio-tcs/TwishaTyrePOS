@@ -101,4 +101,50 @@ export const TYRE_DDL: string[] = [
 )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "uq_tnotif_dedupe" ON "tyre_notifications" ("branchId", "dedupeKey") WHERE "dedupeKey" IS NOT NULL`,
   `CREATE INDEX IF NOT EXISTS "idx_tnotif_ref" ON "tyre_notifications" ("refType", "refId")`,
+
+  // ── Team: people, daily marks, advances / bonus / salary ────────────────────
+  // Separate from login users: a fitter or helper needs no login to be on the payroll.
+  `CREATE TABLE IF NOT EXISTS "tyre_staff" (
+  "id"          UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+  "branchId"    UUID          NOT NULL,
+  "name"        TEXT          NOT NULL,
+  "phone"       TEXT,
+  "designation" TEXT,
+  "joinDate"    DATE,
+  "salaryType"  TEXT          NOT NULL DEFAULT 'monthly' CHECK ("salaryType" IN ('monthly','daily')),
+  "baseSalary"  NUMERIC(12,2) NOT NULL DEFAULT 0,
+  "weeklyOff"   INTEGER       NOT NULL DEFAULT 0,
+  "userId"      UUID,
+  "isActive"    BOOLEAN       NOT NULL DEFAULT true,
+  "notes"       TEXT,
+  "createdAt"   TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  "updatedAt"   TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+)`,
+  `CREATE TABLE IF NOT EXISTS "tyre_staff_days" (
+  "id"            UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  "branchId"      UUID         NOT NULL,
+  "staffId"       UUID         NOT NULL,
+  "date"          DATE         NOT NULL,
+  "status"        TEXT         NOT NULL CHECK ("status" IN ('present','half','absent','leave')),
+  "overtimeHours" NUMERIC(4,1) NOT NULL DEFAULT 0,
+  "note"          TEXT,
+  "createdAt"     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  UNIQUE ("staffId", "date")
+)`,
+  `CREATE TABLE IF NOT EXISTS "tyre_staff_ledger" (
+  "id"        UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+  "branchId"  UUID          NOT NULL,
+  "staffId"   UUID          NOT NULL,
+  "kind"      TEXT          NOT NULL CHECK ("kind" IN ('advance','bonus','deduction','recovery','salary')),
+  "amount"    NUMERIC(12,2) NOT NULL CHECK ("amount" > 0),
+  "date"      DATE          NOT NULL,
+  "month"     TEXT          NOT NULL,
+  "method"    TEXT          NOT NULL DEFAULT 'cash',
+  "note"      TEXT,
+  "expenseId" UUID,
+  "createdBy" UUID,
+  "createdAt" TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+)`,
+  `CREATE INDEX IF NOT EXISTS "idx_tsdays_month"  ON "tyre_staff_days" ("branchId", "date")`,
+  `CREATE INDEX IF NOT EXISTS "idx_tsled_staff"   ON "tyre_staff_ledger" ("staffId", "month")`,
 ]

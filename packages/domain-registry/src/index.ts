@@ -158,6 +158,9 @@ export const DOMAIN_REGISTRY = {
       'tyre_vehicles',
       'tyre_warranty',
       'tyre_notifications',
+      'tyre_staff',
+      'tyre_staff_days',
+      'tyre_staff_ledger',
     ] as string[],
     features: {
       hasBatches:        false,

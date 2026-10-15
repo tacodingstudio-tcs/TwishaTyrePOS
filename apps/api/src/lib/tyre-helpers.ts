@@ -71,8 +71,10 @@ export async function run(req: Ctx, sql: string, ...params: unknown[]): Promise<
 // ── Column casts for dynamic INSERT/UPDATE ────────────────────────────────────
 const COL_CAST: Record<string, string> = {
   // uuid
+  staffId: 'uuid', expenseId: 'uuid', userId: 'uuid',
   branchId: 'uuid', partyId: 'uuid', invoiceId: 'uuid', productId: 'uuid', refId: 'uuid', createdBy: 'uuid',
   // date
+  joinDate: 'date', date: 'date',
   lastServiceDate: 'date', nextServiceDate: 'date', soldOn: 'date', warrantyUntil: 'date',
   // timestamptz
   claimedAt: 'timestamptz',
