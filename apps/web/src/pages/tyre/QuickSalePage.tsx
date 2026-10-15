@@ -289,7 +289,8 @@ export function QuickSalePage() {
     <div className="pb-4">
       <PageHeader title={serviceMode ? 'Alignment, balancing & fitting' : 'New bill'}
         subtitle={serviceMode ? 'Service visit — pick the jobs, type the charges, take payment' : 'Add tyres, type the price, save'} />
-      <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-4">
+      <div className="p-4 sm:p-6 max-w-7xl mx-auto grid grid-cols-1 xl:grid-cols-3 gap-4 items-start">
+      <div className="xl:col-span-2 space-y-4 min-w-0">
 
         {/* 1 · register + GST */}
         <section className="card p-4 flex items-center justify-between gap-3 flex-wrap">
@@ -541,13 +542,16 @@ export function QuickSalePage() {
           )}
         </section>
 
-        {/* 6 · more details */}
-        <details className="card p-4">
-          <summary className="text-sm font-medium text-gray-800 cursor-pointer">More details — address, PO, split payment, old tyre exchange, notes</summary>
-          <div className="mt-4 space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      </div>
+
+      {/* 6 · details — always open, in the right-hand column on a wide screen */}
+      <aside className="xl:sticky xl:top-4 space-y-4 min-w-0">
+        <section className="card p-4">
+          <h2 className="text-sm font-semibold text-gray-900 mb-3">Details</h2>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-3">
               {!party.id && (
-                <div className="sm:col-span-2"><label className="label" htmlFor="addr">Customer address (printed on the bill)</label>
+                <div><label className="label" htmlFor="addr">Customer address (printed on the bill)</label>
                   <input id="addr" className="input" value={address} onChange={(e) => setAddress(e.target.value)} /></div>
               )}
               <div><label className="label" htmlFor="po">PO number</label><input id="po" className="input" value={poNo} onChange={(e) => setPoNo(e.target.value)} /></div>
@@ -556,12 +560,12 @@ export function QuickSalePage() {
                   {Object.entries(VEHICLE_TYPE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select></div>
               <div><label className="label">Fitted by</label><input className="input" value={fittedBy} onChange={(e) => setFittedBy(e.target.value)} placeholder="Technician" /></div>
-              <div className="sm:col-span-3"><label className="label">Notes</label><input className="input" value={notes} onChange={(e) => setNotes(e.target.value)} /></div>
+              <div><label className="label">Notes</label><input className="input" value={notes} onChange={(e) => setNotes(e.target.value)} /></div>
             </div>
             {!serviceMode && (
               <div>
                 <h3 className="text-xs font-semibold text-gray-600 mb-2 flex items-center gap-1.5"><Recycle className="w-3.5 h-3.5" /> Old tyre in exchange</h3>
-                <div className="grid grid-cols-2 gap-3 max-w-sm">
+                <div className="grid grid-cols-2 gap-3">
                   <div><label className="label">How many</label><input type="number" min="0" className="input" value={exchQty} onChange={(e) => setExchQty(e.target.value)} /></div>
                   <div><label className="label">Allowance (₹)</label><input type="number" min="0" className="input" value={exchValue} onChange={(e) => setExchValue(e.target.value)} /></div>
                 </div>
@@ -569,7 +573,7 @@ export function QuickSalePage() {
             )}
             <div>
               <h3 className="text-xs font-semibold text-gray-600 mb-2">Split payment</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 {PAY_METHODS.map(([m, label]) => (
                   <div key={m}><label className="label" htmlFor={`p-${m}`}>{label}</label>
                     <input id={`p-${m}`} type="number" min="0" className="input" value={pay[m] ?? ''}
@@ -578,11 +582,12 @@ export function QuickSalePage() {
               </div>
             </div>
           </div>
-        </details>
+        </section>
 
         {problems.length > 0 && lines.length > 0 && (
           <ul className="text-xs text-amber-700 space-y-1">{problems.map((p) => <li key={p} className="flex gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />{p}</li>)}</ul>
         )}
+      </aside>
       </div>
 
       {/* 7 · pinned total + payment + save */}
