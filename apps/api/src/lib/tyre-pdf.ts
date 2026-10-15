@@ -40,6 +40,8 @@ export interface BusinessHeader {
   gstin?: string | null
   phone?: string | null
   email?: string | null
+  /** e.g. "Powered by Twisha Consultancy Services · https://…" — printed small at the foot of a bill */
+  poweredBy?: string | null
 }
 
 const INK = '#111827'
@@ -282,6 +284,10 @@ export async function renderInvoicePdf(b: InvoicePdfData, biz: BusinessHeader): 
   }
   doc.fillColor(MUTED).font('Helvetica').fontSize(7)
     .text(`For ${biz.name}   —   Authorised signatory`, X, pageBottom() - 6, { width: W, align: 'right', lineBreak: false })
+  if (biz.poweredBy) {
+    doc.fillColor('#9CA3AF').font('Helvetica').fontSize(6.5)
+      .text(biz.poweredBy, X, pageBottom() - 5.5, { width: W * 0.58, align: 'left', lineBreak: false })
+  }
 
   // ── Warranty card ─────────────────────────────────────────────────────────
   if (b.warranty.length) {

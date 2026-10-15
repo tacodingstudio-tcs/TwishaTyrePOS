@@ -32,6 +32,9 @@ export async function loadBusiness(ctx: Ctx): Promise<{ header: BusinessHeader; 
       gstin: b?.gstin ?? null,
       phone: config['business_phone'] ?? owner?.phone ?? null,
       email: config['business_email'] ?? null,
+      // credit line for the software provider; a business can switch it off (show_powered_by: false)
+      poweredBy: config['show_powered_by'] === false ? null
+        : ['Powered by ' + (process.env['POWERED_BY_NAME'] || 'Twisha Consultancy Services'), process.env['POWERED_BY_URL'] || ''].filter(Boolean).join(' · '),
     },
   }
 }

@@ -1,5 +1,6 @@
 // src/pages/LoginPage.tsx
 import { useState } from 'react'
+import { PoweredBy } from '@/components/PoweredBy'
 import { useNavigate, Link } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { authApi } from '@/lib/api'
@@ -106,6 +107,8 @@ export function LoginPage() {
             {isStaff ? 'I am the owner' : 'Staff member? Sign in with the business phone'}
           </button>
         </form>
+
+        <PoweredBy className="text-center mt-6" />
 
         <p className="text-center text-sm text-gray-500 mt-4">
           New business?{' '}

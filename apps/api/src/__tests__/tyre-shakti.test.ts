@@ -408,3 +408,24 @@ describe('Services follow the "GST on services" setting', () => {
     expect(Number(g.data.invoice.cgstTotal) + Number(g.data.invoice.sgstTotal)).toBeCloseTo(91.53, 2)   // 600 incl. 18%
   })
 })
+
+describe('Powered-by credit', () => {
+  test('bill PDFs carry the provider credit unless the business switches it off, and never spill onto a new page', async () => {
+    const owner = await newShopTenant('Shakti Credit Tyres')
+    const p = (await owner.api.post('/api/products', { itemType: 'product', gstRate: 18, unit: 'pcs', trackStock: true, name: 'Yokohama 175/70 R14',
+      sku: 'YOK-1770', salePrice: 5000, openingStock: 9, domainAttrs: { item_kind: 'tyre', brand: 'Yokohama', size: '175/70 R14', vehicle_type: 'car' } })).data
+    const mk = async (phone: string) => (await owner.api.post('/api/tyre/sales', { customer: { name: 'C', phone }, items: [{ productId: p.id, qty: 1 }],
+      payments: [{ method: 'cash', amount: 5000 }] }, { headers: { 'Idempotency-Key': crypto.randomUUID() } })).data.invoice.id
+    const pdfText = async (id: string) => {
+      const buf = Buffer.from((await owner.api.get(`/api/tyre/invoices/${id}/pdf`, { responseType: 'arraybuffer' })).data)
+      return { raw: buf.toString('latin1'), pages: (buf.toString('latin1').match(/\/Type \/Page\b/g) ?? []).length }
+    }
+    const on = await pdfText(await mk('9876545001'))
+    expect(on.pages).toBe(1)
+    const b = (await owner.api.get('/api/branches')).data[0]
+    await owner.api.patch(`/api/branches/${b.id}`, { domainConfig: { show_powered_by: false } })
+    const off = await pdfText(await mk('9876545002'))
+    expect(off.pages).toBe(1)
+    expect(off.raw.length).toBeLessThan(on.raw.length)       // the credit line is the only difference
+  })
+})
