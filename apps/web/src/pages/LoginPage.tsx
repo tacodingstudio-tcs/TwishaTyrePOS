@@ -73,7 +73,7 @@ function BillCard({ className = '', style }: { className?: string; style?: React
     </div>
   )
   return (
-    <div className={`rounded-2xl p-4 w-72 bg-white/[0.07] backdrop-blur-md ring-1 ring-white/15 shadow-2xl shadow-black/30 ${className}`} style={style}>
+    <div className={`rounded-2xl p-4 w-72 bg-black/45 backdrop-blur-lg ring-1 ring-white/20 shadow-2xl shadow-black/40 ${className}`} style={style}>
       <div className="flex items-center justify-between">
         <div className="text-[11px] uppercase tracking-wider text-white/50">Tax invoice · #94</div>
         <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-400/20 text-emerald-300 flex items-center gap-1">
@@ -201,14 +201,14 @@ export function LoginPage() {
 
         <div className="relative max-w-xl">
           <p className="tw-rise text-emerald-300/90 text-sm font-semibold tracking-[0.2em] uppercase" style={{ animationDelay: '.05s' }}>Point of sale · Tyre shops</p>
-          <h1 className="tw-rise tw-title mt-4 text-5xl xl:text-6xl font-extrabold leading-[1.05] tracking-tight" style={{ animationDelay: '.12s' }}>
+          <h1 className="tw-rise tw-title mt-4 text-5xl xl:text-6xl [@media(max-height:760px)]:text-4xl xl:[@media(max-height:760px)]:text-5xl font-extrabold leading-[1.05] tracking-tight" style={{ animationDelay: '.12s' }}>
             Every bill.<br />Every tyre.<br />Every rupee.
           </h1>
-          <p className="tw-rise mt-6 text-lg text-white/70 max-w-sm" style={{ animationDelay: '.2s' }}>
+          <p className="tw-rise mt-6 [@media(max-height:760px)]:mt-4 text-lg [@media(max-height:760px)]:text-base text-white/70 max-w-sm" style={{ animationDelay: '.2s' }}>
             Type one price. {PRODUCT_NAME} splits the GST, tracks the warranty, reminds the customer and keeps your stock honest.
           </p>
 
-          <div className="tw-rise mt-9 flex flex-wrap gap-2.5 max-w-sm" style={{ animationDelay: '.3s' }}>
+          <div className="tw-rise mt-9 [@media(max-height:760px)]:mt-5 flex flex-wrap gap-2.5 max-w-sm" style={{ animationDelay: '.3s' }}>
             {[
               [ShieldCheck, 'Warranty on every serial'],
               [BellRing, 'Service due → WhatsApp'],
@@ -222,18 +222,17 @@ export function LoginPage() {
               )
             })}
           </div>
-        </div>
 
-        {/* floating bill, over the tyre */}
-        <div className="absolute right-10 top-20 tw-rise" style={{ animationDelay: '.45s' }}>
-          <BillCard className="tw-float" />
-        </div>
-        <div className="absolute right-16 top-[21.5rem] tw-rise hidden xl:block" style={{ animationDelay: '.6s' }}>
-          <div className="tw-float rounded-xl bg-white/[0.07] backdrop-blur-md ring-1 ring-white/15 px-4 py-3 text-sm shadow-xl shadow-black/30" style={{ animationDelay: '-2.5s' }}>
-            <div className="text-[11px] uppercase tracking-wider text-white/45">Next due</div>
+          <div className="tw-rise mt-6 max-w-sm tw-float [@media(max-height:720px)]:hidden rounded-xl bg-black/45 backdrop-blur-lg ring-1 ring-white/20 px-4 py-3 shadow-xl shadow-black/40" style={{ animationDelay: '.55s' }}>
+            <div className="text-[11px] uppercase tracking-wider text-white/55">Next due</div>
             <div className="font-semibold text-white">Wheel alignment · GJ 03 AB 4521</div>
             <div className="text-xs text-emerald-300 mt-0.5">in 14 days · WhatsApp ready</div>
           </div>
+        </div>
+
+        {/* floating bill, over the tyre */}
+        <div className="absolute right-10 top-20 tw-rise hidden min-[1400px]:block" style={{ animationDelay: '.45s' }}>
+          <BillCard className="tw-float" />
         </div>
 
         <footer className="relative text-xs text-white/55 tw-rise" style={{ animationDelay: '.7s' }}>
@@ -314,31 +313,6 @@ export function LoginPage() {
           </div>
 
           <PoweredBy className="text-center mt-6 lg:hidden" />
-
-          {import.meta.env.DEV && (
-            <details className="mt-6">
-              <summary className="text-center text-xs text-gray-400 cursor-pointer select-none">Demo accounts (dev only) ▾</summary>
-              <div className="mt-2 text-xs text-gray-500 bg-white/70 rounded-lg p-3 space-y-1 ring-1 ring-gray-200">
-                {[
-                  ['Owner — demo shop', '9200000001', '1111'],
-                  ['Manager', '9200000011', '2222'],
-                  ['Viewer (read-only)', '9200000012', '3333'],
-                  ['Owner — Shakti Enterprise', '9300000001', '2468'],
-                ].map(([who, ph, pn]) => {
-                  const staff = ph === '9200000011' || ph === '9200000012'
-                  return (
-                    <div key={ph} className="flex justify-between gap-2 cursor-pointer hover:text-primary-600 py-0.5"
-                      onClick={() => { setPhone(ph ?? ''); setPin(pn ?? ''); setIsStaff(staff); setBizPhone(staff ? '9200000001' : '') }}>
-                      <span className="font-medium">{who}</span>
-                      <span>{ph}</span>
-                      <span className="font-mono">{pn}</span>
-                    </div>
-                  )
-                })}
-                <p className="text-gray-400 pt-1">Click a row to fill the form.</p>
-              </div>
-            </details>
-          )}
         </div>
       </main>
     </div>
