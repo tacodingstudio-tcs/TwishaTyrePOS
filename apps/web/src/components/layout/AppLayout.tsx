@@ -13,6 +13,7 @@ import { usePendingApprovals, useBranches } from '@/hooks/useApi'
 import { hiddenMenu } from '@/lib/menu'
 import { CelebrationsPanel } from '@/components/CelebrationsPanel'
 import { PoweredByBadge } from '@/components/PoweredBy'
+import { PRODUCT_NAME } from '@/lib/branding'
 
 type NavItem = { to: string; label: string; icon: React.ElementType; end?: boolean }
 
@@ -131,7 +132,7 @@ export function AppLayout() {
             <CircleDot className="w-4 h-4 text-white" />
           </div>
           <div className="overflow-hidden">
-            <div className="text-sm font-semibold text-gray-900 truncate">{tenant?.name ?? 'HisabKitab Tyres'}</div>
+            <div className="text-sm font-semibold text-gray-900 truncate">{tenant?.name ?? PRODUCT_NAME}</div>
             <div className="text-xs text-gray-500 truncate">{branch?.name}</div>
           </div>
         </div>

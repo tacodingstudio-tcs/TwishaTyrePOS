@@ -134,7 +134,7 @@ export function RegisterPage() {
           <div className="w-14 h-14 mx-auto rounded-2xl bg-primary-600 flex items-center justify-center mb-4 shadow-lg shadow-primary-600/20">
             <CircleDot className="w-7 h-7 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Create your account</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Create your Twisha POS account</h1>
           <p className="text-sm text-gray-500 mt-1">Set up billing, LRs, trips and fleet in under a minute</p>
         </div>
 
