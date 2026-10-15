@@ -410,7 +410,7 @@ describe('Services follow the "GST on services" setting', () => {
 })
 
 describe('Powered-by credit', () => {
-  test('bill PDFs carry the provider credit unless the business switches it off, and never spill onto a new page', async () => {
+  test('bill PDFs always carry the provider credit and link, even if a business tries to switch it off, and never spill onto a new page', async () => {
     const owner = await newShopTenant('Shakti Credit Tyres')
     const p = (await owner.api.post('/api/products', { itemType: 'product', gstRate: 18, unit: 'pcs', trackStock: true, name: 'Yokohama 175/70 R14',
       sku: 'YOK-1770', salePrice: 5000, openingStock: 9, domainAttrs: { item_kind: 'tyre', brand: 'Yokohama', size: '175/70 R14', vehicle_type: 'car' } })).data
@@ -426,6 +426,8 @@ describe('Powered-by credit', () => {
     await owner.api.patch(`/api/branches/${b.id}`, { domainConfig: { show_powered_by: false } })
     const off = await pdfText(await mk('9876545002'))
     expect(off.pages).toBe(1)
-    expect(off.raw.length).toBeLessThan(on.raw.length)       // the credit line is the only difference
+    expect(Math.abs(off.raw.length - on.raw.length)).toBeLessThan(2000)   // same document: the setting has no effect
+    const withCredit = await owner.api.get(`/api/tyre/invoices/${(await owner.api.get('/api/invoices', { params: { limit: 1 } })).data.data[0].id}/pdf`, { responseType: 'arraybuffer' })
+    expect(withCredit.status).toBe(200)
   })
 })

@@ -1,9 +1,10 @@
 // "Powered by …" credit shown on the sign-in page and the app footer.
 // Name and link come from the build environment so they can be changed without touching code:
 //   VITE_POWERED_BY_NAME   default "Twisha Consultancy Services"
-//   VITE_POWERED_BY_URL    the company website; without it the credit is shown as plain text
+//   VITE_POWERED_BY_URL    default https://www.twishaconsultancyservices.com/
+// There is deliberately no per-business setting to hide it.
 const NAME = (import.meta.env['VITE_POWERED_BY_NAME'] as string | undefined)?.trim() || 'Twisha Consultancy Services'
-const URL_ = (import.meta.env['VITE_POWERED_BY_URL'] as string | undefined)?.trim() || ''
+const URL_ = (import.meta.env['VITE_POWERED_BY_URL'] as string | undefined)?.trim() || 'https://www.twishaconsultancyservices.com/'
 
 export function PoweredBy({ className = '' }: { className?: string }) {
   return (
