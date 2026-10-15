@@ -281,7 +281,8 @@ export const aiRoutes: FastifyPluginAsync = async (app) => {
   // Smart reorder suggestions based on stock + sales velocity
   app.get('/reorder', async (req) => {
     const suggestions = await getReorderSuggestions(req.tenantId, req.branchId, req.db)
-    return suggestions
+    // the Stock Levels and Home screens read `.suggestions` — a bare array showed "nothing to reorder"
+    return { count: suggestions.length, suggestions }
   })
 
   // ── POST /api/ai/check-invoice ─────────────────────────────────────────────

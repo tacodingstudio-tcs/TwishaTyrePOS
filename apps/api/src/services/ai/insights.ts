@@ -119,6 +119,8 @@ const ReorderSuggestionSchema = z.object({
   avgDailySales:z.number(),
   daysLeft:    z.number(),
   suggestedQty:z.number(),
+  unit:        z.string().optional(),
+  purchasePrice:z.number().optional(),
   reason:      z.string(),
   urgency:     z.enum(['critical', 'high', 'medium']),
 })
@@ -134,12 +136,14 @@ export async function getReorderSuggestions(
   const client = tenantDb ?? db
   // Get low-stock products with 7-day sales velocity
   const products = await client.$queryRaw<Array<{
-    id: string; name: string; stock: number; low_stock_qty: number
+    id: string; name: string; unit: string | null; purchase_price: number | null; stock: number; low_stock_qty: number
     avg_daily_sales: number
   }>>`
     SELECT
       p.id::text,
       p.name,
+      p.unit,
+      p."purchasePrice"::float AS purchase_price,
       COALESCE(SUM(sl.qty), 0)::float AS stock,
       p."lowStockQty"::float AS low_stock_qty,
       COALESCE(
@@ -153,7 +157,7 @@ export async function getReorderSuggestions(
       AND p."trackStock" = true
       AND p."isActive" = true
       AND p."lowStockQty" > 0          -- no reorder level set = not something to reorder (e.g. scrap)
-    GROUP BY p.id, p.name, p."lowStockQty"
+    GROUP BY p.id, p.name, p.unit, p."purchasePrice", p."lowStockQty"
     HAVING COALESCE(SUM(sl.qty), 0) <= p."lowStockQty" * 1.5
     ORDER BY stock ASC
     LIMIT 20
@@ -184,6 +188,8 @@ export async function getReorderSuggestions(
       avgDailySales:+p.avg_daily_sales.toFixed(2),
       daysLeft:     daysLeft === 999 ? -1 : daysLeft,
       suggestedQty,
+      unit:         p.unit ?? undefined,
+      purchasePrice: p.purchase_price ?? undefined,
       reason,
       urgency,
     }

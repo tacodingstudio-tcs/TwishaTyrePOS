@@ -477,8 +477,10 @@ describe('Reorder suggestions', () => {
     await mk('Low tyre', 'LOW-1', 4, 2)
     await mk('Healthy tyre', 'OK-1', 4, 20)
     await mk('No level tyre', 'NL-1', 0, 0)
-    const r = (await owner.api.get('/api/ai/reorder')).data as Array<{ productName: string }>
-    const names = r.map((x) => x.productName)
+    const res = (await owner.api.get('/api/ai/reorder')).data as { count: number; suggestions: Array<{ productName: string; unit?: string }> }
+    expect(res.count).toBe(res.suggestions.length)
+    const names = res.suggestions.map((x) => x.productName)
+    expect(res.suggestions.find((x) => x.productName === 'Low tyre')?.unit).toBe('pcs')
     expect(names).toContain('Low tyre')
     expect(names).not.toContain('Healthy tyre')
     expect(names).not.toContain('No level tyre')
