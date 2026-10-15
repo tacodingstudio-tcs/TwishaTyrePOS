@@ -321,7 +321,7 @@ export function QuickSalePage() {
           <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">
             <div className="sm:col-span-3">
               <PartyCombobox label="Customer" type="customer" value={party}
-                placeholder="Name or mobile — or type a new name"
+                placeholder="Name or mobile"
                 onChange={(p) => { setParty(p); if (p.id && p.phone) setPhone(p.phone) }} />
             </div>
             <div className="sm:col-span-3">
@@ -546,9 +546,35 @@ export function QuickSalePage() {
 
       {/* 6 · details — always open, in the right-hand column on a wide screen */}
       <aside className="xl:sticky xl:top-4 space-y-4 min-w-0">
-        <section className="card p-4">
-          <h2 className="text-sm font-semibold text-gray-900 mb-3">Details</h2>
-          <div className="space-y-4">
+        {/* the bill: total, how it is paid, save — beside the lines on a wide screen */}
+        <section className="card p-5 hidden xl:block">
+          <div className="text-xs text-gray-500 leading-5">
+            {withGst
+              ? <>Taxable {inr(totals.taxable, 2)}<br />CGST {inr(totals.cgst, 2)} · SGST {inr(totals.sgst, 2)}</>
+              : <>No GST on this bill</>}
+          </div>
+          <div className="text-4xl font-bold text-gray-900 mt-1">{inr(totals.grand)}</div>
+          <div className="text-xs text-gray-500 mt-0.5">{lines.length === 0 ? 'Nothing added yet' : `${lines.length} item${lines.length === 1 ? '' : 's'}`}</div>
+          <div className="grid grid-cols-3 gap-2 mt-4">
+            {([['cash', 'Cash'], ['upi', 'UPI'], ['credit', 'Credit']] as const).map(([m, label]) => (
+              <button key={m} type="button" onClick={() => setPayMode(m)}
+                className={`py-2.5 rounded-lg text-sm font-medium border ${payMode === m ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-700 border-gray-200'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {payMode === 'split' && <p className="text-xs text-gray-500 mt-2">Split payment — see Optional details below</p>}
+          {balance > 0.5 && <p className="text-xs text-amber-700 mt-2">Balance on credit {inr(balance, 2)}{!hasCustomer ? ' — add the customer name and mobile' : ''}</p>}
+          <button type="button" className="btn-primary w-full justify-center py-3 text-base mt-4" disabled={!canSave} onClick={() => save.mutate()}>
+            {save.isPending ? 'Saving…' : 'Save bill'}
+          </button>
+          {readOnly && <p className="text-xs text-gray-400 text-center mt-2">Read-only access — you cannot make bills.</p>}
+        </section>
+
+        {/* rarely needed: tucked away, one click */}
+        <details className="card p-4">
+          <summary className="text-sm font-medium text-gray-800 cursor-pointer">Optional details — address, PO, notes, exchange, split payment</summary>
+          <div className="mt-3 space-y-4">
             <div className="grid grid-cols-1 gap-3">
               {!party.id && (
                 <div><label className="label" htmlFor="addr">Customer address (printed on the bill)</label>
@@ -582,7 +608,7 @@ export function QuickSalePage() {
               </div>
             </div>
           </div>
-        </section>
+        </details>
 
         {problems.length > 0 && lines.length > 0 && (
           <ul className="text-xs text-amber-700 space-y-1">{problems.map((p) => <li key={p} className="flex gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />{p}</li>)}</ul>
@@ -591,7 +617,7 @@ export function QuickSalePage() {
       </div>
 
       {/* 7 · pinned total + payment + save */}
-      <div className="sticky bottom-0 z-20 bg-white border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.06)]">
+      <div className="xl:hidden sticky bottom-0 z-20 bg-white border-t border-gray-200 shadow-[0_-4px_12px_rgba(0,0,0,0.06)]">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-4 flex-wrap">
           <div className="min-w-[10rem]">
             <div className="text-[11px] text-gray-500 leading-4">
