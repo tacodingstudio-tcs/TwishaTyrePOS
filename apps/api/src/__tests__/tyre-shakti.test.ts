@@ -306,3 +306,78 @@ describe('Reminder rules: 0 days switches a reminder off', () => {
     expect(String(vt.nextServiceDate).slice(0, 10)).toBe(new Date(Date.now() + 5.5 * 3600000 + 120 * 86400000).toISOString().slice(0, 10))
   })
 })
+
+describe('Excel product import', () => {
+  test('preview changes nothing; import creates, then a second sheet updates prices and ADDS stock', async () => {
+    const { addStaff } = await import('./helpers')
+    const owner = await newShopTenant('Shakti Product Import')
+    const cashier = await addStaff(owner, 'cashier')
+    const imp = (s: any, body: any) => s.api.post('/api/tyre/import/products', body)
+    const stockOf = async (name: string) => {
+      const r = (await owner.api.get('/api/tyre/finder', { params: { q: name, kind: 'any', inStock: 'false', limit: 5 } })).data.data as any[]
+      return r.find((x) => x.name === name)
+    }
+    const rows = [
+      { brand: 'Yokohama', size: '195 65 15', kind: 'tyre', vehicleType: 'car', salePrice: 6900, purchasePrice: 5800, stock: 8, reorderLevel: 4 },
+      { brand: 'Apollo', size: '2.75-18', kind: 'tyre', vehicleType: 'two_wheeler', salePrice: 2100, stock: 10, reorderLevel: 3, sku: 'APL-275' },
+      { name: 'Tube 4.00-8', kind: 'tube', vehicleType: 'two_wheeler', salePrice: 350, stock: 20 },
+      { brand: 'Ceat', size: '185/70 R14', salePrice: undefined },           // new item with no price → error row
+    ]
+    expect((await imp(cashier, { rows })).status).toBe(403)
+
+    const prev = (await imp(owner, { rows, dryRun: true })).data
+    expect(prev).toMatchObject({ dryRun: true, created: 3, failed: 1 })
+    expect(await stockOf('Yokohama 195/65 R15')).toBeUndefined()           // nothing saved by a preview
+
+    const done = (await imp(owner, { rows })).data
+    expect(done).toMatchObject({ created: 3, updated: 0, failed: 1, stockAdded: 38 })
+    const y = await stockOf('Yokohama 195/65 R15')
+    expect([y.stock, y.salePrice, y.lowStockQty]).toEqual([8, 6900, 4])
+    expect(y.domainAttrs).toMatchObject({ size: '195/65 R15', brand: 'Yokohama', vehicle_type: 'car' })
+
+    // a second delivery: same item, new price, 6 more received
+    const again = (await imp(owner, { rows: [{ brand: 'Yokohama', size: '195/65 R15', salePrice: 7100, stock: 6 }] })).data
+    expect(again).toMatchObject({ created: 0, updated: 1, failed: 0, stockAdded: 6 })
+    const y2 = await stockOf('Yokohama 195/65 R15')
+    expect([y2.stock, y2.salePrice]).toEqual([14, 7100])
+    // the same tyre typed another way is recognised, not duplicated
+    const alt = (await imp(owner, { rows: [{ brand: 'yokohama', size: '195/65R15', stock: 1 }] })).data
+    expect(alt).toMatchObject({ created: 0, updated: 1 })
+    expect((await stockOf('Yokohama 195/65 R15')).stock).toBe(15)
+    // categorised, so the Tyres & Items chips find them
+    const cats = (await owner.api.get('/api/categories')).data as any[]
+    const bike = cats.find((c) => c.slug === 'two-wheeler')
+    const inBike = (await owner.api.get('/api/products', { params: { categoryId: bike.id } })).data.data.map((p: any) => p.name)
+    expect(inBike).toEqual(expect.arrayContaining(['Apollo 2.75-18']))
+    // duplicate rows in one sheet are rejected; bad enum is a 422
+    const dup = (await imp(owner, { rows: [rows[0], rows[0]] })).data
+    expect(dup.rows.map((r: any) => r.action)).toEqual(['update', 'error'])
+    expect((await imp(owner, { rows: [{ ...rows[0], kind: 'banana' }] })).status).toBe(422)
+    expect((await imp(owner, { rows: [] })).status).toBe(422)
+  })
+})
+
+describe('AI bill scan option', () => {
+  test('can be switched off in settings; status reflects it; the line parser reads brand, size and kind', async () => {
+    const { parseTyreLine } = await import('../lib/tyre-parse')
+    expect(parseTyreLine('YOKOHAMA 185/65R15 BluEarth ES32')).toMatchObject({ brand: 'Yokohama', size: '185/65 R15', kind: 'tyre', vehicleType: 'car' })
+    expect(parseTyreLine('MRF 205 55 16 ZVTV')).toMatchObject({ brand: 'MRF', size: '205/55 R16' })
+    expect(parseTyreLine('Apollo 2.75-18 tube')).toMatchObject({ brand: 'Apollo', kind: 'tube', size: '2.75-18', vehicleType: 'two_wheeler' })
+    expect(parseTyreLine('CEAT 10.00 R20 truck')).toMatchObject({ brand: 'CEAT', vehicleType: 'truck_bus' })
+    expect(parseTyreLine('Wheel weights 5 kg').size).toBe('')
+
+    const owner = await newShopTenant('Shakti Ai Option')
+    const b = (await owner.api.get('/api/branches')).data[0]
+    const st = async () => (await owner.api.get('/api/tyre/import/ai-status')).data
+    expect((await st()).enabled).toBe(true)
+    await owner.api.patch(`/api/branches/${b.id}`, { domainConfig: { ai_enabled: false } })
+    expect(await st()).toMatchObject({ enabled: false, available: false })
+    const scan = await owner.api.post('/api/tyre/import/scan-bill', { imageBase64: 'A'.repeat(200) })
+    expect(scan.status).toBe(403)
+    expect(String(scan.data.error)).toMatch(/switched off/i)
+    // Excel import keeps working with AI off
+    const imp = await owner.api.post('/api/tyre/import/products', { rows: [{ brand: 'Yokohama', size: '175/65 R14', salePrice: 5900, stock: 4 }] })
+    expect(imp.status).toBe(200)
+    expect(imp.data.created).toBe(1)
+  })
+})

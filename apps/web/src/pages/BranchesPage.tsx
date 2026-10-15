@@ -66,6 +66,7 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
     terms:     String(cfg['invoice_terms'] ?? ''),
     email:     String(cfg['business_email'] ?? ''),
     hidden:    Array.from(hiddenMenu(cfg)),
+    aiEnabled: cfg['ai_enabled'] !== false,
     inclusive: Boolean(cfg['prices_include_gst']),
     carStart:  String(cfg['bill_series']?.car?.start ?? ''),
     twStart:   String(cfg['bill_series']?.two_wheel?.start ?? ''),
@@ -104,6 +105,7 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
         invoice_terms: form.terms.trim(),
         business_email: form.email.trim(),
         hidden_menu: form.hidden,
+        ai_enabled: form.aiEnabled,
         prices_include_gst: form.inclusive,
         // two plain-numbered registers (e.g. Car from 93, Two wheel 2W-1…); blank = one FY-style series
         bill_series: {
@@ -145,6 +147,16 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
           <div className="grid grid-cols-2 gap-3">
             <div><label className="label">City</label><input className="input" value={form.city} onChange={set('city')} /></div>
             <div><label className="label">Pincode</label><input className="input" value={form.pincode} onChange={set('pincode')} /></div>
+          </div>
+
+          <div className="border-t border-gray-100 pt-4">
+            <h4 className="text-sm font-semibold text-gray-900 mb-1">AI features</h4>
+            <label className="flex items-start gap-2 text-sm text-gray-700">
+              <input type="checkbox" className="mt-0.5" checked={form.aiEnabled} onChange={(e) => setForm({ ...form, aiEnabled: e.target.checked })} />
+              <span>Use AI (reads scanned supplier bills, AI assistant, smart suggestions)
+                <span className="block text-[11px] text-gray-400">Needs internet and an AI key on the server. Untick for fully offline use — everything else keeps working, including Excel import.</span>
+              </span>
+            </label>
           </div>
 
           <div className="border-t border-gray-100 pt-4">

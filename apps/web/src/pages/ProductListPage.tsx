@@ -1,5 +1,6 @@
 // src/pages/ProductListPage.tsx
 import { useState, useRef, useCallback } from 'react'
+import { TyreImportModal } from '@/components/tyre/TyreImportModal'
 import * as XLSX from 'xlsx'
 import { useProducts, useCreateProduct, useUpdateProduct, useSuggestHSN, useConfirmHSN } from '@/hooks/useApi'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -348,7 +349,8 @@ export function ProductListPage() {
         )}
       </div>
 
-      {showImportModal && (
+      {showImportModal && domainType === 'tyre' && <TyreImportModal onClose={() => setShowImportModal(false)} />}
+      {showImportModal && domainType !== 'tyre' && (
         <BulkImportModal onClose={() => setShowImportModal(false)} domainType={domainType} />
       )}
 

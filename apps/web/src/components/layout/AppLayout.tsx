@@ -99,6 +99,7 @@ export function AppLayout() {
   const isManager = canManage()
   const { data: branchList } = useBranches()
   const hidden = hiddenMenu((branchList as any[])?.[0]?.domainConfig)
+  if ((branchList as any[])?.[0]?.domainConfig?.ai_enabled === false) hidden.add('/ai')
   const show = (items: NavItem[]) => items.filter((i) => !hidden.has(i.to))
   const { data: pendingApprovals } = usePendingApprovals({ enabled: isManager })
   const pendingCount = Array.isArray(pendingApprovals) ? pendingApprovals.length : 0
