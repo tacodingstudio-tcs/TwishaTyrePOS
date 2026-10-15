@@ -1,21 +1,145 @@
 // src/pages/LoginPage.tsx
-// Twisha POS sign-in: a brand panel on the left (desktop) and the form on the right.
-import { useState } from 'react'
+// Twisha POS sign-in. Left: an immersive dark hero (a slowly turning tyre, a live-looking bill that shows the
+// product's signature trick — type one price, tax is split out). Right: a calm sign-in card with a 4-box PIN.
+import { useMemo, useRef, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { authApi } from '@/lib/api'
 import { useAuthStore } from '@/store/auth.store'
-import { CircleDot, Loader2, ReceiptText, ShieldCheck, Boxes, Users, Phone, Lock } from 'lucide-react'
+import { Loader2, ShieldCheck, BellRing, Phone, ArrowRight, Check } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { PoweredBy } from '@/components/PoweredBy'
 import { PRODUCT_NAME } from '@/lib/branding'
 
-const FEATURES: Array<[React.ElementType, string, string]> = [
-  [ReceiptText, 'Bills in seconds', 'GST-ready invoices — type one price, the tax is worked out for you'],
-  [ShieldCheck, 'Warranty & service reminders', 'Serial numbers on file, next alignment due, WhatsApp to the customer'],
-  [Boxes, 'Stock that tells you what to order', 'Reorder alerts, dead stock and purchase orders in one place'],
-  [Users, 'Your whole shop', 'Staff attendance, salary, advances, shop costs and money to collect'],
-]
+const CSS = `
+@keyframes tw-spin  { to { transform: rotate(360deg) } }
+@keyframes tw-float { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-9px) } }
+@keyframes tw-rise  { from { opacity: 0; transform: translateY(16px) } to { opacity: 1; transform: none } }
+@keyframes tw-glow  { 0%,100% { opacity: .55 } 50% { opacity: .9 } }
+@keyframes tw-sweep { from { background-position: -200% 0 } to { background-position: 200% 0 } }
+.tw-spin  { animation: tw-spin 70s linear infinite }
+.tw-float { animation: tw-float 6s ease-in-out infinite }
+.tw-rise  { animation: tw-rise .7s cubic-bezier(.2,.7,.2,1) both }
+.tw-glow  { animation: tw-glow 5s ease-in-out infinite }
+.tw-title { background: linear-gradient(100deg,#fff 20%,#86efac 45%,#fff 70%); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: tw-sweep 7s linear infinite }
+@media (prefers-reduced-motion: reduce) { .tw-spin,.tw-float,.tw-rise,.tw-glow,.tw-title { animation: none } }
+`
+
+/** The tyre: tread blocks, sidewall lettering, a five-spoke rim and a hub. Pure SVG. */
+function TyreArt({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 400 400" className={className} aria-hidden="true">
+      <defs>
+        <radialGradient id="tw-rim" cx="50%" cy="40%" r="65%">
+          <stop offset="0" stopColor="#f0fdf4" /><stop offset="0.6" stopColor="#86efac" /><stop offset="1" stopColor="#15803d" />
+        </radialGradient>
+        <radialGradient id="tw-wall" cx="50%" cy="50%" r="50%">
+          <stop offset="0.55" stopColor="#0b2417" /><stop offset="1" stopColor="#050f09" />
+        </radialGradient>
+        <path id="tw-arc" d="M200,200 m-141,0 a141,141 0 1,1 282,0 a141,141 0 1,1 -282,0" />
+      </defs>
+      {/* tread */}
+      <circle cx="200" cy="200" r="188" fill="#040b07" stroke="#0f1f16" strokeWidth="2" />
+      <circle cx="200" cy="200" r="178" fill="none" stroke="#22c55e" strokeOpacity="0.55" strokeWidth="20" strokeDasharray="9 11" />
+      <circle cx="200" cy="200" r="178" fill="none" stroke="#052e16" strokeWidth="3" />
+      {/* sidewall */}
+      <circle cx="200" cy="200" r="158" fill="url(#tw-wall)" stroke="#14532d" strokeWidth="3" />
+      <text fontSize="13" fontWeight="700" letterSpacing="7" fill="#4ade80" fillOpacity="0.85">
+        <textPath href="#tw-arc" startOffset="0">TWISHA POS · RADIAL · TUBELESS · TWISHA POS · RADIAL · TUBELESS ·</textPath>
+      </text>
+      <circle cx="200" cy="200" r="118" fill="none" stroke="#166534" strokeWidth="2" strokeDasharray="2 6" />
+      {/* rim */}
+      <circle cx="200" cy="200" r="104" fill="url(#tw-rim)" stroke="#bbf7d0" strokeWidth="2" />
+      {[0, 72, 144, 216, 288].map((a) => (
+        <g key={a} transform={`rotate(${a} 200 200)`}>
+          <rect x="188" y="104" width="24" height="74" rx="12" fill="#052e16" fillOpacity="0.92" />
+          <circle cx="200" cy="120" r="5" fill="#bbf7d0" />
+        </g>
+      ))}
+      <circle cx="200" cy="200" r="42" fill="#052e16" stroke="#4ade80" strokeWidth="3" />
+      {[0, 72, 144, 216, 288].map((a) => (
+        <circle key={a} cx={200 + 28 * Math.cos((a - 90) * Math.PI / 180)} cy={200 + 28 * Math.sin((a - 90) * Math.PI / 180)} r="3.2" fill="#86efac" />
+      ))}
+      <text x="200" y="212" textAnchor="middle" fontSize="34" fontWeight="800" fill="#f0fdf4">T</text>
+    </svg>
+  )
+}
+
+/** A bill that shows what the product does: one typed price, the tax worked out underneath. */
+function BillCard({ className = '', style }: { className?: string; style?: React.CSSProperties }) {
+  const row = (k: string, v: string, strong = false) => (
+    <div className={`flex justify-between ${strong ? 'text-white text-[15px] font-bold pt-2 mt-1 border-t border-white/15' : 'text-white/65 text-xs'}`}>
+      <span>{k}</span><span className="tabular-nums">{v}</span>
+    </div>
+  )
+  return (
+    <div className={`rounded-2xl p-4 w-72 bg-white/[0.07] backdrop-blur-md ring-1 ring-white/15 shadow-2xl shadow-black/30 ${className}`} style={style}>
+      <div className="flex items-center justify-between">
+        <div className="text-[11px] uppercase tracking-wider text-white/50">Tax invoice · #94</div>
+        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-400/20 text-emerald-300 flex items-center gap-1">
+          <Check className="w-3 h-3" /> Paid · UPI
+        </span>
+      </div>
+      <div className="mt-3 text-sm font-semibold text-white">Yokohama 185/65 R15 <span className="text-white/50 font-normal">× 4</span></div>
+      <div className="mt-2 rounded-lg bg-black/25 ring-1 ring-emerald-400/30 px-3 py-2 flex items-center justify-between">
+        <span className="text-[11px] text-emerald-200/80">Data Entry (per tyre)</span>
+        <span className="text-lg font-bold text-emerald-300 tabular-nums">₹10,400</span>
+      </div>
+      <div className="mt-3 space-y-1">
+        {row('Taxable', '₹35,254.24')}
+        {row('CGST 9%', '₹3,172.88')}
+        {row('SGST 9%', '₹3,172.88')}
+        {row('Total', '₹41,600', true)}
+      </div>
+    </div>
+  )
+}
+
+/** Four boxes, one digit each: type, paste, backspace and arrows all behave. */
+function PinBoxes({ value, onChange, onComplete }: { value: string; onChange: (v: string) => void; onComplete?: (pin: string) => void }) {
+  const refs = useRef<Array<HTMLInputElement | null>>([])
+  const digits = value.padEnd(4, ' ').split('')
+  const set = (next: string) => {
+    const clean = next.replace(/\D/g, '').slice(0, 4)
+    onChange(clean)
+    if (clean.length === 4) onComplete?.(clean)
+  }
+  return (
+    <div className="flex gap-3 justify-between" role="group" aria-label="4-digit PIN">
+      {[0, 1, 2, 3].map((i) => (
+        <input
+          key={i}
+          ref={(el) => { refs.current[i] = el }}
+          id={i === 0 ? 'login-pin' : undefined}
+          type="password" inputMode="numeric" autoComplete="off" maxLength={1}
+          aria-label={`PIN digit ${i + 1}`}
+          value={digits[i] === ' ' ? '' : digits[i]}
+          onFocus={(e) => e.target.select()}
+          onChange={(e) => {
+            const d = e.target.value.replace(/\D/g, '').slice(-1)
+            const arr = value.padEnd(4, ' ').split('')
+            arr[i] = d || ' '
+            set(arr.join('').replace(/ /g, ''))
+            if (d && i < 3) refs.current[i + 1]?.focus()
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Backspace' && !digits[i]?.trim() && i > 0) { refs.current[i - 1]?.focus() }
+            if (e.key === 'ArrowLeft' && i > 0) refs.current[i - 1]?.focus()
+            if (e.key === 'ArrowRight' && i < 3) refs.current[i + 1]?.focus()
+          }}
+          onPaste={(e) => {
+            const t = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 4)
+            if (t) { e.preventDefault(); set(t); refs.current[Math.min(t.length, 3)]?.focus() }
+          }}
+          className="w-full h-14 text-center text-2xl font-bold rounded-xl border border-gray-300 bg-white
+                     focus:border-primary-500 focus:ring-4 focus:ring-primary-100 outline-none transition
+                     data-[filled=true]:border-primary-400 data-[filled=true]:bg-primary-50/40"
+          data-filled={!!digits[i]?.trim()}
+        />
+      ))}
+    </div>
+  )
+}
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -24,166 +148,177 @@ export function LoginPage() {
   const [pin, setPin]     = useState('')
   const [bizPhone, setBizPhone] = useState('')
   const [isStaff, setIsStaff]   = useState(false)
+  const greeting = useMemo(() => {
+    const h = new Date().getHours()
+    return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
+  }, [])
 
   const loginMutation = useMutation({
-    mutationFn: () => authApi.login(phone, pin, isStaff ? bizPhone : undefined),
+    mutationFn: (p: string) => authApi.login(phone, p, isStaff ? bizPhone : undefined),
     onSuccess: (data) => {
-      setAuth(
-        data.accessToken, data.refreshToken, data.accessTokenExpiresIn,
-        data.user, data.tenant, data.branch
-      )
+      setAuth(data.accessToken, data.refreshToken, data.accessTokenExpiresIn, data.user, data.tenant, data.branch)
       toast.success(`Welcome back, ${data.user.name}!`)
       navigate('/')
     },
     onError: (err: any) => {
       // No response = server unreachable/asleep; the api layer already shows that message.
-      if (err?.response) toast.error(err.response.status === 429 ? 'Too many tries — wait a minute' : 'Wrong phone number or PIN')
+      // the api layer has already toasted the server's wording; replace it with ours so there is one clear message
+      if (err?.response) { toast.dismiss(); toast.error(err.response.status === 429 ? 'Too many tries — wait a minute' : 'Wrong phone number or PIN') }
+      // start the PIN again from the first box (a half-edited old PIN would otherwise re-submit on the 4th digit)
+      setPin('')
+      setTimeout(() => document.getElementById('login-pin')?.focus(), 30)
     },
   })
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (phone.length < 10 || pin.length !== 4 || (isStaff && bizPhone.length < 10)) return
-    loginMutation.mutate()
+  const ready = phone.length >= 10 && pin.length === 4 && (!isStaff || bizPhone.length >= 10)
+  function submit() {
+    if (!ready || loginMutation.isPending) return
+    loginMutation.mutate(pin)
   }
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-[1.05fr_1fr] bg-white">
+    <div className="min-h-screen grid lg:grid-cols-[1.15fr_1fr] bg-[#050f09]">
+      <style>{CSS}</style>
 
-      {/* ── Brand panel ─────────────────────────────────────────────────────────── */}
-      <aside className="hidden lg:flex relative overflow-hidden flex-col justify-between p-12 text-white bg-gradient-to-br from-primary-700 via-primary-800 to-gray-900">
-        {/* tyre-tread rings */}
-        <svg className="absolute -right-40 -bottom-40 w-[44rem] h-[44rem] opacity-[0.10]" viewBox="0 0 200 200" fill="none" aria-hidden="true">
-          {[96, 80, 64, 48, 32].map((r, i) => (
-            <circle key={r} cx="100" cy="100" r={r} stroke="white" strokeWidth={i === 0 ? 10 : 3} strokeDasharray={i === 0 ? '3 5' : undefined} />
-          ))}
-          <circle cx="100" cy="100" r="10" fill="white" />
-        </svg>
-        <div className="absolute -left-24 -top-24 w-72 h-72 rounded-full bg-white/5" aria-hidden="true" />
+      {/* ══ Hero ═══════════════════════════════════════════════════════════════════ */}
+      <aside className="hidden lg:flex relative overflow-hidden flex-col justify-between p-12 text-white"
+        style={{ background: 'radial-gradient(1100px 700px at 15% 0%, #14532d 0%, #052e16 38%, #050f09 75%)' }}>
+        {/* dot grid + glow */}
+        <div className="absolute inset-0 opacity-[0.14]" style={{ backgroundImage: 'radial-gradient(#86efac 1px, transparent 1px)', backgroundSize: '26px 26px' }} aria-hidden="true" />
+        <div className="absolute -right-24 top-1/3 w-[34rem] h-[34rem] rounded-full bg-emerald-400/20 blur-3xl tw-glow" aria-hidden="true" />
 
-        <div className="relative">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center ring-1 ring-white/25">
-              <CircleDot className="w-6 h-6" />
-            </div>
-            <div className="leading-tight">
-              <div className="text-xl font-bold tracking-tight">{PRODUCT_NAME}</div>
-              <div className="text-xs text-white/70">Point of sale for tyre shops</div>
-            </div>
+        {/* the tyre, half off the canvas */}
+        <div className="absolute -right-36 -bottom-40 w-[31rem] h-[31rem]" aria-hidden="true">
+          <TyreArt className="w-full h-full tw-spin drop-shadow-[0_30px_60px_rgba(0,0,0,0.6)]" />
+        </div>
+
+        <header className="relative tw-rise">
+          <div className="inline-flex items-center gap-3">
+            <span className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-300 to-emerald-600 text-emerald-950 flex items-center justify-center font-extrabold text-xl shadow-lg shadow-emerald-500/30">T</span>
+            <span className="text-lg font-semibold tracking-tight">{PRODUCT_NAME}</span>
           </div>
+        </header>
 
-          <h1 className="mt-16 text-4xl font-bold leading-tight max-w-md">
-            Run the whole tyre shop from one screen.
+        <div className="relative max-w-xl">
+          <p className="tw-rise text-emerald-300/90 text-sm font-semibold tracking-[0.2em] uppercase" style={{ animationDelay: '.05s' }}>Point of sale · Tyre shops</p>
+          <h1 className="tw-rise tw-title mt-4 text-5xl xl:text-6xl font-extrabold leading-[1.05] tracking-tight" style={{ animationDelay: '.12s' }}>
+            Every bill.<br />Every tyre.<br />Every rupee.
           </h1>
-          <p className="mt-4 text-white/75 max-w-md">
-            Sell, fit, track warranty and stock, pay your people and know what is owed — built for how a tyre counter actually works.
+          <p className="tw-rise mt-6 text-lg text-white/70 max-w-sm" style={{ animationDelay: '.2s' }}>
+            Type one price. {PRODUCT_NAME} splits the GST, tracks the warranty, reminds the customer and keeps your stock honest.
           </p>
 
-          <ul className="mt-10 space-y-5 max-w-md">
-            {FEATURES.map(([Icon, title, text]) => (
-              <li key={title} className="flex gap-4">
-                <span className="mt-0.5 w-9 h-9 shrink-0 rounded-lg bg-white/10 ring-1 ring-white/15 flex items-center justify-center">
-                  <Icon className="w-[18px] h-[18px]" />
+          <div className="tw-rise mt-9 flex flex-wrap gap-2.5 max-w-sm" style={{ animationDelay: '.3s' }}>
+            {[
+              [ShieldCheck, 'Warranty on every serial'],
+              [BellRing, 'Service due → WhatsApp'],
+              [Check, 'GST-ready, always'],
+            ].map(([Icon, text]) => {
+              const I = Icon as React.ElementType
+              return (
+                <span key={text as string} className="inline-flex items-center gap-2 rounded-full bg-white/[0.07] ring-1 ring-white/15 backdrop-blur px-3.5 py-1.5 text-sm text-white/85">
+                  <I className="w-4 h-4 text-emerald-300" /> {text as string}
                 </span>
-                <span>
-                  <span className="block text-sm font-semibold">{title}</span>
-                  <span className="block text-sm text-white/65">{text}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
+              )
+            })}
+          </div>
         </div>
 
-        <div className="relative text-xs text-white/60">
-          <span>
-            Powered by{' '}
-            <a href="https://www.twishaconsultancyservices.com/" target="_blank" rel="noopener noreferrer"
-              className="font-semibold text-white/90 hover:text-white hover:underline">Twisha Consultancy Services</a>
-          </span>
+        {/* floating bill, over the tyre */}
+        <div className="absolute right-10 top-20 tw-rise" style={{ animationDelay: '.45s' }}>
+          <BillCard className="tw-float" />
         </div>
+        <div className="absolute right-16 top-[21.5rem] tw-rise hidden xl:block" style={{ animationDelay: '.6s' }}>
+          <div className="tw-float rounded-xl bg-white/[0.07] backdrop-blur-md ring-1 ring-white/15 px-4 py-3 text-sm shadow-xl shadow-black/30" style={{ animationDelay: '-2.5s' }}>
+            <div className="text-[11px] uppercase tracking-wider text-white/45">Next due</div>
+            <div className="font-semibold text-white">Wheel alignment · GJ 03 AB 4521</div>
+            <div className="text-xs text-emerald-300 mt-0.5">in 14 days · WhatsApp ready</div>
+          </div>
+        </div>
+
+        <footer className="relative text-xs text-white/55 tw-rise" style={{ animationDelay: '.7s' }}>
+          Powered by{' '}
+          <a href="https://www.twishaconsultancyservices.com/" target="_blank" rel="noopener noreferrer"
+            className="font-semibold text-white/90 hover:text-white hover:underline">Twisha Consultancy Services</a>
+        </footer>
       </aside>
 
-      {/* ── Sign-in ─────────────────────────────────────────────────────────────── */}
-      <main className="flex items-center justify-center px-5 py-10 bg-gradient-to-br from-primary-50/60 to-gray-50">
-        <div className="w-full max-w-sm">
+      {/* ══ Sign in ════════════════════════════════════════════════════════════════ */}
+      <main className="relative flex items-center justify-center px-5 py-10 bg-white lg:rounded-l-[2.5rem] lg:-ml-8 z-10 shadow-[-24px_0_60px_rgba(0,0,0,0.25)]">
+        <div className="w-full max-w-sm tw-rise">
 
-          {/* small screens: the brand sits above the form */}
+          {/* small screens: compact brand */}
           <div className="lg:hidden text-center mb-8">
-            <div className="w-14 h-14 mx-auto rounded-2xl bg-primary-600 flex items-center justify-center mb-3 shadow-lg shadow-primary-600/25">
-              <CircleDot className="w-7 h-7 text-white" />
-            </div>
-            <div className="text-xl font-bold text-gray-900">{PRODUCT_NAME}</div>
-            <div className="text-xs text-gray-500">Point of sale for tyre shops</div>
+            <span className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-emerald-300 to-emerald-600 text-emerald-950 flex items-center justify-center font-extrabold text-2xl shadow-lg shadow-emerald-500/30">T</span>
+            <div className="mt-3 text-2xl font-extrabold text-gray-900">{PRODUCT_NAME}</div>
+            <div className="text-xs text-gray-500">Every bill. Every tyre. Every rupee.</div>
           </div>
 
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Sign in to {PRODUCT_NAME}</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              {isStaff ? 'Staff sign-in — use the shop’s registered number as well.' : 'Use your registered phone number and 4-digit PIN.'}
-            </p>
-          </div>
+          <p className="text-sm font-semibold text-primary-600">{greeting} 👋</p>
+          <h2 className="mt-1 text-3xl font-extrabold text-gray-900 tracking-tight">Sign in to {PRODUCT_NAME}</h2>
+          <p className="text-sm text-gray-500 mt-2">
+            {isStaff ? 'Staff sign-in — add the shop’s registered number too.' : 'Your phone number and 4-digit PIN. That is all.'}
+          </p>
 
-          <form onSubmit={handleSubmit} className="card p-6 space-y-4 shadow-sm">
+          <form onSubmit={(e) => { e.preventDefault(); submit() }} className="mt-7 space-y-5">
             <div>
               <label className="label" htmlFor="login-phone">Phone number</label>
               <div className="relative">
-                <Phone className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Phone className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <span className="absolute left-10 top-1/2 -translate-y-1/2 text-sm text-gray-400 select-none">+91</span>
                 <input
-                  id="login-phone" type="tel" inputMode="numeric" maxLength={10} placeholder="9876543210"
+                  id="login-phone" type="tel" inputMode="numeric" maxLength={10} placeholder="98765 43210" autoFocus
                   value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
-                  className="input pl-9" autoFocus
+                  className="w-full h-12 pl-[4.6rem] pr-3 rounded-xl border border-gray-300 bg-white text-base
+                             focus:border-primary-500 focus:ring-4 focus:ring-primary-100 outline-none transition"
                 />
               </div>
             </div>
 
             {isStaff && (
-              <div>
-                <label className="label" htmlFor="login-biz">Business phone <span className="text-gray-400 font-normal">(the owner's number)</span></label>
+              <div className="tw-rise">
+                <label className="label" htmlFor="login-biz">Shop's registered phone <span className="text-gray-400 font-normal">(the owner's number)</span></label>
                 <input
-                  id="login-biz" type="tel" inputMode="numeric" maxLength={10} placeholder="Owner's registered phone"
+                  id="login-biz" type="tel" inputMode="numeric" maxLength={10} placeholder="Owner's phone"
                   value={bizPhone} onChange={(e) => setBizPhone(e.target.value.replace(/\D/g, ''))}
-                  className="input"
+                  className="w-full h-12 px-3.5 rounded-xl border border-gray-300 bg-white text-base
+                             focus:border-primary-500 focus:ring-4 focus:ring-primary-100 outline-none transition"
                 />
               </div>
             )}
 
             <div>
-              <label className="label" htmlFor="login-pin">4-digit PIN</label>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  id="login-pin" type="password" inputMode="numeric" maxLength={4} placeholder="••••"
-                  value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-                  className="input pl-9 text-center text-2xl tracking-[0.5em] font-semibold"
-                />
-              </div>
+              <label className="label" htmlFor="login-pin">PIN</label>
+              <PinBoxes value={pin} onChange={setPin} onComplete={(p) => { if (phone.length >= 10 && (!isStaff || bizPhone.length >= 10) && !loginMutation.isPending) loginMutation.mutate(p) }} />
             </div>
 
-            <button
-              type="submit"
-              disabled={phone.length < 10 || pin.length !== 4 || (isStaff && bizPhone.length < 10) || loginMutation.isPending}
-              className="btn-primary w-full justify-center mt-2 py-2.5"
-            >
-              {loginMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : `Sign in to ${PRODUCT_NAME}`}
+            <button type="submit" disabled={!ready || loginMutation.isPending}
+              className="group w-full h-12 rounded-xl font-semibold text-white flex items-center justify-center gap-2
+                         bg-gradient-to-r from-primary-600 to-emerald-600 shadow-lg shadow-primary-600/25
+                         hover:shadow-xl hover:shadow-primary-600/35 hover:-translate-y-px active:translate-y-0
+                         disabled:opacity-50 disabled:shadow-none disabled:hover:translate-y-0 transition-all">
+              {loginMutation.isPending
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Signing you in…</>
+                : <>Sign in <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" /></>}
             </button>
+
             <button type="button" onClick={() => setIsStaff((v) => !v)}
               className="block mx-auto text-xs text-gray-500 hover:text-primary-600">
-              {isStaff ? 'I am the owner' : 'Staff member? Sign in with the business phone'}
+              {isStaff ? 'I am the owner' : 'Staff member? Sign in with the shop’s number'}
             </button>
           </form>
 
-          <p className="text-center text-sm text-gray-500 mt-5">
+          <div className="mt-8 pt-6 border-t border-gray-200/80 text-center text-sm text-gray-500">
             New shop?{' '}
-            <Link to="/register" className="text-primary-600 font-medium hover:underline">Create your {PRODUCT_NAME} account</Link>
-          </p>
+            <Link to="/register" className="text-primary-600 font-semibold hover:underline">Create your {PRODUCT_NAME} account</Link>
+          </div>
 
-          {/* the panel above carries the credit on desktop; small screens get it here */}
-          <PoweredBy className="text-center mt-8 lg:hidden" />
+          <PoweredBy className="text-center mt-6 lg:hidden" />
 
           {import.meta.env.DEV && (
             <details className="mt-6">
               <summary className="text-center text-xs text-gray-400 cursor-pointer select-none">Demo accounts (dev only) ▾</summary>
-              <div className="mt-2 text-xs text-gray-500 bg-gray-50 rounded-lg p-3 space-y-1">
+              <div className="mt-2 text-xs text-gray-500 bg-white/70 rounded-lg p-3 space-y-1 ring-1 ring-gray-200">
                 {[
                   ['Owner — demo shop', '9200000001', '1111'],
                   ['Manager', '9200000011', '2222'],
@@ -200,7 +335,7 @@ export function LoginPage() {
                     </div>
                   )
                 })}
-                <p className="text-gray-400 pt-1">Click a row to fill the form. Run <code>pnpm --filter @billing/api seed</code> to create the demo shop.</p>
+                <p className="text-gray-400 pt-1">Click a row to fill the form.</p>
               </div>
             </details>
           )}

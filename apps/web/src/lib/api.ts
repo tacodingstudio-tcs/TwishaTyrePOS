@@ -64,7 +64,11 @@ api.interceptors.response.use(
   async (error: AxiosError<{ error?: string; message?: string; issues?: Record<string, string[]> }>) => {
     const originalRequest = error.config as (typeof error.config & { _retry?: boolean }) | undefined
 
-    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
+    // A wrong PIN is a 401 from the sign-in call itself — that is an answer to show, not an expired session.
+    // (It used to reload the page: the typed phone number and the error message were both lost.)
+    const reqUrl = String(originalRequest?.url ?? '')
+    const isSignIn = reqUrl.includes('/auth/login') || reqUrl.includes('/auth/register')
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry && !isSignIn) {
       originalRequest._retry = true
 
       if (isRefreshing) {
