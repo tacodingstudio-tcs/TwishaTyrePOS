@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { Search, Plus, Trash2, Car, Wrench, Recycle, AlertTriangle } from 'lucide-react'
+import { Search, Plus, Minus, Trash2, Car, Wrench, Recycle, AlertTriangle, CircleDot, Wind, Gauge, RotateCw, Droplets, Settings2, Check } from 'lucide-react'
 import { tyreApi, branchApi, apiError } from '@/lib/api'
 import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -63,6 +63,23 @@ function lineFromProduct(p: any, qty = 1): Line {
     serviceType: kind === 'service' ? a.service_type : undefined,
     readingsBefore: {}, readingsAfter: {},
   }
+}
+
+const SERVICE_ICON: Record<string, React.ElementType> = {
+  alignment: Gauge, balancing: CircleDot, fitting: Wrench, rotation: RotateCw, nitrogen: Wind, puncture: Droplets, valve: Settings2,
+}
+/** A service's icon from its type, else from its name. */
+function serviceIcon(s: any): React.ElementType {
+  const t = String(s?.domainAttrs?.service_type ?? '')
+  if (SERVICE_ICON[t]) return SERVICE_ICON[t]!
+  const n = String(s?.name ?? '').toLowerCase()
+  if (/align/.test(n)) return Gauge
+  if (/balanc/.test(n)) return CircleDot
+  if (/nitrogen|inflat|air/.test(n)) return Wind
+  if (/puncture|repair/.test(n)) return Droplets
+  if (/rotat/.test(n)) return RotateCw
+  if (/valve/.test(n)) return Settings2
+  return Wrench
 }
 
 export function QuickSalePage() {
@@ -361,8 +378,55 @@ export function QuickSalePage() {
           </section>
         )}
 
+        {/* 3b · service cards (service visits): tap a card to add it, + / − to change how many */}
+        {serviceMode && (
+          <section className="card p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Tap the jobs done</div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              {(services?.data ?? []).map((sv: any) => {
+                const line = lines.find((l) => l.productId === sv.id)
+                const Icon = serviceIcon(sv)
+                const on = !!line
+                return (
+                  <div key={sv.id}
+                    className={`relative rounded-xl border-2 p-3 transition select-none ${on ? 'border-green-600 bg-green-50' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+                    <button type="button" className="w-full text-left" onClick={() => (on ? setLine(line!.key, { qty: line!.qty + 1 }) : addService(sv))}
+                      aria-label={`Add ${sv.name}`}>
+                      <div className="flex items-start justify-between">
+                        <Icon className={`w-6 h-6 ${on ? 'text-green-700' : 'text-gray-400'}`} />
+                        {on && <span className="w-5 h-5 rounded-full bg-green-600 text-white flex items-center justify-center"><Check className="w-3.5 h-3.5" /></span>}
+                      </div>
+                      <div className="mt-2 text-sm font-semibold text-gray-900 leading-tight">{sv.name}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">{inr(sv.salePrice)}{/tyre|wheel/.test(String(sv.unit)) ? ' each' : ''}</div>
+                    </button>
+                    {on && (
+                      <div className="mt-2 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <button type="button" aria-label="Fewer"
+                            className="w-7 h-7 rounded-md border border-gray-300 bg-white flex items-center justify-center"
+                            onClick={() => (line!.qty <= 1 ? setLines((ls) => ls.filter((x) => x.key !== line!.key)) : setLine(line!.key, { qty: line!.qty - 1 }))}>
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <span className="w-6 text-center text-sm font-semibold">{line!.qty}</span>
+                          <button type="button" aria-label="More"
+                            className="w-7 h-7 rounded-md border border-gray-300 bg-white flex items-center justify-center"
+                            onClick={() => setLine(line!.key, { qty: line!.qty + 1 })}>
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <span className="text-sm font-semibold text-green-800">{inr(price2(line!.qty * line!.price))}</span>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+              {(services?.data ?? []).length === 0 && <p className="col-span-full text-sm text-gray-400">No services set up yet — add them under Tyres &amp; Items.</p>}
+            </div>
+          </section>
+        )}
+
         {/* 4 · bill lines */}
-        <section className="card">
+        <section className={`card ${serviceMode && lines.length === 0 ? 'hidden' : ''}`}>
           {lines.length === 0 ? (
             <p className="p-8 text-center text-sm text-gray-400">{serviceMode ? 'Pick the jobs below.' : 'Search a tyre above to start the bill.'}</p>
           ) : (
@@ -385,13 +449,13 @@ export function QuickSalePage() {
                         </button>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
+                    <div className={`grid grid-cols-2 ${serviceMode ? 'sm:grid-cols-2 max-w-md' : 'sm:grid-cols-4'} gap-3 items-end`}>
                       <div><label className="label">Qty</label>
                         <input type="number" min="1" step={l.kind === 'service' ? 'any' : 1} className="input" value={l.qty}
                           onChange={(e) => setLine(l.key, { qty: Math.max(0, Number(e.target.value)) })} /></div>
-                      <div><label className="label">List price</label>
+                      <div className={serviceMode ? 'hidden' : ''}><label className="label">List price</label>
                         <input type="number" min="0" className="input" value={l.rate} onChange={(e) => onList(l, Number(e.target.value))} /></div>
-                      <div><label className="label">Discount %</label>
+                      <div className={serviceMode ? 'hidden' : ''}><label className="label">Discount %</label>
                         <input type="number" min="0" max="100" step="0.01" className="input" value={l.discountPct}
                           onChange={(e) => onDisc(l, Math.min(100, Math.max(0, Number(e.target.value))))} /></div>
                       <div><label className="label font-semibold text-gray-900">{isInclusive && withGst ? 'Data Entry (incl. GST)' : 'Price charged'}</label>
@@ -459,7 +523,7 @@ export function QuickSalePage() {
           )}
 
           {/* quick jobs */}
-          {(services?.data ?? []).length > 0 && (
+          {!serviceMode && (services?.data ?? []).length > 0 && (
             <div className="p-4 border-t border-gray-100 bg-gray-50">
               <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2 flex items-center gap-1.5"><Wrench className="w-3.5 h-3.5" /> Quick add</div>
               <div className="flex flex-wrap gap-2">
@@ -475,7 +539,8 @@ export function QuickSalePage() {
         </section>
 
         {/* 5 · charges */}
-        <section className="card p-4">
+        <details className={`card p-4 ${serviceMode ? '' : 'open'}`} open={!serviceMode}>
+          <summary className={`text-sm font-medium text-gray-800 cursor-pointer ${serviceMode ? '' : 'hidden'}`}>Add other charges (alignment, balancing, weight, labour)</summary>
           <div className="text-xs text-gray-500 mb-2">Other charges — typed amounts, no GST</div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {CHARGE_LABELS.map((k) => (
@@ -484,7 +549,7 @@ export function QuickSalePage() {
                   onChange={(e) => setCharges((c) => ({ ...c, [k]: e.target.value }))} /></div>
             ))}
           </div>
-        </section>
+        </details>
 
         {/* 6 · more details */}
         <details className="card p-4">
