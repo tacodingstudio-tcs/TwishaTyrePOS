@@ -12,6 +12,15 @@ import { getTenantDb } from '../lib/tenant-db.js'
 import { runDailyAlerts } from '../lib/tyre-notify.js'
 
 export async function runTyreAlerts(): Promise<void> {
+  // Housekeeping: replay-protection rows and expired sign-in tokens only matter for a day or two, so they are
+  // not allowed to pile up (idempotency_keys keeps each saved response body).
+  try {
+    const k = await db.$executeRawUnsafe(`DELETE FROM public.idempotency_keys WHERE created_at < NOW() - INTERVAL '7 days'`)
+    const t = await db.$executeRawUnsafe(`DELETE FROM public.refresh_tokens WHERE expires_at < NOW() - INTERVAL '1 day' OR (revoked AND created_at < NOW() - INTERVAL '7 days')`)
+    console.log(`[Tyre Alerts] housekeeping — ${k} old idempotency keys, ${t} dead tokens removed`)
+  } catch (err) {
+    console.error('[Tyre Alerts] housekeeping failed:', (err as Error).message)
+  }
   const tenants = await db.tenant.findMany({ where: { isActive: true }, select: { id: true, schemaName: true } })
   let reminders = 0, serviceDue = 0, ownerAlerts = 0
   for (const t of tenants) {
