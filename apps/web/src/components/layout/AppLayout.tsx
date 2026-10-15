@@ -9,7 +9,8 @@ import {
   RefreshCw, Wallet, TrendingUp, MessageCircle, ReceiptText, LineChart, Container,
   CircleDot, Car, ShieldCheck, BellRing, Wrench,
 } from 'lucide-react'
-import { usePendingApprovals } from '@/hooks/useApi'
+import { usePendingApprovals, useBranches } from '@/hooks/useApi'
+import { hiddenMenu } from '@/lib/menu'
 import { CelebrationsPanel } from '@/components/CelebrationsPanel'
 
 type NavItem = { to: string; label: string; icon: React.ElementType; end?: boolean }
@@ -96,6 +97,9 @@ export function AppLayout() {
   const [moreOpen, setMoreOpen] = useState(() => OTHER.some((i) => location.pathname.startsWith(i.to)))
 
   const isManager = canManage()
+  const { data: branchList } = useBranches()
+  const hidden = hiddenMenu((branchList as any[])?.[0]?.domainConfig)
+  const show = (items: NavItem[]) => items.filter((i) => !hidden.has(i.to))
   const { data: pendingApprovals } = usePendingApprovals({ enabled: isManager })
   const pendingCount = Array.isArray(pendingApprovals) ? pendingApprovals.length : 0
 
@@ -136,19 +140,16 @@ export function AppLayout() {
 
         {/* Navigation */}
         <nav className="flex-1 px-3 pb-3 space-y-1 overflow-y-auto">
-          <Section items={OPERATIONS} />
-          <Section title="After-sales" items={AFTERSALES} />
-          <Section title="Money" items={FINANCE} />
+          <Section items={show(OPERATIONS)} />
+          {show(AFTERSALES).length > 0 && <Section title="After-sales" items={show(AFTERSALES)} />}
+          {show(FINANCE).length > 0 && <Section title="Money" items={show(FINANCE)} />}
 
           {isManager && (
             <div className="space-y-1">
-              <NavLink to="/aging" className={linkCls}>
-                <TrendingUp className="w-4 h-4" /><span className="flex-1">Pending Money</span>
-              </NavLink>
-              <NavLink to="/advances" className={linkCls}>
+              {!hidden.has('/advances') && <NavLink to="/advances" className={linkCls}>
                 <Wallet className="w-4 h-4" /><span className="flex-1">Advances</span>
-              </NavLink>
-              <NavLink to="/approvals" className={linkCls}>
+              </NavLink>}
+              {!hidden.has('/approvals') && <NavLink to="/approvals" className={linkCls}>
                 <Clock className="w-4 h-4" />
                 <span className="flex-1">Approvals</span>
                 {pendingCount > 0 && (
@@ -156,12 +157,12 @@ export function AppLayout() {
                     {pendingCount}
                   </span>
                 )}
-              </NavLink>
+              </NavLink>}
             </div>
           )}
 
           {/* Inventory — expandable (tyres, spares, lubricants) */}
-          <NavLink to="/inventory"
+          {!hidden.has('/inventory') && <NavLink to="/inventory"
             className={() =>
               `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 inventoryOpen ? 'bg-primary-50 text-primary-700' : 'text-gray-600 hover:bg-gray-100'
@@ -169,8 +170,8 @@ export function AppLayout() {
             <Warehouse className="w-4 h-4" />
             <span className="flex-1">Stores</span>
             <ChevronDown className={`w-3.5 h-3.5 transition-transform ${inventoryOpen ? 'rotate-180' : ''}`} />
-          </NavLink>
-          {inventoryOpen && (
+          </NavLink>}
+          {inventoryOpen && !hidden.has('/inventory') && (
             <div className="ml-4 pl-3 border-l border-gray-200 space-y-0.5">
               {INVENTORY_ITEMS.map(({ to, label, icon: Icon }) => (
                 <NavLink key={to} to={to}
@@ -191,7 +192,7 @@ export function AppLayout() {
             <span className="flex-1 text-left">More</span>
             <ChevronDown className={`w-3.5 h-3.5 transition-transform ${moreOpen ? 'rotate-180' : ''}`} />
           </button>
-          {moreOpen && <Section items={OTHER} />}
+          {moreOpen && <Section items={show(OTHER)} />}
         </nav>
 
         {/* User footer */}

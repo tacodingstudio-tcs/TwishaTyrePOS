@@ -1,5 +1,6 @@
 // src/pages/BranchesPage.tsx
 import { useState } from 'react'
+import { HIDEABLE_MENU, hiddenMenu } from '@/lib/menu'
 import {
   useBranches, useUpdateBranch,
   useUsers, useCreateUser, useResetUserPin, useDeactivateUser, useActivateUser,
@@ -61,6 +62,7 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
     bankIfsc:  String(cfg['bank_ifsc'] ?? ''),
     terms:     String(cfg['invoice_terms'] ?? ''),
     email:     String(cfg['business_email'] ?? ''),
+    hidden:    Array.from(hiddenMenu(cfg)),
     inclusive: Boolean(cfg['prices_include_gst']),
     carStart:  String(cfg['bill_series']?.car?.start ?? ''),
     twStart:   String(cfg['bill_series']?.two_wheel?.start ?? ''),
@@ -97,6 +99,7 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
         bank_name: form.bankName.trim(), bank_account_no: form.bankAcc.trim(), bank_ifsc: form.bankIfsc.trim().toUpperCase(),
         invoice_terms: form.terms.trim(),
         business_email: form.email.trim(),
+        hidden_menu: form.hidden,
         prices_include_gst: form.inclusive,
         // two plain-numbered registers (e.g. Car from 93, Two wheel 2W-1…); blank = one FY-style series
         bill_series: {
@@ -138,6 +141,20 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
           <div className="grid grid-cols-2 gap-3">
             <div><label className="label">City</label><input className="input" value={form.city} onChange={set('city')} /></div>
             <div><label className="label">Pincode</label><input className="input" value={form.pincode} onChange={set('pincode')} /></div>
+          </div>
+
+          <div className="border-t border-gray-100 pt-4">
+            <h4 className="text-sm font-semibold text-gray-900 mb-1">Menu</h4>
+            <p className="text-xs text-gray-500 mb-3">Tick what you use. Unticked screens are hidden from the side menu (you can switch them back on any time).</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              {HIDEABLE_MENU.map((m) => (
+                <label key={m.to} className="flex items-start gap-2 text-sm text-gray-700">
+                  <input type="checkbox" className="mt-0.5" checked={!form.hidden.includes(m.to)}
+                    onChange={(e) => setForm({ ...form, hidden: e.target.checked ? form.hidden.filter((x) => x !== m.to) : [...form.hidden, m.to] })} />
+                  <span>{m.label}{m.hint ? <span className="block text-[11px] text-gray-400">{m.hint}</span> : null}</span>
+                </label>
+              ))}
+            </div>
           </div>
 
           <div className="border-t border-gray-100 pt-4">
