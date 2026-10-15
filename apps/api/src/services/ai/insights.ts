@@ -152,6 +152,7 @@ export async function getReorderSuggestions(
     WHERE p."branchId" = ${branchId}::uuid
       AND p."trackStock" = true
       AND p."isActive" = true
+      AND p."lowStockQty" > 0          -- no reorder level set = not something to reorder (e.g. scrap)
     GROUP BY p.id, p.name, p."lowStockQty"
     HAVING COALESCE(SUM(sl.qty), 0) <= p."lowStockQty" * 1.5
     ORDER BY stock ASC

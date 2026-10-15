@@ -467,3 +467,21 @@ describe('Billing core flows in a tyre shop', () => {
     })
   })
 })
+
+describe('Reorder suggestions', () => {
+  test('only items with a reorder level that are at or near it are suggested (scrap/no-level items are not)', async () => {
+    const owner = await newShopTenant('Reorder Tyres')
+    const mk = async (name: string, sku: string, lowStockQty: number, openingStock: number) =>
+      (await owner.api.post('/api/products', { name, sku, itemType: 'product', gstRate: 18, unit: 'pcs', trackStock: true, salePrice: 1000, lowStockQty, openingStock,
+        domainAttrs: { item_kind: 'tyre', size: '185/65 R15', brand: 'X' } })).data
+    await mk('Low tyre', 'LOW-1', 4, 2)
+    await mk('Healthy tyre', 'OK-1', 4, 20)
+    await mk('No level tyre', 'NL-1', 0, 0)
+    const r = (await owner.api.get('/api/ai/reorder')).data as Array<{ productName: string }>
+    const names = r.map((x) => x.productName)
+    expect(names).toContain('Low tyre')
+    expect(names).not.toContain('Healthy tyre')
+    expect(names).not.toContain('No level tyre')
+    expect(names).not.toContain('Old Tyre (scrap)')
+  })
+})
