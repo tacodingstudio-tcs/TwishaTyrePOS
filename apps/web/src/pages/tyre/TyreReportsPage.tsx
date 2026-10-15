@@ -1,5 +1,6 @@
 // Sales & margin by size / brand / item, and dead stock.
 import { useState } from 'react'
+import { localIso, localMonth } from '@/lib/dates'
 import { useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { tyreApi, apiError } from '@/lib/api'
@@ -9,8 +10,8 @@ import { inr, num, fmtDate } from '@/components/tyre/format'
 type Tab = 'size' | 'brand' | 'product' | 'vehicle_type' | 'dead'
 const TABS: Array<[Tab, string]> = [['size', 'By size'], ['brand', 'By brand'], ['product', 'By item'], ['vehicle_type', 'By vehicle'], ['dead', 'Dead stock']]
 
-const monthStart = () => `${new Date().toISOString().slice(0, 8)}01`
-const today = () => new Date().toISOString().slice(0, 10)
+const monthStart = () => `${localMonth()}-01`
+const today = () => localIso()
 
 export function TyreReportsPage() {
   const [tab, setTab] = useState<Tab>('size')

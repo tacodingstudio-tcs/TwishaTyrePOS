@@ -1,5 +1,6 @@
 // src/pages/DashboardPage.tsx
 import { useState } from 'react'
+import { localIso } from '@/lib/dates'
 import {
   useDailySummary, useLowStock, useUdhaarSummary, useInvoices,
   useWeeklySummary, useAIInsight, useReorderSuggestions,
@@ -29,8 +30,7 @@ function periodRange(period: string) {
   const now  = new Date()
   const days = period === '90d' ? 90 : period === '30d' ? 30 : 7
   const from = new Date(now); from.setDate(from.getDate() - days)
-  const fmt  = (d: Date) => d.toISOString().slice(0, 10)
-  return { from: fmt(from), to: fmt(now) }
+  return { from: localIso(from), to: localIso(now) }
 }
 
 export function DashboardPage() {

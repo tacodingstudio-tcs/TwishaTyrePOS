@@ -1,5 +1,6 @@
 // Warranty register: look a tyre up by serial / vehicle / mobile / bill, record a claim.
 import { useState } from 'react'
+import { localIso } from '@/lib/dates'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -29,7 +30,7 @@ export function WarrantyPage() {
     placeholderData: (prev: any) => prev,
   })
   const rows: any[] = data?.data ?? []
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localIso()
 
   const voidIt = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) => tyreApi.voidWarranty(id, reason),

@@ -1,5 +1,6 @@
 // src/pages/CreateInvoicePage.tsx
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { localIso } from '@/lib/dates'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { ProductSearch } from '@/components/invoice/ProductSearch'
@@ -80,7 +81,7 @@ function applyDiscountRules(
 
   const today  = new Date()
   const dow    = today.getDay()  // 0=Sun
-  const todayStr = today.toISOString().slice(0, 10)
+  const todayStr = localIso(today)
 
   for (const rule of rules) {
     if (!rule.isActive) continue

@@ -1,6 +1,7 @@
 // Team & salary — the shop's own people (with or without a login): daily attendance,
 // advances / bonus / deductions, monthly payroll and salary payments.
 import { useMemo, useState } from 'react'
+import { localIso, localMonth } from '@/lib/dates'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { UserPlus, Wallet, CalendarCheck, Users } from 'lucide-react'
@@ -16,8 +17,8 @@ const STATUS: Array<[string, string, string]> = [
   ['absent',  'Absent',  'bg-red-600 text-white border-red-600'],
   ['leave',   'Leave',   'bg-blue-600 text-white border-blue-600'],
 ]
-const thisMonth = () => new Date().toISOString().slice(0, 7)
-const todayIso = () => new Date().toISOString().slice(0, 10)
+const thisMonth = () => localMonth()
+const todayIso = () => localIso()
 
 export function TeamPage() {
   const role = useAuthStore((s) => s.user?.role)

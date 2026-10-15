@@ -1,5 +1,6 @@
 // src/pages/ExpensePage.tsx
 import { useState } from 'react'
+import { localIso } from '@/lib/dates'
 import { Plus, Trash2, Pencil, TrendingDown, X, Check } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import {
@@ -17,8 +18,7 @@ function monthRange(offset = 0) {
   const mon  = now.getMonth() + offset
   const from = new Date(year, mon, 1)
   const to   = new Date(year, mon + 1, 0)
-  const fmt  = (d: Date) => d.toISOString().slice(0, 10)
-  return { from: fmt(from), to: fmt(to) }
+  return { from: localIso(from), to: localIso(to) }
 }
 
 function fmtDate(iso: string) {
@@ -78,7 +78,7 @@ export function ExpensePage() {
     setRange(monthRange(next))
   }
 
-  const monthLabel = new Date(range.from).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+  const monthLabel = new Date(`${range.from}T12:00:00`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
 
   return (
     <div>
