@@ -515,3 +515,28 @@ describe('Catalogue categories', () => {
     expect(odd.categoryId).toBe(wheels.id)
   })
 })
+
+describe('Aging / outstanding', () => {
+  test('supplier bills fall into the payable aging buckets; customer credit into receivable buckets', async () => {
+    const owner = await newShopTenant('Aging Tyres')
+    const day = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10)
+    const sup = (await owner.api.post('/api/parties', { type: 'supplier', name: 'Aging Supplier', phone: '9811500001' })).data
+    for (const [ago, amount] of [[10, 1000], [45, 2000], [100, 3000]] as const) {
+      const r = await owner.api.post('/api/invoices', { txnType: 'purchase_invoice', partyId: sup.id, date: day(ago),
+        items: [{ description: 'Stock', qty: 1, rate: amount, gstRate: 0 }] }, { headers: { 'Idempotency-Key': crypto.randomUUID() } })
+      expect(r.status).toBe(201)
+    }
+    const out = (await owner.api.get('/api/payments/outstanding', { params: { type: 'supplier' } })).data
+    expect(out.total).toBe(6000)
+    expect(out.aging).toMatchObject({ '0_30': 1000, '31_60': 2000, '90plus': 3000 })
+
+    const p = (await owner.api.post('/api/products', { name: 'T', sku: 'T1', itemType: 'product', gstRate: 18, unit: 'pcs', trackStock: true, salePrice: 1000, openingStock: 5,
+      domainAttrs: { item_kind: 'tyre', vehicle_type: 'car' } })).data
+    const s = await owner.api.post('/api/tyre/sales', { customer: { name: 'Credit Cust', phone: '9811500002' }, date: day(70), creditDays: 30,
+      items: [{ productId: p.id, qty: 1 }], payments: [{ method: 'cash', amount: 400 }] }, { headers: { 'Idempotency-Key': crypto.randomUUID() } })
+    expect(s.status).toBe(201)
+    const rec = (await owner.api.get('/api/payments/outstanding', { params: { type: 'customer' } })).data
+    expect(rec.total).toBe(780)
+    expect(rec.aging['61_90']).toBe(780)
+  })
+})

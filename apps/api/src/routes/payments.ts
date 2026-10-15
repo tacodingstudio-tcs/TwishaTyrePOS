@@ -330,7 +330,7 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
       LEFT JOIN invoices i
              ON i."partyId"  = p.id
             AND i."branchId" = ${branchId}::uuid
-            AND i."txnType"  = 'sale_invoice'
+            AND i."txnType"  = CASE WHEN p.type = 'supplier' THEN 'purchase_invoice' ELSE 'sale_invoice' END
       WHERE p.balance != 0
         AND p."branchId" = ${branchId}::uuid
       GROUP BY p.id, p.name, p.type, p.phone, p.balance
