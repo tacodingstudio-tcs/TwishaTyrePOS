@@ -65,6 +65,8 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
     carStart:  String(cfg['bill_series']?.car?.start ?? ''),
     twStart:   String(cfg['bill_series']?.two_wheel?.start ?? ''),
     twPrefix:  String(cfg['bill_series']?.two_wheel?.prefix ?? '2W-'),
+    ngStart:   String(cfg['bill_series']?.non_gst?.start ?? ''),
+    ngPrefix:  String(cfg['bill_series']?.non_gst?.prefix ?? 'NG-'),
   })
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm({ ...form, [k]: e.target.value })
@@ -99,6 +101,7 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
         // two plain-numbered registers (e.g. Car from 93, Two wheel 2W-1…); blank = one FY-style series
         bill_series: {
           ...(Number(form.carStart) > 0 ? { car: { prefix: '', start: Math.floor(Number(form.carStart)) } } : {}),
+          ...(Number(form.ngStart) > 0 ? { non_gst: { prefix: form.ngPrefix.trim(), start: Math.floor(Number(form.ngStart)) } } : {}),
           ...(Number(form.twStart) > 0 ? { two_wheel: { prefix: form.twPrefix.trim(), start: Math.floor(Number(form.twStart)) } } : {}),
         },
       },
@@ -148,6 +151,10 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
               <div><label className="label">Car bills start at</label><input type="number" min="1" className="input" placeholder="e.g. 93" value={form.carStart} onChange={set('carStart')} /></div>
               <div><label className="label">Two-wheel start at</label><input type="number" min="1" className="input" placeholder="e.g. 1" value={form.twStart} onChange={set('twStart')} /></div>
               <div><label className="label">Two-wheel prefix</label><input className="input" maxLength={6} value={form.twPrefix} onChange={set('twPrefix')} /></div>
+            </div>
+            <div className="grid grid-cols-3 gap-3 mt-3">
+              <div><label className="label">No-GST bills start at</label><input type="number" min="1" className="input" placeholder="e.g. 1" value={form.ngStart} onChange={set('ngStart')} /></div>
+              <div><label className="label">No-GST prefix</label><input className="input" maxLength={6} value={form.ngPrefix} onChange={set('ngPrefix')} /></div>
             </div>
             <div className="mt-3"><label className="label">Email (printed on bills)</label><input className="input" value={form.email} onChange={set('email')} /></div>
           </div>

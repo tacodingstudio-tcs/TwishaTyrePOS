@@ -60,6 +60,8 @@ const SaleBody = z.object({
   fittedBy:   z.string().trim().max(80).optional(),
   saleKind:   z.enum(SALE_KINDS).default('retail'),
   /** true = every price typed is what the customer pays per unit, GST included (Data Entry style) */
+  /** false = a bill with no GST at all (cash memo): the typed price is the final price, nothing is added or taken out */
+  withGst:    z.boolean().default(true),
   pricesIncludeGst: z.boolean().optional(),
   /** register the bill number comes from, e.g. 'car' | 'two_wheel' (see config bill_series) */
   billSeries: z.string().trim().regex(/^[a-z_]{1,20}$/).optional(),
@@ -231,7 +233,7 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
     const kind: string = p.itemType === 'service' ? 'service' : (a['item_kind'] ?? 'tyre')
     const rate = it.rate ?? p.salePrice
     // A catalogue GST of 0 on a non-exempt item means "never set" — fall back to the shop default.
-    const gstRate = p.gstExempt ? 0 : p.gstRate > 0 ? p.gstRate
+    const gstRate = !body.withGst || p.gstExempt ? 0 : p.gstRate > 0 ? p.gstRate
       : Number(kind === 'service' ? conf('default_service_gst') : conf('default_tyre_gst'))
     const warrantyMonths = it.warrantyMonths ?? (Number(a['warranty_months'] ?? 0) || Number(conf('default_warranty_months') ?? 0))
     // net = what one unit costs the shop to compare against purchase price, i.e. without GST
@@ -311,7 +313,7 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
       credit_days: creditDays,
       payment_splits: body.payments,
       source: 'tyre_counter',
-      bill_series: body.billSeries, po_no: body.poNo, po_date: body.poDate,
+      gst_bill: body.withGst ? undefined : false, bill_series: body.billSeries, po_no: body.poNo, po_date: body.poDate,
       vehicle_make: body.makeModel, prices_include_gst: inclusive || undefined,
     },
     aiMeta: {},
@@ -322,7 +324,7 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
         productId: l.p.id,
         description: l.p.name,
         qty: l.it.qty, unit: l.p.unit ?? 'pcs', rate: l.rate,
-        discountPct: l.it.discountPct, gstRate: l.gstRate, gstExempt: !!l.p.gstExempt, priceIncludesGst: inclusive,
+        discountPct: l.it.discountPct, gstRate: l.gstRate, gstExempt: !!l.p.gstExempt || !body.withGst, priceIncludesGst: inclusive,
         hsnSacCode: l.p.hsnSacCode ?? defaultHsn(l.kind, vehicleType ?? l.a['vehicle_type'], String(conf('default_service_sac'))),
         itemMeta: {
           item_kind: l.kind,

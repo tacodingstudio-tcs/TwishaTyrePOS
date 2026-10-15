@@ -89,6 +89,7 @@ const TyreInvoiceData = z.object({
   payment_terms:       z.enum(PAYMENT_TERMS).optional(),
   credit_days:         z.number().int().min(0).max(180).optional(),
   // register series the bill number belongs to (car / two_wheel …) and the customer's PO
+  gst_bill:            z.boolean().optional(),   // false = cash memo, outside the GST returns
   bill_series:         z.string().max(20).optional(),
   po_no:               z.string().max(40).optional(),
   po_date:             z.string().max(10).optional(),

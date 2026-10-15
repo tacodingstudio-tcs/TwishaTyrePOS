@@ -293,6 +293,7 @@ export const reportRoutes: FastifyPluginAsync = async (app) => {
         JOIN parties p ON p.id = i."partyId"
         WHERE i."branchId" = ${branchId}::uuid
           AND i."txnType"  = 'sale_invoice'
+          AND COALESCE(i."domainData"->>'gst_bill','true') <> 'false'
           AND i."date"    >= ${from}::date
           AND i."date"    <= ${to}::date
           AND i.status   != 'draft'
@@ -318,6 +319,7 @@ export const reportRoutes: FastifyPluginAsync = async (app) => {
         LEFT JOIN parties p ON p.id = i."partyId"
         WHERE i."branchId" = ${branchId}::uuid
           AND i."txnType"  = 'sale_invoice'
+          AND COALESCE(i."domainData"->>'gst_bill','true') <> 'false'
           AND i."date"    >= ${from}::date
           AND i."date"    <= ${to}::date
           AND i.status   != 'draft'
@@ -345,6 +347,7 @@ export const reportRoutes: FastifyPluginAsync = async (app) => {
         LEFT JOIN parties p ON p.id = i."partyId"
         WHERE i."branchId" = ${branchId}::uuid
           AND i."txnType"  = 'sale_invoice'
+          AND COALESCE(i."domainData"->>'gst_bill','true') <> 'false'
           AND i."date"    >= ${from}::date
           AND i."date"    <= ${to}::date
           AND i.status   != 'draft'
@@ -375,6 +378,7 @@ export const reportRoutes: FastifyPluginAsync = async (app) => {
         JOIN invoices i ON i.id = ii."invoiceId"
         WHERE i."branchId" = ${branchId}::uuid
           AND i."txnType"  = 'sale_invoice'
+          AND COALESCE(i."domainData"->>'gst_bill','true') <> 'false'
           AND i."date"    >= ${from}::date
           AND i."date"    <= ${to}::date
           AND i.status   != 'draft'

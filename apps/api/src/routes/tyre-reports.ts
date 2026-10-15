@@ -192,6 +192,7 @@ export const tyreReportRoutes: FastifyPluginAsync = async (app) => {
           'Other charges': n === 0 ? otherCharges : 0,
           'Bill Total': n === 0 ? b.grandTotal : '',
           'Customer GST No': b.partyGstin ?? '',
+          'GST Bill': b.dd?.gst_bill === false ? 'No' : 'Yes',
         })
       })
     }

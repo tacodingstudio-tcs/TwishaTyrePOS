@@ -66,7 +66,7 @@ export async function loadInvoiceDoc(ctx: Ctx, invoiceId: string): Promise<{ dat
   const { config } = await loadBusiness(ctx)
 
   const data: InvoicePdfData = {
-    number: inv.number, date: inv.date, dueDate: inv.dueDate, status: inv.status,
+    number: inv.number, gstBill: dd['gst_bill'] === false ? false : true, date: inv.date, dueDate: inv.dueDate, status: inv.status,
     partyName: inv.partyName ?? '', partyPhone: inv.partyPhone ?? null, partyGstin: inv.partyGstin ?? null,
     partyAddress: addrText(inv.partyAddress) || null,
     vehicleNo: dd['vehicle_no'] ?? null, vehicleMake: dd['vehicle_make'] ?? null,

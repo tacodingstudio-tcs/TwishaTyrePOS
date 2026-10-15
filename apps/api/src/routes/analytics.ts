@@ -419,6 +419,7 @@ export const analyticsRoutes: FastifyPluginAsync = async (app) => {
         FROM invoices
         WHERE "branchId" = ${branchId}::uuid
           AND "txnType"  = 'sale_invoice'
+          AND COALESCE("domainData"->>'gst_bill','true') <> 'false'
           AND "date"    >= ${from}::date
           AND "date"    <= ${to}::date
           AND status   != 'draft'
@@ -443,6 +444,7 @@ export const analyticsRoutes: FastifyPluginAsync = async (app) => {
         JOIN invoices i ON i.id = ii."invoiceId"
         WHERE i."branchId" = ${branchId}::uuid
           AND i."txnType"  = 'sale_invoice'
+          AND COALESCE(i."domainData"->>'gst_bill','true') <> 'false'
           AND i."date"    >= ${from}::date
           AND i."date"    <= ${to}::date
           AND i.status   != 'draft'
@@ -460,6 +462,7 @@ export const analyticsRoutes: FastifyPluginAsync = async (app) => {
         FROM invoices i
         LEFT JOIN parties p ON p.id = i."partyId"
         WHERE i."branchId" = ${branchId}::uuid AND i."txnType" = 'sale_invoice'
+          AND COALESCE(i."domainData"->>'gst_bill','true') <> 'false'
           AND i."date" >= ${from}::date AND i."date" <= ${to}::date AND i.status != 'draft'
         GROUP BY (CASE WHEN p.gstin IS NOT NULL AND p.gstin != '' THEN 'B2B' ELSE 'B2C' END)
       `,
@@ -473,6 +476,7 @@ export const analyticsRoutes: FastifyPluginAsync = async (app) => {
         FROM invoice_items ii
         JOIN invoices i ON i.id = ii."invoiceId"
         WHERE i."branchId" = ${branchId}::uuid AND i."txnType" = 'sale_invoice'
+          AND COALESCE(i."domainData"->>'gst_bill','true') <> 'false'
           AND i."date" >= ${from}::date AND i."date" <= ${to}::date AND i.status != 'draft'
         GROUP BY ii."gstRate"
         ORDER BY ii."gstRate"

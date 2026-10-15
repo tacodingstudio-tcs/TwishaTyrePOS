@@ -88,6 +88,7 @@ export function QuickSalePage() {
   const [notes, setNotes] = useState('')
   // Data Entry style billing: the price typed is what the customer pays per tyre, GST inside it
   const [inclusive, setInclusive] = useState<boolean | null>(null)
+  const [withGst, setWithGst] = useState(true)          // false = cash memo, no GST on this bill
   const [billSeries, setBillSeries] = useState('')
   const [makeModel, setMakeModel] = useState('')
   const [address, setAddress] = useState('')
@@ -97,7 +98,13 @@ export function QuickSalePage() {
   const shopCfg: Record<string, any> = (branches as any[])?.[0]?.domainConfig ?? {}
   const seriesKeys = Object.keys(shopCfg['bill_series'] ?? {})
   const isInclusive = inclusive ?? !!shopCfg['prices_include_gst']
-  useEffect(() => { if (!billSeries && seriesKeys.length) setBillSeries(seriesKeys[0]!) }, [seriesKeys.join(',')]) // eslint-disable-line
+  // a no-GST bill goes into its own register when the shop has one, so the GST register stays continuous
+  const gstKeys = seriesKeys.filter((k) => k !== 'non_gst')
+  useEffect(() => {
+    if (!seriesKeys.length) return
+    const want = !withGst && seriesKeys.includes('non_gst') ? 'non_gst' : (gstKeys.includes(billSeries) ? billSeries : (gstKeys[0] ?? seriesKeys[0]!))
+    if (want !== billSeries) setBillSeries(want)
+  }, [seriesKeys.join(','), withGst]) // eslint-disable-line
   // finder
   const [size, setSize] = useState('')
   const [text, setText] = useState('')
@@ -145,14 +152,14 @@ export function QuickSalePage() {
     let taxable = 0, gst = 0, cgst = 0
     for (const l of lines) {
       const amt = r2(l.qty * l.rate * (1 - l.discountPct / 100))
-      const g = isInclusive ? r2(amt * l.gstRate / (100 + l.gstRate)) : r2(amt * l.gstRate / 100)
+      const g = !withGst ? 0 : isInclusive ? r2(amt * l.gstRate / (100 + l.gstRate)) : r2(amt * l.gstRate / 100)
       taxable += isInclusive ? amt - g : amt
       gst += g; cgst += r2(g / 2)
     }
     const extra = CHARGE_LABELS.reduce((sum, k) => sum + (Number(charges[k]) || 0), 0)
     const grand = Math.round(taxable + gst + extra)
     return { taxable, gst, cgst, sgst: gst - cgst, extra, grand }
-  }, [lines, isInclusive, charges])
+  }, [lines, isInclusive, charges, withGst])
   const paid = Object.values(pay).reduce((s, v) => s + (Number(v) || 0), 0)
   const exch = Number(exchValue) || 0
   const balance = Math.round((totals.grand - paid - exch) * 100) / 100
@@ -183,6 +190,7 @@ export function QuickSalePage() {
       return tyreApi.createSale({
         partyId: party.id,
         customer: !party.id && party.name.trim() ? { name: party.name.trim(), phone: phone.replace(/\D/g, '') || undefined, address: address.trim() || undefined } : undefined,
+        withGst,
         pricesIncludeGst: isInclusive,
         billSeries: billSeries || undefined,
         makeModel: makeModel.trim() || undefined,
@@ -443,11 +451,20 @@ export function QuickSalePage() {
               <div className="mb-3">
                 <label className="label" htmlFor="series">Bill register</label>
                 <select id="series" className="input" value={billSeries} onChange={(e) => setBillSeries(e.target.value)}>
-                  {seriesKeys.map((k) => <option key={k} value={k}>{k.replace(/_/g, ' ')}</option>)}
+                  {seriesKeys.filter((k) => withGst ? k !== 'non_gst' : true).map((k) => <option key={k} value={k}>{k.replace(/_/g, ' ')}</option>)}
                 </select>
               </div>
             )}
-            <label className="flex items-center gap-2 text-xs text-gray-600 mb-3">
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-800 mb-1">
+              <input type="checkbox" checked={withGst} onChange={(e) => setWithGst(e.target.checked)} />
+              GST bill
+            </label>
+            {!withGst && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-3">
+                Cash memo — no GST is charged or shown, and it stays out of the GST returns. The price you type is the final price.
+              </p>
+            )}
+            <label className={`flex items-center gap-2 text-xs text-gray-600 mb-3 ${withGst ? '' : 'hidden'}`}>
               <input type="checkbox" checked={isInclusive} onChange={(e) => setInclusive(e.target.checked)} />
               Prices already include GST (Data Entry)
             </label>

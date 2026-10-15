@@ -205,3 +205,39 @@ describe('Gujarati on the bill', () => {
     expect(plain.toString('latin1')).not.toContain('NotoSansGujarati')
   })
 })
+
+describe('No-GST (cash memo) bills', () => {
+  test('withGst:false charges no tax, uses its own register, stays out of GST returns, prints as Cash Memo', async () => {
+    const owner = await newShopTenant('Shakti NoGst Tyres')
+    const p = (await owner.api.post('/api/products', {
+      itemType: 'product', gstRate: 18, unit: 'pcs', trackStock: true, name: 'Yokohama 165/80 R14', sku: 'YOK-165',
+      salePrice: 5000, openingStock: 20, domainAttrs: { item_kind: 'tyre', brand: 'Yokohama', size: '165/80 R14', vehicle_type: 'car' },
+    })).data
+    const b = (await owner.api.get('/api/branches')).data[0]
+    await owner.api.patch(`/api/branches/${b.id}`, { domainConfig: { prices_include_gst: true,
+      bill_series: { car: { prefix: '', start: 93 }, non_gst: { prefix: 'NG-', start: 1 } } } })
+    const post = (body: any) => owner.api.post('/api/tyre/sales', body, { headers: { 'Idempotency-Key': crypto.randomUUID() } })
+    const gst = await post({ customer: { name: 'With GST', phone: '9876543401' }, billSeries: 'car',
+      items: [{ productId: p.id, qty: 2, rate: 5900 }], payments: [{ method: 'cash', amount: 11800 }] })
+    const cash = await post({ customer: { name: 'Cash Memo', phone: '9876543402' }, withGst: false, billSeries: 'non_gst',
+      items: [{ productId: p.id, qty: 2, rate: 5000 }], charges: [{ label: 'Alignment', amount: 300 }],
+      payments: [{ method: 'cash', amount: 10300 }] })
+    expect([gst.status, cash.status]).toEqual([201, 201])
+    expect(cash.data.invoice.number).toBe('NG-1')
+    expect(Number(cash.data.invoice.grandTotal)).toBe(10300)
+    expect(Number(cash.data.invoice.cgstTotal)).toBe(0)
+
+    const month = new Date().toISOString().slice(0, 7)
+    const sum = (await owner.api.get('/api/analytics/gst-summary', { params: { month } })).data
+    expect(sum.summary).toMatchObject({ invoice_count: 1, total_invoice_value: 11800 })   // only the GST bill is in the return
+
+    const reg = (await owner.api.get('/api/tyre/reports/register')).data.rows
+    expect(reg.find((r: any) => r['Bill No'] === 'NG-1')['GST Bill']).toBe('No')
+    expect(reg.find((r: any) => r['Bill No'] === '93')['GST Bill']).toBe('Yes')
+
+    const pdf = await owner.api.get(`/api/tyre/invoices/${cash.data.invoice.id}/pdf`, { responseType: 'arraybuffer' })
+    expect(pdf.status).toBe(200)
+    expect(Buffer.from(pdf.data).subarray(0, 4).toString()).toBe('%PDF')
+    expect((await post({ customer: { name: 'X', phone: '9876543403' }, withGst: 'no', items: [{ productId: p.id, qty: 1 }], payments: [] })).status).toBe(422)
+  })
+})

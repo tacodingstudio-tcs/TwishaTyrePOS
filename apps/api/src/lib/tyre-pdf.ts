@@ -137,6 +137,8 @@ export interface WarrantyCardRow {
 
 export interface InvoicePdfData {
   number: string
+  /** false = a cash memo with no GST; printed as "Bill", not "Tax Invoice" */
+  gstBill?: boolean
   date: unknown
   dueDate?: unknown
   status: string
@@ -173,7 +175,7 @@ export async function renderInvoicePdf(b: InvoicePdfData, biz: BusinessHeader): 
   const X = 30, W = doc.page.width - 60
   const pageBottom = () => doc.page.height - 40
 
-  let y = letterhead(doc, biz, 'Tax Invoice', 'Original for recipient · Tyres, tubes & fitting services', X, 30, W)
+  let y = letterhead(doc, biz, b.gstBill === false ? 'Cash Memo' : 'Tax Invoice', b.gstBill === false ? 'Original for recipient · Not a tax invoice' : 'Original for recipient · Tyres, tubes & fitting services', X, 30, W)
 
   // Bill-to / meta
   doc.lineWidth(0.5).strokeColor(LINE).rect(X, y, W * 0.58, 86).stroke().rect(X + W * 0.58, y, W * 0.42, 86).stroke()
