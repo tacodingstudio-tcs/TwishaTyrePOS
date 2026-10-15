@@ -241,3 +241,37 @@ describe('No-GST (cash memo) bills', () => {
     expect((await post({ customer: { name: 'X', phone: '9876543403' }, withGst: 'no', items: [{ productId: p.id, qty: 1 }], payments: [] })).status).toBe(422)
   })
 })
+
+describe('Data Entry price drives the discount', () => {
+  test('finalPrice below list is recorded as a discount; at/above list there is none; totals are exact', async () => {
+    const owner = await newShopTenant('Shakti Discount Tyres')
+    const p = (await owner.api.post('/api/products', {
+      itemType: 'product', gstRate: 18, unit: 'pcs', trackStock: true, name: 'Yokohama 215/60 R17', sku: 'YOK-215',
+      salePrice: 11000, purchasePrice: 8000, openingStock: 30, domainAttrs: { item_kind: 'tyre', brand: 'Yokohama', size: '215/60 R17', vehicle_type: 'car' },
+    })).data
+    const b = (await owner.api.get('/api/branches')).data[0]
+    await owner.api.patch(`/api/branches/${b.id}`, { domainConfig: { prices_include_gst: true } })
+    const sale = async (item: any, paid: number, phone: string) => {
+      const r = await owner.api.post('/api/tyre/sales', { customer: { name: 'D', phone }, items: [{ productId: p.id, ...item }],
+        payments: [{ method: 'cash', amount: paid }] }, { headers: { 'Idempotency-Key': crypto.randomUUID() } })
+      expect(r.status).toBe(201)
+      const inv = (await owner.api.get(`/api/invoices/${r.data.invoice.id}`)).data
+      return inv
+    }
+    // list 11,000 → typed 10,400 × 4 = 41,600; discount (11,000 − 10,400) × 4 = 2,400 incl. GST
+    const a = await sale({ qty: 4, finalPrice: 10400 }, 41600, '9876543501')
+    expect(Number(a.grandTotal)).toBe(41600)
+    const gross = 44000, discIncl = 2400
+    expect(Number(a.items[0].discountAmt)).toBeCloseTo(discIncl * 100 / 118, 2)
+    expect(Number(a.items[0].taxableAmt)).toBeCloseTo((gross - discIncl) * 100 / 118, 2)
+    // a price with paise and an awkward percentage stays exact
+    const c = await sale({ qty: 3, finalPrice: 9876.5 }, 29629.5, '9876543502')
+    expect(Number(c.grandTotal)).toBe(Math.round(29629.5))            // whole-rupee rounding on the bill
+    // charged above list: no discount, price is what was typed
+    const up = await sale({ qty: 1, finalPrice: 12000 }, 12000, '9876543503')
+    expect([Number(up.grandTotal), Number(up.items[0].discountAmt)]).toEqual([12000, 0])
+    // no finalPrice: the catalogue price is used as before
+    const plain = await sale({ qty: 1 }, 11000, '9876543504')
+    expect(Number(plain.grandTotal)).toBe(11000)
+  })
+})

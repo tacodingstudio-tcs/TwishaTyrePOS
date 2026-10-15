@@ -32,6 +32,7 @@ interface Line {
   rate: number
   mrp?: number | null
   discountPct: number
+  price: number                // the price actually charged per unit (Data Entry) — list rate less discount
   gstRate: number
   serials: string
   dots: string
@@ -56,7 +57,7 @@ function lineFromProduct(p: any, qty = 1): Line {
   return {
     key: newKey(), productId: p.id, name: p.name, kind, unit: p.unit ?? 'pcs',
     size: a.size, brand: a.brand, stock: kind === 'service' ? null : Number(p.stock ?? 0),
-    qty, rate: Number(p.salePrice ?? 0), mrp: p.mrp ?? null, discountPct: 0,
+    qty, rate: Number(p.salePrice ?? 0), price: Number(p.salePrice ?? 0), mrp: p.mrp ?? null, discountPct: 0,
     gstRate: p.gstRate > 0 ? Number(p.gstRate) : DEFAULT_GST,
     serials: '', dots: '', positions: [], warrantyMonths: Number(a.warranty_months ?? 0) || undefined,
     serviceType: kind === 'service' ? a.service_type : undefined,
@@ -151,7 +152,7 @@ export function QuickSalePage() {
   const totals = useMemo(() => {
     let taxable = 0, gst = 0, cgst = 0
     for (const l of lines) {
-      const amt = r2(l.qty * l.rate * (1 - l.discountPct / 100))
+      const amt = r2(l.qty * l.price)
       const g = !withGst ? 0 : isInclusive ? r2(amt * l.gstRate / (100 + l.gstRate)) : r2(amt * l.gstRate / 100)
       taxable += isInclusive ? amt - g : amt
       gst += g; cgst += r2(g / 2)
@@ -166,6 +167,13 @@ export function QuickSalePage() {
   const tyreUnits = lines.filter((l) => l.kind === 'tyre').reduce((s, l) => s + l.qty, 0)
   const hasCustomer = !!party.id || (party.name.trim().length > 0 && phone.replace(/\D/g, '').length >= 10)
 
+  // list price, discount % and the price charged are one linked trio — change any one, the others follow
+  const price2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
+  const onList = (l: Line, v: number) => setLine(l.key, { rate: v, price: price2(v * (1 - l.discountPct / 100)) })
+  const onDisc = (l: Line, d: number) => setLine(l.key, { discountPct: d, price: price2(l.rate * (1 - d / 100)) })
+  const onPrice = (l: Line, p: number) => setLine(l.key, {
+    price: p, discountPct: l.rate > 0 && p < l.rate ? Math.round(((l.rate - p) / l.rate) * 10000) / 100 : 0,
+  })
   const setLine = (key: string, patch: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)))
   const addProduct = (p: any) => {
     setLines((ls) => {
@@ -203,7 +211,7 @@ export function QuickSalePage() {
         fittedBy: fittedBy.trim() || undefined,
         creditDays: balance > 0.5 ? Number(creditDays || 0) : undefined,
         items: lines.map((l) => ({
-          productId: l.productId, qty: l.qty, rate: l.rate, discountPct: l.discountPct,
+          productId: l.productId, qty: l.qty, rate: l.rate, finalPrice: l.price,
           serialNos: splitList(l.serials), dotCodes: splitList(l.dots),
           positions: l.positions.filter(Boolean),
           warrantyMonths: l.warrantyMonths,
@@ -362,15 +370,18 @@ export function QuickSalePage() {
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
-                      <div className="grid grid-cols-4 gap-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                         <div><label className="label">Qty</label>
                           <input type="number" min="1" step={l.kind === 'service' ? 'any' : 1} className="input" value={l.qty}
                             onChange={(e) => setLine(l.key, { qty: Math.max(0, Number(e.target.value)) })} /></div>
-                        <div><label className="label">{isInclusive ? 'Price incl. GST (₹)' : 'Rate (₹)'}</label>
-                          <input type="number" min="0" className="input" value={l.rate} onChange={(e) => setLine(l.key, { rate: Number(e.target.value) })} />
+                        <div><label className="label">List price (₹)</label>
+                          <input type="number" min="0" className="input" value={l.rate} onChange={(e) => onList(l, Number(e.target.value))} />
                           {l.mrp ? <span className="text-[11px] text-gray-400">MRP {inr(l.mrp)}</span> : null}</div>
                         <div><label className="label">Disc %</label>
-                          <input type="number" min="0" max="100" className="input" value={l.discountPct} onChange={(e) => setLine(l.key, { discountPct: Number(e.target.value) })} /></div>
+                          <input type="number" min="0" max="100" step="0.01" className="input" value={l.discountPct} onChange={(e) => onDisc(l, Math.min(100, Math.max(0, Number(e.target.value))))} />
+                          {l.discountPct > 0 && <span className="text-[11px] text-green-700">− {inr(price2(l.rate - l.price))} per tyre</span>}</div>
+                        <div><label className="label font-semibold text-gray-900">{isInclusive ? 'Data Entry price, incl. GST (₹)' : 'Price charged (₹)'}</label>
+                          <input type="number" min="0" className="input border-gray-900 font-semibold" value={l.price} onChange={(e) => onPrice(l, Number(e.target.value))} /></div>
                         <div><label className="label">GST %</label>
                           <input type="number" min="0" max="28" className="input" value={l.gstRate} onChange={(e) => setLine(l.key, { gstRate: Number(e.target.value) })} /></div>
                       </div>

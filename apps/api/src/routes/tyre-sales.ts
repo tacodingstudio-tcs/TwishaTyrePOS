@@ -33,6 +33,9 @@ const SaleItem = z.object({
   qty:            z.number().positive().max(1000),
   rate:           z.number().nonnegative().max(1e7).optional(),      // defaults to the catalogue sale price
   discountPct:    z.number().min(0).max(100).default(0),
+  /** the price actually charged per unit (the "Data Entry" box). When it is below the list rate the
+   *  difference is recorded as the discount; it wins over discountPct. */
+  finalPrice:     z.number().nonnegative().max(1e7).optional(),
   serialNos:      z.array(z.string().trim().min(1).max(40)).max(50).default([]),
   dotCodes:       z.array(z.string().trim().regex(/^\d{4}$/, 'DOT is week + year, e.g. 2325')).max(50).default([]),
   positions:      z.array(z.enum(TYRE_POSITIONS)).max(50).default([]),
@@ -231,14 +234,19 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
     const p = byId.get(it.productId)
     const a = (p.domainAttrs ?? {}) as Record<string, any>
     const kind: string = p.itemType === 'service' ? 'service' : (a['item_kind'] ?? 'tyre')
-    const rate = it.rate ?? p.salePrice
+    let rate = it.rate ?? p.salePrice
+    let discountPct = it.discountPct
+    if (it.finalPrice !== undefined) {
+      if (rate > 0 && it.finalPrice < rate) discountPct = ((rate - it.finalPrice) / rate) * 100
+      else { rate = it.finalPrice; discountPct = 0 }          // charged at or above list: no discount
+    }
     // A catalogue GST of 0 on a non-exempt item means "never set" — fall back to the shop default.
     const gstRate = !body.withGst || p.gstExempt ? 0 : p.gstRate > 0 ? p.gstRate
       : Number(kind === 'service' ? conf('default_service_gst') : conf('default_tyre_gst'))
     const warrantyMonths = it.warrantyMonths ?? (Number(a['warranty_months'] ?? 0) || Number(conf('default_warranty_months') ?? 0))
     // net = what one unit costs the shop to compare against purchase price, i.e. without GST
-    const net = rate * (1 - it.discountPct / 100) / (inclusive && gstRate > 0 ? 1 + gstRate / 100 : 1)
-    return { it, p, a, kind, rate, gstRate, warrantyMonths, net }
+    const net = rate * (1 - discountPct / 100) / (inclusive && gstRate > 0 ? 1 + gstRate / 100 : 1)
+    return { it, p, a, kind, rate, discountPct, gstRate, warrantyMonths, net }
   })
 
   for (const l of lines) {
@@ -324,7 +332,7 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
         productId: l.p.id,
         description: l.p.name,
         qty: l.it.qty, unit: l.p.unit ?? 'pcs', rate: l.rate,
-        discountPct: l.it.discountPct, gstRate: l.gstRate, gstExempt: !!l.p.gstExempt || !body.withGst, priceIncludesGst: inclusive,
+        discountPct: l.discountPct, gstRate: l.gstRate, gstExempt: !!l.p.gstExempt || !body.withGst, priceIncludesGst: inclusive,
         hsnSacCode: l.p.hsnSacCode ?? defaultHsn(l.kind, vehicleType ?? l.a['vehicle_type'], String(conf('default_service_sac'))),
         itemMeta: {
           item_kind: l.kind,
