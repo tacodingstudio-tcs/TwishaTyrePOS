@@ -1,6 +1,7 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
+import compress from '@fastify/compress'
 import jwt from '@fastify/jwt'
 import rateLimit from '@fastify/rate-limit'
 import { redis } from './lib/redis.js'
@@ -60,6 +61,8 @@ if (process.env['NODE_ENV'] === 'production') {
 
 // ── Security plugins ──────────────────────────────────────────────────────────
 await app.register(helmet, { contentSecurityPolicy: false })
+// Stock lists and reports are 100s of KB of JSON: gzip cuts them ~10x on the wire (PDFs/images are already compressed).
+await app.register(compress, { threshold: 1024, encodings: ['gzip', 'deflate'], global: true })
 
 // WEB_URL may be blank on a fresh deploy (Render passes an empty string) and may hold several
 // comma-separated sites; an empty value must fall back, not be handed to the cors plugin.

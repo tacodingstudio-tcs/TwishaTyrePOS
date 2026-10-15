@@ -38,12 +38,13 @@ export const tyreReportRoutes: FastifyPluginAsync = async (app) => {
                 COALESCE(SUM("grandTotal" - "paidAmt") FILTER (WHERE "grandTotal" - "paidAmt" > 0.5 AND "dueDate" IS NOT NULL AND "dueDate" < $2::date), 0)::float AS overdue,
                 COUNT(*) FILTER (WHERE "grandTotal" - "paidAmt" > 0.5 AND "dueDate" IS NOT NULL AND "dueDate" < $2::date)::int AS "overdueBills"
          FROM ${tbl(s, 'invoices')}
-         WHERE "branchId" = $1::uuid AND "txnType" = 'sale_invoice' AND status NOT IN ('cancelled','draft')`, b, today),
+         WHERE "branchId" = $1::uuid AND "txnType" = 'sale_invoice' AND status IN ('confirmed','partial')`, b, today),
       q1<any>(req,
         `WITH st AS (
            SELECT p.id, p."lowStockQty"::float AS low, p."purchasePrice"::float AS cost,
-                  COALESCE((SELECT SUM(sl.qty) FROM ${tbl(s, 'stock_ledger')} sl WHERE sl."productId" = p.id AND sl."branchId" = $1::uuid), 0)::float AS qty
+                  COALESCE(bal.qty, 0)::float AS qty
            FROM ${tbl(s, 'products')} p
+           LEFT JOIN (SELECT "productId", SUM(qty) AS qty FROM ${tbl(s, 'stock_ledger')} WHERE "branchId" = $1::uuid GROUP BY "productId") bal ON bal."productId" = p.id
            WHERE p."branchId" = $1::uuid AND p."isActive" = true AND p."trackStock" = true AND p."itemType" <> 'service'
              AND COALESCE(p."domainAttrs"->>'item_kind','tyre') <> 'scrap')
          SELECT COALESCE(SUM(qty), 0)::float AS units,

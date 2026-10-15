@@ -145,6 +145,11 @@ export const tyreImportRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
+    // imported numbers are unknown to the live counter — drop it so the next bill starts above them
+    if (!body.dryRun && created.length) {
+      await run(req, `DELETE FROM ${tbl(req.schemaName, 'invoice_sequences')} WHERE branch_id = $1::uuid AND txn_type = $2 AND fy = 'S'`,
+        req.branchId, `sale_invoice:series:${body.series}`)
+    }
     void httpError; void r2
     return { dryRun: body.dryRun, created: created.length, skipped: skipped.length, failed: problems.length, problems, numbers: created }
   })

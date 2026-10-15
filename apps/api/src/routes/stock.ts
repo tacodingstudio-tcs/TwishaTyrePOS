@@ -1,6 +1,7 @@
 // apps/api/src/routes/stock.ts
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
+import { Prisma } from '@billing/db'
 
 export const stockRoutes: FastifyPluginAsync = async (app) => {
 
@@ -10,59 +11,52 @@ export const stockRoutes: FastifyPluginAsync = async (app) => {
   // reservedQty, product: { name, unit, sku, lowStockQty, category: { name } } }] }
   app.get('/', async (req) => {
     const { branchId } = req
-    const { q, status } = z.object({
-      q:      z.string().optional(),
+    const { q, status, limit, offset } = z.object({
+      q:      z.string().trim().max(80).optional(),
       status: z.enum(['low', 'out']).optional(),
-      limit:  z.coerce.number().int().min(1).max(1000).default(200),
+      limit:  z.coerce.number().int().min(1).max(1000).default(100),
+      offset: z.coerce.number().int().min(0).default(0),
     }).parse(req.query)
+    const likePattern = q ? `%${q.replace(/[%_]/g, '\\$&')}%` : null
 
-    const likePattern = q ? `%${q}%` : null
-    const rows = await req.db.$queryRaw<Array<{
-      id: string; productId: string; currentQty: number; reservedQty: number
-      name: string; sku: string | null; unit: string
-      lowStockQty: number; categoryName: string | null
-    }>>`
-      SELECT
-        p.id::text                              AS id,
-        p.id::text                              AS "productId",
-        COALESCE(SUM(sl.qty), 0)::float         AS "currentQty",
-        0::float                                AS "reservedQty",
-        p.name,
-        p.sku,
-        p.unit,
-        p."lowStockQty"::float                  AS "lowStockQty",
-        c.name                                  AS "categoryName"
+    // Every tracked product with its balance, from ONE grouped pass over the ledger.
+    const base = Prisma.sql`
+      SELECT p.id, p.name, p.sku, p.unit, p."lowStockQty"::float AS low, p."purchasePrice"::float AS cost,
+             c.name AS category, COALESCE(s.qty, 0)::float AS qty
       FROM products p
-      LEFT JOIN stock_ledger sl
-        ON sl."productId" = p.id
-        AND sl."branchId" = ${branchId}::uuid
+      LEFT JOIN (SELECT "productId", SUM(qty) AS qty FROM stock_ledger WHERE "branchId" = ${branchId}::uuid GROUP BY "productId") s
+             ON s."productId" = p.id
       LEFT JOIN categories c ON c.id = p."categoryId"
-      WHERE p."isActive"   = true
-        AND p."trackStock" = true
-        AND (${likePattern}::text IS NULL OR p.name ILIKE ${likePattern}::text)
-      GROUP BY p.id, p.name, p.sku, p.unit, p."lowStockQty", c.name
-      ORDER BY p.name ASC
-    `
+      WHERE p."isActive" = true AND p."trackStock" = true AND p."branchId" = ${branchId}::uuid
+        AND (${likePattern}::text IS NULL OR p.name ILIKE ${likePattern}::text OR p.sku ILIKE ${likePattern}::text)`
 
-    // Shape into nested form the UI expects
-    let data = rows.map(r => ({
-      id:          r.id,
-      productId:   r.productId,
-      currentQty:  r.currentQty,
-      reservedQty: r.reservedQty,
-      product: {
-        name:       r.name,
-        sku:        r.sku,
-        unit:       r.unit,
-        lowStockQty: r.lowStockQty,
-        category:   r.categoryName ? { name: r.categoryName } : null,
-      },
+    const [sum] = await req.db.$queryRaw<Array<{ total: number; out: number; low: number; inStock: number; value: number }>>(Prisma.sql`
+      WITH st AS (${base})
+      SELECT COUNT(*)::int AS total,
+             COUNT(*) FILTER (WHERE qty <= 0)::int AS out,
+             COUNT(*) FILTER (WHERE qty > 0 AND qty <= low)::int AS low,
+             COUNT(*) FILTER (WHERE qty > 0)::int AS "inStock",
+             COALESCE(SUM(GREATEST(qty, 0) * COALESCE(cost, 0)), 0)::float AS value
+      FROM st`)
+
+    const where = status === 'out' ? Prisma.sql`WHERE qty <= 0` : status === 'low' ? Prisma.sql`WHERE qty > 0 AND qty <= low` : Prisma.empty
+    const rows = await req.db.$queryRaw<Array<{
+      id: string; name: string; sku: string | null; unit: string; low: number; cost: number | null; category: string | null; qty: number
+    }>>(Prisma.sql`
+      WITH st AS (${base})
+      SELECT id::text AS id, name, sku, unit, low, cost, category, qty FROM st ${where}
+      ORDER BY name ASC LIMIT ${limit} OFFSET ${offset}`)
+
+    // Same nested shape the screen already reads, plus purchasePrice (the "inventory value" card needs it).
+    const data = rows.map((r) => ({
+      id: r.id, productId: r.id, currentQty: r.qty, reservedQty: 0,
+      product: { name: r.name, sku: r.sku, unit: r.unit, lowStockQty: r.low, purchasePrice: r.cost, category: r.category ? { name: r.category } : null },
     }))
-
-    if (status === 'out') data = data.filter(r => r.currentQty <= 0)
-    if (status === 'low') data = data.filter(r => r.currentQty > 0 && r.currentQty <= r.product.lowStockQty)
-
-    return { data, meta: { total: data.length } }
+    const matching = status === 'out' ? sum!.out : status === 'low' ? sum!.low : sum!.total
+    return {
+      data,
+      meta: { total: sum!.total, matching, limit, offset, out: sum!.out, low: sum!.low, inStock: sum!.inStock, inventoryValue: Math.round(sum!.value * 100) / 100 },
+    }
   })
 
   // ── GET /api/stock/ledger/:productId ─────────────────────────────────────────

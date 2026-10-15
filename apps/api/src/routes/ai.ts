@@ -4,6 +4,8 @@
 // any message — consistent with the rest of the platform's safety model.
 
 import type { FastifyPluginAsync } from 'fastify'
+import { cacheKey, getOrSet } from '../lib/cache.js'
+import { redis } from '../lib/redis.js'
 import { z } from 'zod'
 import { buildInvoiceDraft } from '../services/ai/invoiceExtractor.js'
 import { scanBillImage, resolveOCRBill } from '../services/ai/ocrScanner.js'
@@ -269,8 +271,13 @@ export const aiRoutes: FastifyPluginAsync = async (app) => {
     const lang = ((tenant.settings as Record<string, unknown>)?.['lang'] as
       'hi' | 'gu' | 'en' | 'mr' | 'ta') ?? 'en'
     try {
-      return await generateDashboardInsight(req.tenantId, req.branchId, lang, req.db)
+      // One model call per branch per 15 minutes (the Home screen asks on every visit); a failure is remembered for 3.
+      const downKey = cacheKey(req.schemaName, req.branchId, 'ai', 'insight-down')
+      if (await redis.get(downKey).catch(() => null)) return { insights: [], aiUnavailable: true }
+      return await getOrSet(cacheKey(req.schemaName, req.branchId, 'ai', 'insight', lang), 900,
+        () => generateDashboardInsight(req.tenantId, req.branchId, lang, req.db))
     } catch (err) {
+      await redis.setex(cacheKey(req.schemaName, req.branchId, 'ai', 'insight-down'), 180, '1').catch(() => {})
       // No AI provider key / provider outage: the dashboard simply shows no insight card.
       req.log.warn({ err }, 'AI insight unavailable')
       return { insights: [], aiUnavailable: true }
@@ -325,7 +332,9 @@ export const aiRoutes: FastifyPluginAsync = async (app) => {
     const { horizon } = z.object({
       horizon: z.coerce.number().refine((n) => n === 7 || n === 30).default(7),
     }).parse(req.query)
-    return cashflowForecast(req.branchId, horizon as 7 | 30, req.db)
+    // narrative comes from a model: ask once per 10 minutes, not on every visit
+    return getOrSet(cacheKey(req.schemaName, req.branchId, 'ai', 'cashflow', String(horizon)), 600,
+      () => cashflowForecast(req.branchId, horizon as 7 | 30, req.db))
   })
 
   // ── GET /api/ai/party-duplicates ──────────────────────────────────────────
@@ -354,13 +363,14 @@ export const aiRoutes: FastifyPluginAsync = async (app) => {
         new Date().toISOString().slice(0, 7)
       ),
     }).parse(req.query)
-    return gstFilingSummary(req.branchId, month, req.db)
+    return getOrSet(cacheKey(req.schemaName, req.branchId, 'ai', 'gst', month), 600,
+      () => gstFilingSummary(req.branchId, month, req.db))
   })
 
   // ── GET /api/ai/demand-forecast ───────────────────────────────────────────
   // Predict which SKUs will stock out and when
   app.get('/demand-forecast', async (req) => {
-    return demandForecast(req.branchId, req.db)
+    return getOrSet(cacheKey(req.schemaName, req.branchId, 'ai', 'demand'), 600, () => demandForecast(req.branchId, req.db))
   })
 
   // ── POST /api/ai/chat ─────────────────────────────────────────────────────

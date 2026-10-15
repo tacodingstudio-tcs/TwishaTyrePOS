@@ -49,28 +49,32 @@ export async function nextInvoiceNumber(
 
   const prefix = await getBranchInvoicePrefix(tx, branchId, txnType)
 
-  // Determine the max numeric suffix already used for this branch+txnType+fy
-  // to guard against sequence resets (e.g. reprovision wiped invoice_sequences).
-  const maxRow = await tx.$queryRaw<Array<{ max_val: bigint }>>`
-    SELECT COALESCE(MAX(
-      NULLIF(SUBSTRING("number" FROM '[0-9]+$'), '')::bigint
-    ), 0) AS max_val
-    FROM invoices
-    WHERE "branchId" = ${branchId}::uuid AND "txnType" = ${txnType}
-  `
-  const maxUsed = Number(maxRow[0]?.max_val ?? 0)
-
-  // Upsert the counter row and atomically increment, ensuring we never go
-  // below the actual maximum already persisted in the invoices table.
-  const result = await tx.$queryRaw<Array<{ next_val: number }>>`
-    INSERT INTO invoice_sequences (branch_id, txn_type, fy, current_val)
-    VALUES (${branchId}::uuid, ${txnType}, ${fy}, ${maxUsed + 1})
-    ON CONFLICT (branch_id, txn_type, fy) DO UPDATE
-      SET current_val = GREATEST(invoice_sequences.current_val + 1, ${maxUsed + 1})
+  // Fast path: the counter row already exists — one indexed UPDATE (takes the row lock, so two counters
+  // never get the same number). Scanning every invoice for MAX() on each sale cost ~45 ms at 60,000 bills
+  // and grew with every bill, all while holding the lock.
+  const bumped = await tx.$queryRaw<Array<{ next_val: number }>>`
+    UPDATE invoice_sequences SET current_val = current_val + 1
+    WHERE branch_id = ${branchId}::uuid AND txn_type = ${txnType} AND fy = ${fy}
     RETURNING current_val AS next_val
   `
-
-  const seq = result[0]?.next_val ?? 1
+  let seq = bumped[0]?.next_val
+  if (seq === undefined) {
+    // First number of this financial year (or the counter table was wiped by a re-provision):
+    // start above the highest number already in use, once.
+    const maxRow = await tx.$queryRaw<Array<{ max_val: bigint }>>`
+      SELECT COALESCE(MAX(NULLIF(SUBSTRING("number" FROM '[0-9]+$'), '')::bigint), 0) AS max_val
+      FROM invoices WHERE "branchId" = ${branchId}::uuid AND "txnType" = ${txnType}
+    `
+    const maxUsed = Number(maxRow[0]?.max_val ?? 0)
+    const result = await tx.$queryRaw<Array<{ next_val: number }>>`
+      INSERT INTO invoice_sequences (branch_id, txn_type, fy, current_val)
+      VALUES (${branchId}::uuid, ${txnType}, ${fy}, ${maxUsed + 1})
+      ON CONFLICT (branch_id, txn_type, fy) DO UPDATE
+        SET current_val = GREATEST(invoice_sequences.current_val + 1, ${maxUsed + 1})
+      RETURNING current_val AS next_val
+    `
+    seq = result[0]?.next_val ?? 1
+  }
   const paddedSeq = String(seq).padStart(5, '0')
 
   return `${prefix}-${fy}-${paddedSeq}`
@@ -86,15 +90,38 @@ export async function nextSeriesNumber(
   txnType: string,
   series: NumberSeries,
 ): Promise<string> {
-  const lockKey = hashLockKey(`${branchId}:${txnType}:series:${series.key}`)
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey}::bigint)`
-  const row = await tx.$queryRaw<Array<{ max_val: bigint }>>`
-    SELECT COALESCE(MAX(NULLIF(SUBSTRING("number" FROM '[0-9]+$'), '')::bigint), 0) AS max_val
-    FROM invoices
-    WHERE "branchId" = ${branchId}::uuid AND "txnType" = ${txnType}
-      AND "domainData"->>'bill_series' = ${series.key}
+  const counterType = `${txnType}:series:${series.key}`
+  const bumped = await tx.$queryRaw<Array<{ next_val: number }>>`
+    UPDATE invoice_sequences SET current_val = current_val + 1
+    WHERE branch_id = ${branchId}::uuid AND txn_type = ${counterType} AND fy = 'S'
+    RETURNING current_val AS next_val
   `
-  const next = Math.max(series.start, Number(row[0]?.max_val ?? 0) + 1)
+  let next = bumped[0]?.next_val
+  if (next === undefined) {
+    // first bill of this register (or the counter was reset after an import): start above the highest used
+    const row = await tx.$queryRaw<Array<{ max_val: bigint }>>`
+      SELECT COALESCE(MAX(NULLIF(SUBSTRING("number" FROM '[0-9]+$'), '')::bigint), 0) AS max_val
+      FROM invoices
+      WHERE "branchId" = ${branchId}::uuid AND "txnType" = ${txnType}
+        AND "domainData"->>'bill_series' = ${series.key}
+    `
+    const first = Math.max(series.start, Number(row[0]?.max_val ?? 0) + 1)
+    const r = await tx.$queryRaw<Array<{ next_val: number }>>`
+      INSERT INTO invoice_sequences (branch_id, txn_type, fy, current_val)
+      VALUES (${branchId}::uuid, ${counterType}, 'S', ${first})
+      ON CONFLICT (branch_id, txn_type, fy) DO UPDATE
+        SET current_val = GREATEST(invoice_sequences.current_val + 1, ${first})
+      RETURNING current_val AS next_val
+    `
+    next = r[0]?.next_val ?? first
+  }
+  // the start number can be raised in settings later
+  if (next < series.start) {
+    await tx.$executeRaw`
+      UPDATE invoice_sequences SET current_val = ${series.start}
+      WHERE branch_id = ${branchId}::uuid AND txn_type = ${counterType} AND fy = 'S'`
+    next = series.start
+  }
   return `${series.prefix}${next}`
 }
 

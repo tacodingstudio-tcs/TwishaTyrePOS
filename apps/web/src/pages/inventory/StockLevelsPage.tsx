@@ -470,29 +470,32 @@ export function StockLevelsPage() {
   const [ledgerProduct, setLedgerProduct] = useState<{ id: string; name: string } | null>(null)
   const [quickUpdate, setQuickUpdate] = useState<{ productId: string; productName: string; currentQty: number; unit: string; packSize?: string } | null>(null)
   const [tab, setTab]               = useState<Tab>('stock')
+  const [limit, setLimit]           = useState(100)
 
   const { data, isLoading } = useStockLevels({
     q:       search || undefined,
     status:  filter !== 'all' ? filter : undefined,
-    limit:   100,
+    limit,
   })
 
   const { data: reorderData } = useReorderSuggestions()
   const { data: expiryData }  = useExpiryAlerts(30)
 
   const allRows          = data?.data ?? []
-  const outCount         = allRows.filter((r: any) => Number(r.currentQty) <= 0).length
-  const lowCount         = allRows.filter((r: any) => Number(r.currentQty) > 0 && Number(r.currentQty) <= Number(r.product?.lowStockQty ?? 0)).length
+  // the server counts the WHOLE catalogue; the table below is only the page being shown
+  const meta             = data?.meta ?? {}
+  const outCount         = meta.out ?? allRows.filter((r: any) => Number(r.currentQty) <= 0).length
+  const lowCount         = meta.low ?? allRows.filter((r: any) => Number(r.currentQty) > 0 && Number(r.currentQty) <= Number(r.product?.lowStockQty ?? 0)).length
   const reorderCount     = (reorderData?.suggestions ?? []).length
   const expiryCount      = (expiryData?.summary?.expired ?? 0) + (expiryData?.summary?.critical ?? 0)
 
-  const totalValue = allRows.reduce((sum: number, r: any) => {
+  const totalValue = meta.inventoryValue ?? allRows.reduce((sum: number, r: any) => {
     const qty   = Number(r.currentQty ?? 0)
     const price = Number(r.product?.purchasePrice ?? 0)
     return sum + (qty > 0 ? qty * price : 0)
   }, 0)
 
-  const inStockCount = allRows.filter((r: any) => Number(r.currentQty) > 0).length
+  const inStockCount = meta.inStock ?? allRows.filter((r: any) => Number(r.currentQty) > 0).length
 
   return (
     <div>
@@ -513,7 +516,7 @@ export function StockLevelsPage() {
           </div>
           <div className="card p-4">
             <p className="text-xs text-gray-500 mb-1">Total SKUs</p>
-            <p className="text-xl font-bold text-gray-900">{allRows.length}</p>
+            <p className="text-xl font-bold text-gray-900">{meta.total ?? allRows.length}</p>
             <p className="text-xs text-gray-400 mt-0.5">{inStockCount} in stock</p>
           </div>
           <div className="card p-4">
@@ -661,6 +664,12 @@ export function StockLevelsPage() {
                 </tbody>
               </table>
             </div>
+            {(meta.matching ?? 0) > (data?.data?.length ?? 0) && (
+              <div className="flex items-center justify-center gap-3 mt-4 text-sm text-gray-500">
+                Showing {data?.data?.length} of {meta.matching}
+                <button type="button" className="btn-ghost border border-gray-200" onClick={() => setLimit((l) => l + 200)}>Show 200 more</button>
+              </div>
+            )}
           </>
         )}
       </div>

@@ -626,28 +626,19 @@ export async function confirmHSN(
 // Used by the daily alert notification.
 // =============================================================================
 export async function getLowStockAlerts(ctx: RequestCtx) {
-  // Get all products with stock tracking enabled
-  const products = await ctx.db.product.findMany({
-    where:  { isActive: true, trackStock: true },
-    select: { id: true, name: true, unit: true, lowStockQty: true, salePrice: true, domainAttrs: true },
-  })
-
-  const stockMap = await getBatchStockBalances(
-    ctx.db,
-    products.map((p) => p.id),
-    ctx.branchId
-  )
-
-  const alerts = products
-    .map((p) => ({
-      ...p,
-      stockOnHand:  stockMap.get(p.id) ?? 0,
-      lowStockQty:  p.lowStockQty.toNumber(),
-    }))
-    .filter((p) => p.stockOnHand <= p.lowStockQty)
-    .sort((a, b) => a.stockOnHand - b.stockOnHand)
-
-  return alerts
+  // The balance is computed and compared in SQL, so only the low items travel (was: every product, filtered in JS).
+  const rows = await ctx.db.$queryRaw<Array<{
+    id: string; name: string; unit: string; lowStockQty: number; salePrice: number; domainAttrs: unknown; stockOnHand: number
+  }>>`
+    SELECT p.id::text AS id, p.name, p.unit, p."lowStockQty"::float AS "lowStockQty", p."salePrice"::float AS "salePrice",
+           p."domainAttrs", COALESCE(s.qty, 0)::float AS "stockOnHand"
+    FROM products p
+    LEFT JOIN (SELECT "productId", SUM(qty) AS qty FROM stock_ledger WHERE "branchId" = ${ctx.branchId}::uuid GROUP BY "productId") s
+           ON s."productId" = p.id
+    WHERE p."isActive" = true AND p."trackStock" = true
+      AND COALESCE(s.qty, 0) <= p."lowStockQty"
+    ORDER BY COALESCE(s.qty, 0) ASC, p.name ASC`
+  return rows
 }
 
 // =============================================================================

@@ -100,6 +100,11 @@ export const TYRE_DDL: string[] = [
   "sentAt"         TIMESTAMPTZ
 )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "uq_tnotif_dedupe" ON "tyre_notifications" ("branchId", "dedupeKey") WHERE "dedupeKey" IS NOT NULL`,
+  // Stock = SUM over the ledger: a covering index turns every balance lookup into an index-only scan.
+  `CREATE INDEX IF NOT EXISTS "idx_sl_balance" ON "stock_ledger" ("branchId", "productId") INCLUDE ("qty", "txnType", "createdAt")`,
+  // "Who owes me" only ever looks at open bills; keep them in a tiny index however many paid bills pile up.
+  `CREATE INDEX IF NOT EXISTS "idx_inv_open" ON "invoices" ("branchId", "txnType", "partyId") WHERE "status" IN ('confirmed','partial')`,
+  `CREATE INDEX IF NOT EXISTS "idx_inv_branch_type_date" ON "invoices" ("branchId", "txnType", "date" DESC)`,
   `CREATE INDEX IF NOT EXISTS "idx_tnotif_ref" ON "tyre_notifications" ("refType", "refId")`,
 
   // ── Team: people, daily marks, advances / bonus / salary ────────────────────

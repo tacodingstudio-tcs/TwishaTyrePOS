@@ -59,7 +59,7 @@ services:
     command: >
       redis-server
         --maxmemory 256mb
-        --maxmemory-policy allkeys-lru
+        --maxmemory-policy noeviction
         --save 60 1
         --loglevel warning
     healthcheck:

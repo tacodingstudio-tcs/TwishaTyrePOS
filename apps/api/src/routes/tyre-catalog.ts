@@ -92,7 +92,8 @@ export const tyreCatalogRoutes: FastifyPluginAsync = async (app) => {
               COUNT(DISTINCT p.id)::int AS models,
               COALESCE(SUM(sl.qty), 0)::float AS stock
        FROM ${tbl(req.schemaName, 'products')} p
-       LEFT JOIN ${tbl(req.schemaName, 'stock_ledger')} sl ON sl."productId" = p.id AND sl."branchId" = $1::uuid
+       LEFT JOIN (SELECT "productId", SUM(qty) AS qty FROM ${tbl(req.schemaName, 'stock_ledger')}
+                   WHERE "branchId" = $1::uuid GROUP BY "productId") sl ON sl."productId" = p.id
        WHERE p."branchId" = $1::uuid AND p."isActive" = true AND p."itemType" <> 'service'
          AND COALESCE(p."domainAttrs"->>'item_kind','tyre') = 'tyre'
        GROUP BY 1 ORDER BY stock DESC, size LIMIT 200`, req.branchId)
@@ -113,22 +114,32 @@ export const tyreCatalogRoutes: FastifyPluginAsync = async (app) => {
     const qy = z.object({
       days: z.coerce.number().int().min(7).max(720).default(Number(cfg['dead_stock_days'] ?? 90)),
     }).parse(req.query)
+    // Tyres that sold inside the window are not dead, so they are ruled out with one cheap date-indexed look-up;
+    // only the few that did not sell are then asked for their last sale date. Stock and first receipt come from a
+    // single grouped pass over the ledger (the old query probed invoices once per product: 200+ ms at 3,000 tyres).
+    const sinceIso = new Date(Date.now() - qy.days * 86_400_000).toISOString().slice(0, 10)
     const rows = await q<any>(req,
-      `SELECT p.id, p.name, p."domainAttrs"->>'brand' AS brand, p."domainAttrs"->>'size' AS size,
-              COALESCE(SUM(sl.qty), 0)::float AS stock,
-              p."purchasePrice"::float AS "purchasePrice",
-              (COALESCE(SUM(sl.qty), 0) * COALESCE(p."purchasePrice", 0))::float AS "stockValue",
-              (SELECT MAX(i."date") FROM ${tbl(req.schemaName, 'invoice_items')} ii
-                 JOIN ${tbl(req.schemaName, 'invoices')} i ON i.id = ii."invoiceId"
-                WHERE ii."productId" = p.id AND i."txnType" = 'sale_invoice' AND i.status <> 'cancelled') AS "lastSold",
-              (SELECT MIN(sl2."createdAt") FROM ${tbl(req.schemaName, 'stock_ledger')} sl2
-                WHERE sl2."productId" = p.id AND sl2."branchId" = $1::uuid AND sl2.qty > 0) AS "firstIn"
+      `WITH bal AS (
+         SELECT "productId", SUM(qty) AS stock, MIN("createdAt") FILTER (WHERE qty > 0) AS "firstIn"
+           FROM ${tbl(req.schemaName, 'stock_ledger')} WHERE "branchId" = $1::uuid GROUP BY "productId"),
+       recent AS (
+         SELECT DISTINCT ii."productId"
+           FROM ${tbl(req.schemaName, 'invoices')} i JOIN ${tbl(req.schemaName, 'invoice_items')} ii ON ii."invoiceId" = i.id
+          WHERE i."branchId" = $1::uuid AND i."txnType" = 'sale_invoice' AND i.status <> 'cancelled' AND i.date >= $2::date
+            AND ii."productId" IS NOT NULL)
+       SELECT p.id, p.name, p."domainAttrs"->>'brand' AS brand, p."domainAttrs"->>'size' AS size,
+              bal.stock::float AS stock, p."purchasePrice"::float AS "purchasePrice",
+              (bal.stock * COALESCE(p."purchasePrice", 0))::float AS "stockValue",
+              ls."lastSold", bal."firstIn"
        FROM ${tbl(req.schemaName, 'products')} p
-       JOIN ${tbl(req.schemaName, 'stock_ledger')} sl ON sl."productId" = p.id AND sl."branchId" = $1::uuid
+       JOIN bal ON bal."productId" = p.id
+       LEFT JOIN LATERAL (
+         SELECT MAX(i.date) AS "lastSold"
+           FROM ${tbl(req.schemaName, 'invoice_items')} ii JOIN ${tbl(req.schemaName, 'invoices')} i ON i.id = ii."invoiceId"
+          WHERE ii."productId" = p.id AND i."txnType" = 'sale_invoice' AND i.status <> 'cancelled') ls ON true
        WHERE p."branchId" = $1::uuid AND p."isActive" = true AND p."trackStock" = true AND p."itemType" <> 'service'
-         AND COALESCE(p."domainAttrs"->>'item_kind','tyre') <> 'scrap'
-       GROUP BY p.id
-       HAVING COALESCE(SUM(sl.qty), 0) > 0`, req.branchId)
+         AND COALESCE(p."domainAttrs"->>'item_kind','tyre') <> 'scrap' AND bal.stock > 0
+         AND NOT EXISTS (SELECT 1 FROM recent r WHERE r."productId" = p.id)`, req.branchId, sinceIso)
 
     const cutoff = Date.now() - qy.days * 86_400_000
     const dead = rows
