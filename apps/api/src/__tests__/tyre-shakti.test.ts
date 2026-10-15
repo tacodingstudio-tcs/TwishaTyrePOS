@@ -150,3 +150,37 @@ describe('Shakti register export', () => {
     expect((await owner.api.get('/api/tyre/reports/register', { params: { from: '2026-13-45' } })).status).toBeGreaterThanOrEqual(400)
   })
 })
+
+describe('Old register import', () => {
+  test('creates historic bills without moving stock, skips repeats, handles service-only bills, owner/manager only', async () => {
+    const { addStaff } = await import('./helpers')
+    const owner = await newShopTenant('Shakti Import Tyres')
+    const cashier = await addStaff(owner, 'cashier')
+    const b = (await owner.api.get('/api/branches')).data[0]
+    await owner.api.patch(`/api/branches/${b.id}`, { domainConfig: { prices_include_gst: true, bill_series: { car: { prefix: '', start: 93 } } } })
+    const rows = [
+      { date: '2025-06-01', billNo: 1, customer: 'Old Customer', mobile: '9876500001', vehicleNo: 'GJ-32-AB-0001', vehicleMake: 'Swift', km: 40000,
+        brand: 'Yokohama', size: '185/65R15', qty: 4, price: 10400, charges: { alignment: 200 } },
+      { date: '2025-06-02', billNo: 2, customer: 'Service Only', vehicleNo: 'GJ-32-AB-0002', charges: { alignment: 250, balancing: 300 } },
+    ]
+    const run = (s: any, body: any) => s.api.post('/api/tyre/import/register', body)
+    expect((await run(cashier, { series: 'car', rows })).status).toBe(403)
+    const dry = (await run(owner, { series: 'car', rows, dryRun: true })).data
+    expect(dry).toMatchObject({ created: 2, dryRun: true })
+    expect((await owner.api.get('/api/invoices', { params: { txnType: 'sale_invoice' } })).data.data ?? []).toHaveLength(0)
+
+    const r = await run(owner, { series: 'car', rows })
+    expect(r.data).toMatchObject({ created: 2, skipped: 0, failed: 0 })
+    expect((await run(owner, { series: 'car', rows })).data).toMatchObject({ created: 0, skipped: 2 })
+
+    const reg = (await owner.api.get('/api/tyre/reports/register', { params: { from: '2025-01-01', to: '2025-12-31' } })).data.rows
+    const one = reg.find((x: any) => x['Bill No'] === '1')
+    expect(one).toMatchObject({ 'Bill Total': 41800, 'Tyre Total': 41600, 'Alignment': 200, 'Date': '2025-06-01' })
+    expect(reg.find((x: any) => x['Bill No'] === '2')['Bill Total']).toBe(550)
+
+    // next live bill continues after the imported numbers, and the vehicle is on file
+    const vehicles = (await owner.api.get('/api/tyre/vehicles')).data
+    expect(JSON.stringify(vehicles)).toContain('GJ32AB0001')
+    expect((await run(owner, { series: 'car', rows: [{ ...rows[0], billNo: 'X1', qty: -1 }] })).status).toBe(422)
+  })
+})

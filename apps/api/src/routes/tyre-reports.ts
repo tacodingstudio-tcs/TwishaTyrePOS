@@ -145,7 +145,7 @@ export const tyreReportRoutes: FastifyPluginAsync = async (app) => {
     const s = req.schemaName
 
     const bills = await q<any>(req,
-      `SELECT i.id, i.number, i.date, i.status, i."grandTotal"::float AS "grandTotal", i."domainData" AS dd,
+      `SELECT i.id, i.number, to_char(i.date, 'YYYY-MM-DD') AS date, i.status, i."grandTotal"::float AS "grandTotal", i."domainData" AS dd,
               p.name AS "partyName", p.phone AS "partyPhone", p.gstin AS "partyGstin", p.address AS "partyAddress"
        FROM ${tbl(s, 'invoices')} i LEFT JOIN ${tbl(s, 'parties')} p ON p.id = i."partyId"
        WHERE i."branchId" = $1::uuid AND i."txnType" = 'sale_invoice' AND i.status <> 'cancelled'
@@ -178,7 +178,7 @@ export const tyreReportRoutes: FastifyPluginAsync = async (app) => {
         const qty = t?.qty ?? 0
         const unitTaxable = qty > 0 ? r2((t.taxable + t.disc) / qty) : 0
         rows.push({
-          'Date': String(b.date).slice(0, 10), 'Bill No': b.number, 'Series': b.dd?.bill_series ?? '',
+          'Date': b.date, 'Bill No': b.number, 'Series': b.dd?.bill_series ?? '',
           'Customer': b.partyName ?? '', 'Mobile': b.partyPhone ?? '', 'Address': addr(b.partyAddress),
           'Vehicle Make': b.dd?.vehicle_make ?? '', 'Vehicle No': b.dd?.vehicle_no ?? '', 'KM': b.dd?.odometer ?? '',
           'Tyre': t?.meta?.brand ?? t?.description ?? '', 'Size': t?.meta?.size ?? '', 'HSN': t?.hsn ?? '',

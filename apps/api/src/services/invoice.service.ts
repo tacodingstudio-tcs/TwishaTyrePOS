@@ -84,6 +84,8 @@ export interface RequestCtx {
   branchDomainType?: string
   /** plain running numbers for a named register instead of PREFIX-FY-00001 */
   numberSeries?:    NumberSeries
+  /** exact bill number to use (historic import) — must not already exist */
+  fixedNumber?:     string
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -245,7 +247,9 @@ export async function createInvoice(
       }
 
       // 5b. Generate invoice number (uses advisory lock inside)
-      const number = ctx.numberSeries
+      const number = ctx.fixedNumber
+        ? ctx.fixedNumber
+        : ctx.numberSeries
         ? await nextSeriesNumber(tx, ctx.branchId, input.txnType, ctx.numberSeries)
         : await nextInvoiceNumber(tx, ctx.branchId, input.txnType)
 

@@ -17,6 +17,7 @@ import { tyreSalesRoutes }   from './tyre-sales.js'
 import { tyreVehicleRoutes } from './tyre-vehicles.js'
 import { tyreReportRoutes }  from './tyre-reports.js'
 import { tyreCommsRoutes }   from './tyre-comms.js'
+import { tyreImportRoutes }  from './tyre-import.js'
 
 export const tyreRoutes: FastifyPluginAsync = async (app) => {
   await app.register(tyreCatalogRoutes)
@@ -24,4 +25,5 @@ export const tyreRoutes: FastifyPluginAsync = async (app) => {
   await app.register(tyreVehicleRoutes)
   await app.register(tyreReportRoutes)
   await app.register(tyreCommsRoutes)
+  await app.register(tyreImportRoutes)
 }
