@@ -262,8 +262,8 @@ export function ProductListPage() {
           </div>
         </div>
 
-        {/* Consumable / For Sale filter */}
-        <div className="flex gap-1 mb-4">
+        {/* Consumable / For Sale filter — not used by tyre shops (categories do the job) */}
+        <div className={`flex gap-1 mb-4 ${domainType === 'tyre' ? 'hidden' : ''}`}>
           {([['all', 'All'], ['sale', 'For Sale'], ['consumable', 'Consumables']] as const).map(([key, label]) => (
             <button
               key={key}

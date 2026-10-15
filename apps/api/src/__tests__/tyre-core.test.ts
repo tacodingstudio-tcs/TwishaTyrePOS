@@ -487,3 +487,31 @@ describe('Reorder suggestions', () => {
     expect(names).not.toContain('Old Tyre (scrap)')
   })
 })
+
+describe('Catalogue categories', () => {
+  test('new tyre items are filed under the right category and each category filter finds them', async () => {
+    const owner = await newShopTenant('Category Tyres')
+    const mk = async (name: string, sku: string, attrs: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+      (await owner.api.post('/api/products', { name, sku, itemType: 'product', gstRate: 18, unit: 'pcs', trackStock: true, salePrice: 500, openingStock: 3, domainAttrs: attrs, ...extra })).data
+    await mk('Car tyre', 'C-1', { item_kind: 'tyre', size: '185/65 R15', vehicle_type: 'car' })
+    await mk('Bike tyre', 'B-1', { item_kind: 'tyre', size: '2.75-18', vehicle_type: 'two_wheeler' })
+    await mk('Truck tyre', 'T-1', { item_kind: 'tyre', size: '10.00 R20', vehicle_type: 'truck_bus' })
+    await mk('Tube', 'TB-1', { item_kind: 'tube', size: '4.00-8' })
+    await mk('Valve caps', 'V-1', { item_kind: 'valve' })
+
+    const cats = (await owner.api.get('/api/categories')).data as Array<{ id: string; slug: string }>
+    const countIn = async (slug: string) => {
+      const c = cats.find((x) => x.slug === slug)!
+      return ((await owner.api.get('/api/products', { params: { categoryId: c.id } })).data.data as any[]).map((p) => p.name)
+    }
+    expect(await countIn('car-tyres')).toContain('Car tyre')
+    expect(await countIn('two-wheeler')).toEqual(['Bike tyre'])
+    expect(await countIn('truck-bus')).toEqual(['Truck tyre'])
+    expect(await countIn('tubes-flaps')).toEqual(['Tube'])
+    expect(await countIn('consumables')).toEqual(['Valve caps'])
+    // an explicit category wins over the automatic one
+    const wheels = cats.find((x) => x.slug === 'wheels')!
+    const odd = await mk('Chosen', 'X-1', { item_kind: 'tyre', vehicle_type: 'car' }, { categoryId: wheels.id })
+    expect(odd.categoryId).toBe(wheels.id)
+  })
+})

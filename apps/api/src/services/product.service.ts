@@ -20,7 +20,7 @@
 
 import { Prisma } from '@billing/db'
 import type { PrismaClient } from '@billing/db'
-import { DOMAIN_REGISTRY, validateProductAttrs, type DomainType } from '@billing/domain-registry'
+import { DOMAIN_REGISTRY, validateProductAttrs, tyreCategorySlug, type DomainType } from '@billing/domain-registry'
 import { z } from 'zod'
 import { ai, parseAIJson } from '../lib/ai-provider.js'
 
@@ -209,6 +209,16 @@ export async function createProduct(input: CreateProductInput, ctx: RequestCtx) 
     }
   }
 
+  // Tyre shop: file the item under its category (Car & SUV, Two-wheeler, …) when none was chosen
+  let categoryId = input.categoryId
+  if (!categoryId && ctx.branchDomainType === 'tyre') {
+    const slug = tyreCategorySlug(validatedAttrs as any)
+    if (slug) {
+      const cat = await ctx.db.category.findFirst({ where: { slug, isActive: true }, select: { id: true } })
+      categoryId = cat?.id
+    }
+  }
+
   return ctx.db.$transaction(async (tx) => {
     const product = await tx.product.create({
       data: {
@@ -216,7 +226,7 @@ export async function createProduct(input: CreateProductInput, ctx: RequestCtx) 
         itemType:      input.itemType,
         name:          input.name,
         nameLocal:     input.nameLocal     ?? null,
-        categoryId:    input.categoryId    ?? null,
+        categoryId:    categoryId          ?? null,
         brandId:       input.brandId       ?? null,
         sku:           input.sku           ?? null,
         barcode:       input.barcode       ?? null,

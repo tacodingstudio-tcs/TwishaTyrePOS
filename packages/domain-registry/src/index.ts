@@ -34,6 +34,27 @@ export const ITEM_KINDS = [
 /** Which kinds are individually identified (serial / DOT) and can carry a warranty. */
 export const SERIALISED_KINDS: readonly string[] = ['tyre', 'tube', 'alloy_wheel', 'battery']
 
+/** Category slug (see provision-schema DOMAIN_CATEGORIES.tyre) an item belongs in, from its attributes. */
+export function tyreCategorySlug(attrs: { item_kind?: string; vehicle_type?: string } | null | undefined): string | null {
+  const kind = attrs?.item_kind
+  if (!kind) return null
+  switch (kind) {
+    case 'tyre': {
+      const v = attrs?.vehicle_type
+      if (v === 'two_wheeler' || v === 'three_wheeler') return 'two-wheeler'
+      if (v === 'truck_bus' || v === 'lcv') return 'truck-bus'
+      if (v === 'tractor' || v === 'otr') return 'tractor'
+      return 'car-tyres'
+    }
+    case 'tube': case 'flap': return 'tubes-flaps'
+    case 'alloy_wheel': return 'wheels'
+    case 'valve': case 'battery': case 'accessory': return 'consumables'
+    case 'scrap': return 'scrap'
+    case 'service': return 'services'
+    default: return null
+  }
+}
+
 export const TYRE_VEHICLE_TYPES = [
   'two_wheeler', 'three_wheeler', 'car', 'suv', 'lcv', 'truck_bus', 'tractor', 'otr', 'other',
 ] as const
