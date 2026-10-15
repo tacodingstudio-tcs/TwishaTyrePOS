@@ -87,7 +87,7 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
       address: { ...(branch.address ?? {}), line1: form.line1 || undefined, city: form.city || undefined, pincode: form.pincode || undefined },
       domainConfig: {
         default_tyre_gst: Number(form.tyreGst) || 18,
-        default_service_gst: Number(form.serviceGst) || 18,
+        default_service_gst: num0(form.serviceGst, 18),
         default_service_sac: form.serviceSac.trim() || '998714',
         default_warranty_months: Number(form.warrantyMonths) || 0,
         // 0 = no reminder for that job (a blank box falls back to the default)

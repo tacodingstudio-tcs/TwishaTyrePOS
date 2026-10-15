@@ -20,6 +20,8 @@ const SERVICES: SeedService[] = [
   { name: 'Tyre Rotation',                  serviceType: 'rotation',     price: 200, unit: 'job',   sku: 'SVC-ROT' },
   { name: 'Nitrogen Inflation (per tyre)',  serviceType: 'nitrogen',     price: 50,  unit: 'tyre',  sku: 'SVC-N2' },
   { name: 'Valve Replacement',              serviceType: 'valve_change', price: 40,  unit: 'pcs',   sku: 'SVC-VLV' },
+  { name: 'Wheel Weights',                  serviceType: 'balancing',    price: 120, unit: 'job',   sku: 'SVC-WGT' },
+  { name: 'Labour Charge',                  serviceType: 'other',        price: 100, unit: 'job',   sku: 'SVC-LAB' },
 ]
 
 export async function seedTyreCatalogue(db: any, branchId: string, cfg?: Record<string, any>): Promise<void> {

@@ -243,8 +243,10 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
       else { rate = it.finalPrice; discountPct = 0 }          // charged at or above list: no discount
     }
     // A catalogue GST of 0 on a non-exempt item means "never set" — fall back to the shop default.
-    const gstRate = !body.withGst || p.gstExempt ? 0 : p.gstRate > 0 ? p.gstRate
-      : Number(kind === 'service' ? conf('default_service_gst') : conf('default_tyre_gst'))
+    // Services follow the business setting "GST on services" (0 = none, as on Shakti's sheet); items use their own rate.
+    const gstRate = !body.withGst || p.gstExempt ? 0
+      : kind === 'service' ? Number(conf('default_service_gst') ?? 18)
+      : p.gstRate > 0 ? p.gstRate : Number(conf('default_tyre_gst'))
     const warrantyMonths = it.warrantyMonths ?? (Number(a['warranty_months'] ?? 0) || Number(conf('default_warranty_months') ?? 0))
     // net = what one unit costs the shop to compare against purchase price, i.e. without GST
     const net = rate * (1 - discountPct / 100) / (inclusive && gstRate > 0 ? 1 + gstRate / 100 : 1)

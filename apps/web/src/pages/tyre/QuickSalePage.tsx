@@ -202,8 +202,12 @@ export function QuickSalePage() {
   // inside it. Switching back adds it again. Only applies when prices are typed GST-inclusive.
   const strip = (v: number, g: number) => price2(v / (1 + g / 100))
   const addBack = (v: number, g: number) => price2(v * (1 + g / 100))
-  const memoPrice = (l: Line): Line => (!withGst && isInclusive && l.gstRate > 0)
-    ? { ...l, rate: strip(l.rate, l.gstRate), price: strip(l.price, l.gstRate) } : l
+  const serviceGst = Number(shopCfg['default_service_gst'] ?? DEFAULT_GST)
+  const withShopGst = (l: Line): Line => (l.kind === 'service' ? { ...l, gstRate: serviceGst } : l)
+  const memoPrice = (raw: Line): Line => {
+    const l = withShopGst(raw)
+    return (!withGst && isInclusive && l.gstRate > 0) ? { ...l, rate: strip(l.rate, l.gstRate), price: strip(l.price, l.gstRate) } : l
+  }
   const switchGst = (on: boolean) => {
     if (on === withGst) return
     if (isInclusive) {
@@ -242,7 +246,6 @@ export function QuickSalePage() {
         billSeries: billSeries || undefined,
         makeModel: makeModel.trim() || undefined,
         poNo: poNo.trim() || undefined,
-        charges: CHARGE_LABELS.map((label) => ({ label, amount: Number(charges[label]) || 0 })).filter((c) => c.amount > 0),
         saleKind: serviceMode && !lines.some((l) => l.kind !== 'service') ? 'service_only' : undefined,
         vehicleNo: regNo.trim() || undefined,
         vehicleType: regNo.trim() ? vehicleType : undefined,
@@ -537,19 +540,6 @@ export function QuickSalePage() {
             </div>
           )}
         </section>
-
-        {/* 5 · charges */}
-        <details className={`card p-4 ${serviceMode ? '' : 'open'}`} open={!serviceMode}>
-          <summary className={`text-sm font-medium text-gray-800 cursor-pointer ${serviceMode ? '' : 'hidden'}`}>Add other charges (alignment, balancing, weight, labour)</summary>
-          <div className="text-xs text-gray-500 mb-2">Other charges — typed amounts, no GST</div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {CHARGE_LABELS.map((k) => (
-              <div key={k}><label className="label" htmlFor={`ch-${k}`}>{k}</label>
-                <input id={`ch-${k}`} type="number" min="0" className="input" placeholder="0" value={charges[k] ?? ''}
-                  onChange={(e) => setCharges((c) => ({ ...c, [k]: e.target.value }))} /></div>
-            ))}
-          </div>
-        </details>
 
         {/* 6 · more details */}
         <details className="card p-4">

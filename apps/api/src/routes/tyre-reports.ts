@@ -164,15 +164,25 @@ export const tyreReportRoutes: FastifyPluginAsync = async (app) => {
     for (const it of items) { const a = byBill.get(it.invoiceId) ?? []; a.push(it); byBill.set(it.invoiceId, a) }
 
     const addr = (a: any) => !a ? '' : typeof a === 'string' ? a : [a.line1, a.line2, a.city, a.pincode].filter(Boolean).join(', ')
-    const chargeOf = (list: any[], word: string) =>
-      r2(list.filter((c) => c.meta?.item_kind === 'charge' && String(c.description).toLowerCase().includes(word)).reduce((t, c) => t + c.total, 0))
+    // typed charges (imported bills) and service cards (today's bills) both fill those four columns
+    const isCharge = (l: any) => l.meta?.item_kind === 'charge' || l.meta?.item_kind === 'service'
+    const wordOf = (l: any) => {
+      const t = String(l.meta?.service_type ?? '')
+      const d = String(l.description).toLowerCase()
+      if (/weight/.test(d)) return 'weight'
+      if (/labou?r/.test(d)) return 'labour'
+      if (t === 'alignment' || /align/.test(d)) return 'align'
+      if (t === 'balancing' || /balanc/.test(d)) return 'balanc'
+      return 'other'
+    }
+    const chargeOf = (list: any[], word: string) => r2(list.filter((c) => isCharge(c) && wordOf(c) === word).reduce((t, c) => t + c.total, 0))
 
     const rows: Array<Record<string, string | number>> = []
     for (const b of bills) {
       const list = byBill.get(b.id) ?? []
-      const tyres = list.filter((l) => l.meta?.item_kind !== 'charge')
-      const chargeLines = list.filter((l) => l.meta?.item_kind === 'charge')
-      const otherCharges = r2(chargeLines.filter((c) => !/align|balanc|weight|labour/i.test(String(c.description))).reduce((t, c) => t + c.total, 0))
+      const tyres = list.filter((l) => !isCharge(l))
+      const chargeLines = list.filter(isCharge)
+      const otherCharges = chargeOf(chargeLines, 'other')
       const lines = tyres.length ? tyres : [null]
       lines.forEach((t, n) => {
         const qty = t?.qty ?? 0

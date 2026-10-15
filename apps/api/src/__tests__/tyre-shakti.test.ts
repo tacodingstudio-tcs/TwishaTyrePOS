@@ -381,3 +381,30 @@ describe('AI bill scan option', () => {
     expect(imp.data.created).toBe(1)
   })
 })
+
+describe('Services follow the "GST on services" setting', () => {
+  test('0 = no GST on service cards; the register export puts them in the Alignment/Weight/Labour columns', async () => {
+    const owner = await newShopTenant('Shakti Service Gst')
+    const svc = (await owner.api.get('/api/tyre/finder', { params: { kind: 'service', limit: 50 } })).data.data as any[]
+    const aln = svc.find((s) => s.sku === 'SVC-ALN'), bal = svc.find((s) => s.sku === 'SVC-BAL')
+    const b = (await owner.api.get('/api/branches')).data[0]
+    await owner.api.patch(`/api/branches/${b.id}`, { domainConfig: { prices_include_gst: true, default_service_gst: 0 } })
+    const r = await owner.api.post('/api/tyre/sales', {
+      customer: { name: 'Walk In', phone: '9876544101' }, vehicleNo: 'GJ01ZZ0001', saleKind: 'service_only',
+      items: [{ productId: aln.id, qty: 1 }, { productId: bal.id, qty: 4 }], payments: [{ method: 'cash', amount: 1000 }],
+    }, { headers: { 'Idempotency-Key': crypto.randomUUID() } })
+    expect(r.status).toBe(201)
+    expect([Number(r.data.invoice.grandTotal), Number(r.data.invoice.cgstTotal), Number(r.data.invoice.taxableAmt)]).toEqual([1000, 0, 1000])
+
+    const row = (await owner.api.get('/api/tyre/reports/register')).data.rows[0]
+    expect(row).toMatchObject({ Alignment: 600, Balancing: 400, 'Bill Total': 1000, 'GST Bill': 'Yes' })
+
+    // the default stays 18% for shops that charge it
+    await owner.api.patch(`/api/branches/${b.id}`, { domainConfig: { default_service_gst: 18 } })
+    const g = await owner.api.post('/api/tyre/sales', {
+      customer: { name: 'Walk In 2', phone: '9876544102' }, saleKind: 'service_only',
+      items: [{ productId: aln.id, qty: 1 }], payments: [{ method: 'cash', amount: 600 }],
+    }, { headers: { 'Idempotency-Key': crypto.randomUUID() } })
+    expect(Number(g.data.invoice.cgstTotal) + Number(g.data.invoice.sgstTotal)).toBeCloseTo(91.53, 2)   // 600 incl. 18%
+  })
+})
