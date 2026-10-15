@@ -19,33 +19,38 @@ type NavItem = { to: string; label: string; icon: React.ElementType; end?: boole
 const OPERATIONS: NavItem[] = [
   { to: '/',                   label: 'Home',            icon: LayoutDashboard, end: true },
   { to: '/tyre/sale',          label: 'New Sale',        icon: ReceiptText },
-  { to: '/tyre/stock',         label: 'Tyre Stock',      icon: CircleDot },
   { to: '/invoices',           label: 'All Bills',       icon: FileText },
   { to: '/parties',            label: 'Customers',       icon: Users },
+  { to: '/tyre/stock',         label: 'Tyre Stock',      icon: CircleDot },
 ]
 
-const AFTERSALES: NavItem[] = [
-  { to: '/tyre/vehicles',      label: 'Vehicles',        icon: Car },
-  { to: '/tyre/warranty',      label: 'Warranty',        icon: ShieldCheck },
-  { to: '/tyre/reminders',     label: 'Service Reminders', icon: BellRing },
-  { to: '/tyre/messages',      label: 'WhatsApp Messages', icon: MessageCircle },
-]
-
-const FINANCE: NavItem[] = [
+// checked every day
+const DAILY: NavItem[] = [
   { to: '/aging',              label: 'Money to Collect', icon: Wallet },
+  { to: '/tyre/reminders',     label: 'Service Reminders', icon: BellRing },
+  { to: '/tyre/team',          label: 'Team & Salary',   icon: UserCheck },
   { to: '/expenses',           label: 'Shop Costs',      icon: TrendingDown },
+]
+
+// looked at weekly / monthly
+const REPORTS: NavItem[] = [
   { to: '/tyre/reports',       label: 'Sales & Margin',  icon: LineChart },
   { to: '/reports',            label: 'GST Reports',     icon: BarChart2 },
   { to: '/analytics',          label: 'Charts',          icon: Container },
 ]
 
+const AFTERSALES: NavItem[] = [
+  { to: '/tyre/vehicles',      label: 'Vehicles',        icon: Car },
+  { to: '/tyre/warranty',      label: 'Warranty',        icon: ShieldCheck },
+  { to: '/tyre/messages',      label: 'WhatsApp Messages', icon: MessageCircle },
+]
+
+// rarely used: folded under "More"
 const OTHER: NavItem[] = [
   { to: '/pipeline',  label: 'Quotations', icon: GitBranch },
   { to: '/contracts', label: 'Contracts',  icon: RefreshCw },
   { to: '/broadcast', label: 'Broadcast',  icon: MessageCircle },
-  { to: '/tyre/team', label: 'Team & Salary', icon: UserCheck },
   { to: '/ai',        label: 'AI Assistant', icon: Sparkles },
-  { to: '/branches',  label: 'My Business & Staff', icon: Building2 },
 ]
 
 const INVENTORY_ITEMS = [
@@ -99,7 +104,8 @@ export function AppLayout() {
   const { data: branchList } = useBranches()
   const hidden = hiddenMenu((branchList as any[])?.[0]?.domainConfig)
   if ((branchList as any[])?.[0]?.domainConfig?.ai_enabled === false) hidden.add('/ai')
-  const show = (items: NavItem[]) => items.filter((i) => !hidden.has(i.to))
+  // salary details are for the owner / manager only, so the link is not offered to anyone else
+  const show = (items: NavItem[]) => items.filter((i) => !hidden.has(i.to) && !(i.to === '/tyre/team' && !isManager))
   const { data: pendingApprovals } = usePendingApprovals({ enabled: isManager })
   const pendingCount = Array.isArray(pendingApprovals) ? pendingApprovals.length : 0
 
@@ -141,8 +147,7 @@ export function AppLayout() {
         {/* Navigation */}
         <nav className="flex-1 px-3 pb-3 space-y-1 overflow-y-auto">
           <Section items={show(OPERATIONS)} />
-          {show(AFTERSALES).length > 0 && <Section title="After-sales" items={show(AFTERSALES)} />}
-          {show(FINANCE).length > 0 && <Section title="Money" items={show(FINANCE)} />}
+          {show(DAILY).length > 0 && <Section title="Every day" items={show(DAILY)} />}
 
           {isManager && (
             <div className="space-y-1">
@@ -160,6 +165,8 @@ export function AppLayout() {
               </NavLink>}
             </div>
           )}
+
+
 
           {/* Inventory — expandable (tyres, spares, lubricants) */}
           {!hidden.has('/inventory') && <NavLink to="/inventory"
@@ -186,6 +193,10 @@ export function AppLayout() {
             </div>
           )}
 
+
+          {show(REPORTS).length > 0 && <Section title="Reports" items={show(REPORTS)} />}
+          {show(AFTERSALES).length > 0 && <Section title="After-sales" items={show(AFTERSALES)} />}
+
           {/* Rarely used screens stay folded so the menu is short and calm */}
           <button type="button" onClick={() => setMoreOpen((v) => !v)}
             className="w-full flex items-center gap-3 px-3 py-2 mt-2 rounded-lg text-xs font-semibold uppercase tracking-wider text-gray-400 hover:bg-gray-100">
@@ -193,6 +204,9 @@ export function AppLayout() {
             <ChevronDown className={`w-3.5 h-3.5 transition-transform ${moreOpen ? 'rotate-180' : ''}`} />
           </button>
           {moreOpen && <Section items={show(OTHER)} />}
+          <div className="pt-2 mt-2 border-t border-gray-100">
+            <Section items={[{ to: '/branches', label: 'My Business & Staff', icon: Building2 }]} />
+          </div>
         </nav>
 
         {/* User footer */}
