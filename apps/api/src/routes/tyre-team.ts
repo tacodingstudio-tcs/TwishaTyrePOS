@@ -235,7 +235,7 @@ export const tyreTeamRoutes: FastifyPluginAsync = async (app) => {
     }
     let expenseId: string | undefined
     if (b.kind === 'advance') {
-      expenseId = await addExpense(req, { date, category: 'salary_advance', description: `Advance to ${st.name}${b.note ? ` — ${b.note}` : ''}`, amount: b.amount, method: b.method })
+      expenseId = await addExpense(req, { date, category: 'staff_advance', description: `Advance to ${st.name}${b.note ? ` — ${b.note}` : ''}`, amount: b.amount, method: b.method })
     }
     const row = await insertRow(req, 'tyre_staff_ledger', {
       branchId: req.branchId, staffId: b.staffId, kind: b.kind, amount: b.amount, date, month, method: b.method,
@@ -276,7 +276,7 @@ export const tyreTeamRoutes: FastifyPluginAsync = async (app) => {
     if (!row) throw httpError(404, 'Team member not found')
     if (b.amount > row.due + 0.005) throw httpError(422, `Only ₹${row.due} is due to ${row.name} for ${b.month}`)
     const date = b.date ?? todayStr()
-    const expenseId = await addExpense(req, { date, category: 'salary', description: `Salary ${b.month} — ${row.name}`, amount: b.amount, method: b.method })
+    const expenseId = await addExpense(req, { date, category: 'staff', description: `Salary ${b.month} — ${row.name}`, amount: b.amount, method: b.method })
     const entry = await insertRow(req, 'tyre_staff_ledger', {
       branchId: req.branchId, staffId: b.staffId, kind: 'salary', amount: b.amount, date, month: b.month, method: b.method,
       note: b.note, expenseId, createdBy: req.userId,

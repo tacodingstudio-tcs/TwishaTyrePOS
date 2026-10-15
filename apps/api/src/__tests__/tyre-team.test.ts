@@ -74,7 +74,7 @@ describe('Team & salary', () => {
   test('advance is paid out (an expense), recovered from salary, and cannot be over-recovered', async () => {
     const adv = await owner.api.post('/api/tyre/team/ledger', { staffId: ramesh.id, kind: 'advance', amount: 3000, date: '2026-06-12', note: 'family function' })
     expect(adv.status).toBe(201)
-    expect(JSON.stringify((await owner.api.get('/api/expenses', { params: { limit: 50 } })).data)).toContain('salary_advance')
+    expect(JSON.stringify((await owner.api.get('/api/expenses', { params: { limit: 50 } })).data)).toContain('staff_advance')
     expect((await owner.api.get('/api/tyre/team/staff')).data.data.find((p: any) => p.id === ramesh.id).advanceOutstanding).toBe(3000)
 
     expect((await owner.api.post('/api/tyre/team/ledger', { staffId: ramesh.id, kind: 'recovery', amount: 5000, month: MONTH })).status).toBe(422)
@@ -91,6 +91,13 @@ describe('Team & salary', () => {
     expect((await row(owner, ramesh.id)).due).toBe(0)
     expect((await pay(owner, { staffId: ramesh.id, month: MONTH, amount: 1 })).status).toBe(422)
     expect(JSON.stringify((await owner.api.get('/api/expenses', { params: { limit: 50 } })).data)).toContain('Salary 2026-06')
+    // the Shop Costs category chips find them: salary under Staff Salary, advances under Staff Advances
+    const cats = (await owner.api.get('/api/expenses/categories')).data as Array<{ code: string }>
+    expect(cats.map((c) => c.code)).toEqual(expect.arrayContaining(['staff', 'staff_advance']))
+    const byCat = async (category: string) => (await owner.api.get('/api/expenses', { params: { category, limit: 50 } })).data
+    expect(JSON.stringify(await byCat('staff'))).toContain('Salary 2026-06')
+    expect(JSON.stringify(await byCat('staff_advance'))).toContain('Advance to')
+    expect(JSON.stringify(await byCat('rent'))).not.toContain('Salary 2026-06')
   })
 
   test('removing an advance removes its expense; one already recovered is protected', async () => {

@@ -257,6 +257,7 @@ const UNIVERSAL: ExpenseCategory[] = [
   { code: 'electricity',  label: 'Electricity',        icon: '⚡', affectsStock: false },
   { code: 'internet',     label: 'Internet / Phone',   icon: '📶', affectsStock: false },
   { code: 'staff',        label: 'Staff Salary',       icon: '👤', affectsStock: false },
+  { code: 'staff_advance', label: 'Staff Advances',     icon: '💸', affectsStock: false },
   { code: 'maintenance',  label: 'Maintenance',        icon: '🔧', affectsStock: false },
   { code: 'misc',         label: 'Miscellaneous',      icon: '📎', affectsStock: false },
 ]
