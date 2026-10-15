@@ -3,7 +3,6 @@
 // My Business) are never hideable.
 export const HIDEABLE_MENU: Array<{ to: string; label: string; hint?: string }> = [
   { to: '/tyre/stock',            label: 'Tyre Stock' },
-  { to: '/tyre/sale?mode=service', label: 'Alignment & Balancing' },
   { to: '/tyre/vehicles',         label: 'Vehicles' },
   { to: '/tyre/warranty',         label: 'Warranty' },
   { to: '/tyre/reminders',        label: 'Service Reminders' },

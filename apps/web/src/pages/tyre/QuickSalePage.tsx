@@ -87,7 +87,7 @@ export function QuickSalePage() {
   const [sp] = useSearchParams()
   const role = useAuthStore((s) => s.user?.role)
   const readOnly = role === 'viewer'
-  const serviceMode = sp.get('mode') === 'service'      // alignment / balancing / fitting without selling a tyre
+  void sp                                               // an old ?mode=service link simply opens this same page
 
   // customer + vehicle
   const [party, setParty] = useState<PickedParty>({ name: '' })
@@ -230,7 +230,7 @@ export function QuickSalePage() {
     setLines((ls) => {
       if (ls.some((l) => l.productId === p.id)) return ls
       // per-wheel services default to the tyres in the basket, or 4 wheels on a service-only visit
-      const qty = perTyre ? Math.max(1, tyreUnits || (serviceMode ? 4 : 1)) : 1
+      const qty = perTyre ? Math.max(1, tyreUnits || 4) : 1
       return [...ls, memoPrice(lineFromProduct(p, qty))]
     })
   }
@@ -246,7 +246,8 @@ export function QuickSalePage() {
         billSeries: billSeries || undefined,
         makeModel: makeModel.trim() || undefined,
         poNo: poNo.trim() || undefined,
-        saleKind: serviceMode && !lines.some((l) => l.kind !== 'service') ? 'service_only' : undefined,
+        // a bill with only jobs on it (no tyre) is recorded as a service visit
+        saleKind: lines.length > 0 && lines.every((l) => l.kind === 'service') ? 'service_only' : undefined,
         vehicleNo: regNo.trim() || undefined,
         vehicleType: regNo.trim() ? vehicleType : undefined,
         odometer: odometer ? Number(odometer) : undefined,
@@ -287,8 +288,7 @@ export function QuickSalePage() {
 
   return (
     <div className="pb-4">
-      <PageHeader title={serviceMode ? 'Alignment, balancing & fitting' : 'New bill'}
-        subtitle={serviceMode ? 'Service visit — pick the jobs, type the charges, take payment' : 'Add tyres, type the price, save'} />
+      <PageHeader title="New bill" subtitle="Add tyres and tap the jobs done — one bill" />
       <div className="p-4 sm:p-6 max-w-7xl mx-auto grid grid-cols-1 xl:grid-cols-3 gap-4 items-start">
       <div className="xl:col-span-2 space-y-4 min-w-0">
 
@@ -346,7 +346,7 @@ export function QuickSalePage() {
         </section>
 
         {/* 3 · add tyre */}
-        {!serviceMode && (
+        {(
           <section className="card p-4">
             <div className="flex items-center gap-3">
               <div className="relative flex-1">
@@ -382,57 +382,10 @@ export function QuickSalePage() {
           </section>
         )}
 
-        {/* 3b · service cards (service visits): tap a card to add it, + / − to change how many */}
-        {serviceMode && (
-          <section className="card p-4">
-            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Tap the jobs done</div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {(services?.data ?? []).map((sv: any) => {
-                const line = lines.find((l) => l.productId === sv.id)
-                const Icon = serviceIcon(sv)
-                const on = !!line
-                return (
-                  <div key={sv.id}
-                    className={`relative rounded-xl border-2 p-3 transition select-none ${on ? 'border-green-600 bg-green-50' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
-                    <button type="button" className="w-full text-left" onClick={() => (on ? setLine(line!.key, { qty: line!.qty + 1 }) : addService(sv))}
-                      aria-label={`Add ${sv.name}`}>
-                      <div className="flex items-start justify-between">
-                        <Icon className={`w-6 h-6 ${on ? 'text-green-700' : 'text-gray-400'}`} />
-                        {on && <span className="w-5 h-5 rounded-full bg-green-600 text-white flex items-center justify-center"><Check className="w-3.5 h-3.5" /></span>}
-                      </div>
-                      <div className="mt-2 text-sm font-semibold text-gray-900 leading-tight">{sv.name}</div>
-                      <div className="text-xs text-gray-500 mt-0.5">{inr(sv.salePrice)}{/tyre|wheel/.test(String(sv.unit)) ? ' each' : ''}</div>
-                    </button>
-                    {on && (
-                      <div className="mt-2 flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <button type="button" aria-label="Fewer"
-                            className="w-7 h-7 rounded-md border border-gray-300 bg-white flex items-center justify-center"
-                            onClick={() => (line!.qty <= 1 ? setLines((ls) => ls.filter((x) => x.key !== line!.key)) : setLine(line!.key, { qty: line!.qty - 1 }))}>
-                            <Minus className="w-3.5 h-3.5" />
-                          </button>
-                          <span className="w-6 text-center text-sm font-semibold">{line!.qty}</span>
-                          <button type="button" aria-label="More"
-                            className="w-7 h-7 rounded-md border border-gray-300 bg-white flex items-center justify-center"
-                            onClick={() => setLine(line!.key, { qty: line!.qty + 1 })}>
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                        <span className="text-sm font-semibold text-green-800">{inr(price2(line!.qty * line!.price))}</span>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-              {(services?.data ?? []).length === 0 && <p className="col-span-full text-sm text-gray-400">No services set up yet — add them under Tyres &amp; Items.</p>}
-            </div>
-          </section>
-        )}
-
         {/* 4 · bill lines */}
-        <section className={`card ${serviceMode && lines.length === 0 ? 'hidden' : ''}`}>
+        <section className="card">
           {lines.length === 0 ? (
-            <p className="p-8 text-center text-sm text-gray-400">{serviceMode ? 'Pick the jobs below.' : 'Search a tyre above to start the bill.'}</p>
+            <p className="p-8 text-center text-sm text-gray-400">Search a tyre above, or tap a job below, to start the bill.</p>
           ) : (
             <ul className="divide-y divide-gray-100">
               {lines.map((l) => {
@@ -453,16 +406,16 @@ export function QuickSalePage() {
                         </button>
                       </div>
                     </div>
-                    <div className={`grid grid-cols-2 ${serviceMode ? 'sm:grid-cols-2 max-w-md' : 'sm:grid-cols-4'} gap-3 items-end`}>
+                    <div className={`grid grid-cols-2 ${l.kind === 'service' ? 'sm:grid-cols-2 max-w-md' : 'sm:grid-cols-4'} gap-3 items-end`}>
                       <div><label className="label">Qty</label>
                         <input type="number" min="1" step={l.kind === 'service' ? 'any' : 1} className="input" value={l.qty}
                           onChange={(e) => setLine(l.key, { qty: Math.max(0, Number(e.target.value)) })} /></div>
-                      <div className={serviceMode ? 'hidden' : ''}><label className="label">List price</label>
+                      <div className={l.kind === 'service' ? 'hidden' : ''}><label className="label">List price</label>
                         <input type="number" min="0" className="input" value={l.rate} onChange={(e) => onList(l, Number(e.target.value))} /></div>
-                      <div className={serviceMode ? 'hidden' : ''}><label className="label">Discount %</label>
+                      <div className={l.kind === 'service' ? 'hidden' : ''}><label className="label">Discount %</label>
                         <input type="number" min="0" max="100" step="0.01" className="input" value={l.discountPct}
                           onChange={(e) => onDisc(l, Math.min(100, Math.max(0, Number(e.target.value))))} /></div>
-                      <div><label className="label font-semibold text-gray-900">{isInclusive && withGst ? 'Data Entry (incl. GST)' : 'Price charged'}</label>
+                      <div><label className="label font-semibold text-gray-900">{l.kind === 'service' ? 'Price' : isInclusive && withGst ? 'Data Entry (incl. GST)' : 'Price charged'}</label>
                         <input type="number" min="0" className="input border-gray-900 font-semibold text-base" value={l.price} onChange={(e) => onPrice(l, Number(e.target.value))} /></div>
                     </div>
                     {l.discountPct > 0 && <p className="text-xs text-green-700">Discount − {inr(price2(l.rate - l.price))} per unit ({l.discountPct}%)</p>}
@@ -526,22 +479,55 @@ export function QuickSalePage() {
             </ul>
           )}
 
-          {/* quick jobs */}
-          {!serviceMode && (services?.data ?? []).length > 0 && (
-            <div className="p-4 border-t border-gray-100 bg-gray-50">
-              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2 flex items-center gap-1.5"><Wrench className="w-3.5 h-3.5" /> Quick add</div>
-              <div className="flex flex-wrap gap-2">
-                {(services?.data ?? []).map((s: any) => (
-                  <button key={s.id} type="button" onClick={() => addService(s)}
-                    className="px-3 py-1.5 text-xs rounded-full border border-gray-200 bg-white hover:border-primary-300 hover:bg-primary-50">
-                    {s.name} · {inr(s.salePrice)}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </section>
 
+
+        {/* 3b · service cards: tap a card to add it, + / − to change how many — same bill as the tyres */}
+        {(
+          <section className="card p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Jobs done (tap to add)</div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              {(services?.data ?? []).map((sv: any) => {
+                const line = lines.find((l) => l.productId === sv.id)
+                const Icon = serviceIcon(sv)
+                const on = !!line
+                return (
+                  <div key={sv.id}
+                    className={`relative rounded-xl border-2 p-3 transition select-none ${on ? 'border-green-600 bg-green-50' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+                    <button type="button" className="w-full text-left" onClick={() => (on ? setLine(line!.key, { qty: line!.qty + 1 }) : addService(sv))}
+                      aria-label={`Add ${sv.name}`}>
+                      <div className="flex items-start justify-between">
+                        <Icon className={`w-6 h-6 ${on ? 'text-green-700' : 'text-gray-400'}`} />
+                        {on && <span className="w-5 h-5 rounded-full bg-green-600 text-white flex items-center justify-center"><Check className="w-3.5 h-3.5" /></span>}
+                      </div>
+                      <div className="mt-2 text-sm font-semibold text-gray-900 leading-tight">{sv.name}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">{inr(sv.salePrice)}{/tyre|wheel/.test(String(sv.unit)) ? ' each' : ''}</div>
+                    </button>
+                    {on && (
+                      <div className="mt-2 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <button type="button" aria-label="Fewer"
+                            className="w-7 h-7 rounded-md border border-gray-300 bg-white flex items-center justify-center"
+                            onClick={() => (line!.qty <= 1 ? setLines((ls) => ls.filter((x) => x.key !== line!.key)) : setLine(line!.key, { qty: line!.qty - 1 }))}>
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <span className="w-6 text-center text-sm font-semibold">{line!.qty}</span>
+                          <button type="button" aria-label="More"
+                            className="w-7 h-7 rounded-md border border-gray-300 bg-white flex items-center justify-center"
+                            onClick={() => setLine(line!.key, { qty: line!.qty + 1 })}>
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <span className="text-sm font-semibold text-green-800">{inr(price2(line!.qty * line!.price))}</span>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+              {(services?.data ?? []).length === 0 && <p className="col-span-full text-sm text-gray-400">No services set up yet — add them under Tyres &amp; Items.</p>}
+            </div>
+          </section>
+        )}
       </div>
 
       {/* 6 · details — always open, in the right-hand column on a wide screen */}
@@ -588,7 +574,7 @@ export function QuickSalePage() {
               <div><label className="label">Fitted by</label><input className="input" value={fittedBy} onChange={(e) => setFittedBy(e.target.value)} placeholder="Technician" /></div>
               <div><label className="label">Notes</label><input className="input" value={notes} onChange={(e) => setNotes(e.target.value)} /></div>
             </div>
-            {!serviceMode && (
+            {(
               <div>
                 <h3 className="text-xs font-semibold text-gray-600 mb-2 flex items-center gap-1.5"><Recycle className="w-3.5 h-3.5" /> Old tyre in exchange</h3>
                 <div className="grid grid-cols-2 gap-3">

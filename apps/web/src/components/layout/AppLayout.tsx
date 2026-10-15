@@ -20,7 +20,6 @@ const OPERATIONS: NavItem[] = [
   { to: '/',                   label: 'Home',            icon: LayoutDashboard, end: true },
   { to: '/tyre/sale',          label: 'New Sale',        icon: ReceiptText },
   { to: '/tyre/stock',         label: 'Tyre Stock',      icon: CircleDot },
-  { to: '/tyre/sale?mode=service', label: 'Alignment & Balancing', icon: Wrench },
   { to: '/invoices',           label: 'All Bills',       icon: FileText },
   { to: '/parties',            label: 'Customers',       icon: Users },
 ]
