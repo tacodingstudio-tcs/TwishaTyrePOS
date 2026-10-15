@@ -222,17 +222,19 @@ export function LoginPage() {
               )
             })}
           </div>
-
-          <div className="tw-rise mt-6 max-w-sm tw-float [@media(max-height:720px)]:hidden rounded-xl bg-black/45 backdrop-blur-lg ring-1 ring-white/20 px-4 py-3 shadow-xl shadow-black/40" style={{ animationDelay: '.55s' }}>
-            <div className="text-[11px] uppercase tracking-wider text-white/55">Next due</div>
-            <div className="font-semibold text-white">Wheel alignment · GJ 03 AB 4521</div>
-            <div className="text-xs text-emerald-300 mt-0.5">in 14 days · WhatsApp ready</div>
-          </div>
         </div>
 
         {/* floating bill, over the tyre */}
-        <div className="absolute right-10 top-20 tw-rise hidden min-[1400px]:block" style={{ animationDelay: '.45s' }}>
+        <div className="absolute right-10 top-20 tw-rise hidden min-[1400px]:flex flex-col items-end gap-3" style={{ animationDelay: '.45s' }}>
           <BillCard className="tw-float" />
+          <div className="tw-float w-72 [@media(max-height:780px)]:hidden rounded-xl bg-black/55 backdrop-blur-lg ring-1 ring-white/20 px-4 py-3 shadow-xl shadow-black/40"
+            style={{ animationDelay: '-2.5s' }}>
+            <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-white/55">
+              <BellRing className="w-3.5 h-3.5 text-emerald-300" /> Next due
+            </div>
+            <div className="mt-1 font-semibold text-white text-sm">Wheel alignment · GJ 03 AB 4521</div>
+            <div className="text-xs text-emerald-300 mt-0.5">in 14 days · WhatsApp ready</div>
+          </div>
         </div>
 
         <footer className="relative text-xs text-white/55 tw-rise" style={{ animationDelay: '.7s' }}>
