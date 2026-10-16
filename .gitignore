@@ -52,3 +52,7 @@ backups/
 # E2E screenshots
 e2e/out/
 apps/api/scripts/routes.txt
+
+# local secrets (never commit)
+.env.neon
+.env.*.local
