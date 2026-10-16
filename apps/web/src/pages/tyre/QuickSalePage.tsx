@@ -10,6 +10,16 @@ import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { PartyCombobox, type PickedParty } from '@/components/ui/PartyCombobox'
 import { inr, num, VEHICLE_TYPE_LABEL, POSITION_LABEL, dotInfo } from '@/components/tyre/format'
+import { isValidGstin } from '@/lib/gstin'
+
+/** GST state codes (first two digits of a GSTIN), shown under the field so a wrong state code is easy to spot. */
+const GST_STATE: Record<string, string> = {
+  '01': 'Jammu & Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab', '04': 'Chandigarh', '05': 'Uttarakhand', '06': 'Haryana', '07': 'Delhi',
+  '08': 'Rajasthan', '09': 'Uttar Pradesh', '10': 'Bihar', '11': 'Sikkim', '12': 'Arunachal Pradesh', '13': 'Nagaland', '14': 'Manipur', '15': 'Mizoram',
+  '16': 'Tripura', '17': 'Meghalaya', '18': 'Assam', '19': 'West Bengal', '20': 'Jharkhand', '21': 'Odisha', '22': 'Chhattisgarh', '23': 'Madhya Pradesh',
+  '24': 'Gujarat', '26': 'Dadra & Nagar Haveli and Daman & Diu', '27': 'Maharashtra', '29': 'Karnataka', '30': 'Goa', '31': 'Lakshadweep', '32': 'Kerala',
+  '33': 'Tamil Nadu', '34': 'Puducherry', '35': 'Andaman & Nicobar', '36': 'Telangana', '37': 'Andhra Pradesh', '38': 'Ladakh', '97': 'Other Territory',
+}
 
 const ALIGNMENT_KEYS = ['Front toe', 'Rear toe', 'Camber L', 'Camber R', 'Caster L', 'Caster R']
 
@@ -92,6 +102,7 @@ export function QuickSalePage() {
   // customer + vehicle
   const [party, setParty] = useState<PickedParty>({ name: '' })
   const [phone, setPhone] = useState('')
+  const [gstin, setGstin] = useState('')                 // optional: only for a business customer who wants a GST bill in their name
   const [regNo, setRegNo] = useState('')
   const [vehicleType, setVehicleType] = useState('car')
   const [odometer, setOdometer] = useState('')
@@ -241,6 +252,7 @@ export function QuickSalePage() {
       return tyreApi.createSale({
         partyId: party.id,
         customer: !party.id && party.name.trim() ? { name: party.name.trim(), phone: phone.replace(/\D/g, '') || undefined, address: address.trim() || undefined } : undefined,
+        customerGstin: gstin.trim() || undefined,
         withGst,
         pricesIncludeGst: isInclusive,
         billSeries: billSeries || undefined,
@@ -284,6 +296,12 @@ export function QuickSalePage() {
   }
   if (balance > 0.5 && !hasCustomer) problems.push('Add the customer name and mobile to leave a balance on credit')
   if (balance < -0.5) problems.push('Payments are more than the bill')
+  // the GSTIN is optional — it is only checked when something has been typed in
+  const gstinText = gstin.trim().toUpperCase()
+  const gstinState = gstinText.length >= 2 ? GST_STATE[gstinText.slice(0, 2)] : undefined
+  const gstinOk = gstinText.length === 15 && isValidGstin(gstinText)
+  if (gstinText && !gstinOk) problems.push('Customer GSTIN is not complete or not valid — fix it or clear the box')
+  if (gstinText && !party.id && !party.name.trim()) problems.push('Add the customer name to go with the GSTIN')
   const canSave = !readOnly && problems.length === 0 && !save.isPending
 
   return (
@@ -322,11 +340,26 @@ export function QuickSalePage() {
             <div className="sm:col-span-3">
               <PartyCombobox label="Customer" type="customer" value={party}
                 placeholder="Name or mobile"
-                onChange={(p) => { setParty(p); if (p.id && p.phone) setPhone(p.phone) }} />
+                onChange={(p) => { setParty(p); if (p.id && p.phone) setPhone(p.phone); if (p.id) setGstin((p.gstin ?? '').toUpperCase()) }} />
             </div>
             <div className="sm:col-span-3">
               <label className="label" htmlFor="ph">Mobile</label>
               <input id="ph" className="input" inputMode="numeric" maxLength={13} disabled={!!party.id} value={phone} onChange={(e) => setPhone(e.target.value)} />
+            </div>
+            <div className="sm:col-span-3">
+              <label className="label" htmlFor="gstin">Customer GSTIN <span className="text-gray-400 font-normal">(optional)</span></label>
+              <input id="gstin" className={`input font-mono uppercase tracking-wide ${gstinText.length === 15 && !gstinOk ? 'border-red-400' : ''}`}
+                placeholder="24AABCR1234A1Z5" maxLength={15} autoComplete="off" spellCheck={false} value={gstin}
+                onChange={(e) => setGstin(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
+            </div>
+            <div className="sm:col-span-3 flex items-end pb-2 text-xs">
+              {!gstinText && <span className="text-gray-400">Only for a business customer who wants a GST bill in their name. Leave empty otherwise.</span>}
+              {gstinText && !gstinOk && (
+                <span className={gstinText.length === 15 ? 'text-red-600' : 'text-gray-500'}>
+                  {gstinText.length === 15 ? 'This GSTIN does not look right — check each character' : `${gstinText.length} of 15 characters${gstinState ? ` · ${gstinState}` : ''}`}
+                </span>
+              )}
+              {gstinOk && <span className="text-green-700 inline-flex items-center gap-1"><Check className="w-3.5 h-3.5" /> Valid GSTIN · {gstinState ?? `state code ${gstinText.slice(0, 2)}`} — business (B2B) bill</span>}
             </div>
             <div className="sm:col-span-2">
               <label className="label" htmlFor="reg">Vehicle no.</label>

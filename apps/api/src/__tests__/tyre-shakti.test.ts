@@ -431,3 +431,92 @@ describe('Powered-by credit', () => {
     expect(withCredit.status).toBe(200)
   })
 })
+
+describe('Customer GSTIN on a bill (optional)', () => {
+  let owner: Session, tyre: any
+
+  /** A GSTIN that passes the check digit, built the same way the real ones are. */
+  const gstinOf = (state: string, pan: string, entity = '1'): string => {
+    const base = `${state}${pan}${entity}Z`
+    const CH = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    let sum = 0
+    for (let i = 0; i < 14; i++) { const m = CH.indexOf(base[i]!) * (i % 2 === 0 ? 1 : 2); sum += Math.floor(m / 36) + (m % 36) }
+    return base + CH[(36 - (sum % 36)) % 36]
+  }
+  const G1 = gstinOf('24', 'AABCR1234A'), G2 = gstinOf('24', 'AAACS5678B'), G3 = gstinOf('27', 'AAACT9999C')
+
+  const sale = (body: Record<string, unknown>) =>
+    owner.api.post('/api/tyre/sales', { items: [{ productId: tyre.id, qty: 1, rate: 5000 }], payments: [{ method: 'cash', amount: 5000 }], ...body },
+      { headers: { 'Idempotency-Key': crypto.randomUUID() } })
+  const partyOf = async (invoiceId: string) => {
+    const inv = (await owner.api.get(`/api/invoices/${invoiceId}`)).data
+    return (await owner.api.get(`/api/parties/${inv.partyId}`)).data
+  }
+
+  beforeAll(async () => {
+    owner = await newShopTenant('Gstin Tyres')
+    tyre = (await owner.api.post('/api/products', {
+      itemType: 'product', gstRate: 18, unit: 'pcs', trackStock: true, name: 'MRF 185/65 R15', sku: 'MRF-185', salePrice: 5000, purchasePrice: 3500, openingStock: 40,
+      domainAttrs: { item_kind: 'tyre', brand: 'MRF', size: '185/65 R15', vehicle_type: 'car' },
+    })).data
+  })
+
+  test('a normal bill without a GSTIN works exactly as before', async () => {
+    const r = await sale({ customer: { name: 'Walk In', phone: '9811100001' } })
+    expect(r.status).toBe(201)
+    expect((await partyOf(r.data.invoice.id)).gstin ?? null).toBeNull()
+  })
+
+  test('a valid GSTIN is kept on the new customer and printed on the bill', async () => {
+    const r = await sale({ customer: { name: 'Shree Roadlines', phone: '9811100002' }, customerGstin: G1.toLowerCase() })
+    expect(r.status).toBe(201)
+    expect((await partyOf(r.data.invoice.id)).gstin).toBe(G1)
+    const pdf = await owner.api.get(`/api/tyre/invoices/${r.data.invoice.id}/pdf`, { responseType: 'arraybuffer' })
+    expect(pdf.status).toBe(200)
+    expect(Buffer.from(pdf.data).subarray(0, 4).toString()).toBe('%PDF')
+  })
+
+  test('a wrong or half-typed GSTIN is refused with a clear message; blank is fine', async () => {
+    const bad = await sale({ customer: { name: 'X Traders', phone: '9811100003' }, customerGstin: G1.slice(0, 14) + (G1.endsWith('0') ? '1' : '0') })
+    expect(bad.status).toBe(422)
+    expect(JSON.stringify(bad.data)).toMatch(/GSTIN is not valid/)
+    expect((await sale({ customer: { name: 'Short', phone: '9811100004' }, customerGstin: '24AABC' })).status).toBe(422)
+    expect((await sale({ customer: { name: 'Blank', phone: '9811100005' }, customerGstin: '   ' })).status).toBe(201)
+  })
+
+  test('the same GSTIN is the same business: no duplicate customer is made', async () => {
+    const a = await partyOf((await sale({ customer: { name: 'Shree Roadlines Pvt', phone: '9811100099' }, customerGstin: G1 })).data.invoice.id)
+    const b = await partyOf((await sale({ customer: { name: 'Shree Roadlines', phone: '9811100002' }, customerGstin: G1 })).data.invoice.id)
+    expect(a.id).toBe(b.id)
+    expect(a.name).toBe('Shree Roadlines')
+  })
+
+  test('a saved customer without a GSTIN gets it filled in; a different one is not silently overwritten', async () => {
+    const first = await sale({ customer: { name: 'Hari Transport', phone: '9811100006' } })
+    const party = await partyOf(first.data.invoice.id)
+    expect(party.gstin ?? null).toBeNull()
+    const second = await sale({ partyId: party.id, customerGstin: G2 })
+    expect(second.status).toBe(201)
+    expect((await owner.api.get(`/api/parties/${party.id}`)).data.gstin).toBe(G2)
+    const clash = await sale({ partyId: party.id, customerGstin: G3 })
+    expect(clash.status).toBe(422)
+    expect(JSON.stringify(clash.data)).toMatch(new RegExp(G2))
+    expect((await sale({ partyId: party.id, customerGstin: G2 })).status).toBe(201)      // the same one again is fine
+  })
+
+  test('a GSTIN with a name but no mobile number still saves the customer', async () => {
+    const r = await sale({ customer: { name: 'No Phone Traders' }, customerGstin: G3 })
+    expect(r.status).toBe(201)
+    const p = await partyOf(r.data.invoice.id)
+    expect(p.gstin).toBe(G3)
+    expect(p.name).toBe('No Phone Traders')
+  })
+
+  test('the bill goes to the B2B table of GSTR-1 under the customer GSTIN', async () => {
+    const month = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 7)
+    const g = await owner.api.get('/api/reports/gstr1', { params: { month } })
+    expect(g.status).toBe(200)
+    const text = JSON.stringify(g.data)
+    expect(text).toContain(G1)
+  })
+})

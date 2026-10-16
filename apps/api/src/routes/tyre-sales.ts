@@ -24,9 +24,14 @@ import {
 } from '../lib/tyre-helpers.js'
 import { notifyInvoice, safely } from '../lib/tyre-notify.js'
 import { loadInvoiceDoc } from '../lib/tyre-docs.js'
+import { isValidGstin } from '../lib/gstin.js'
 
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
 const idParam = z.object({ id: z.string().uuid() })
+/** A customer's GSTIN: blank is fine, anything typed must be a real one (format + check digit). */
+const gstinField = z.string().trim().toUpperCase()
+  .refine((v) => v === '' || isValidGstin(v), 'The customer GSTIN is not valid — please check it')
+  .transform((v) => v || undefined)
 
 const SaleItem = z.object({
   productId:      z.string().uuid(),
@@ -54,8 +59,10 @@ const SaleBody = z.object({
     name:  z.string().trim().min(1).max(120),
     phone: z.string().trim().max(15).optional(),
     address: z.string().trim().max(300).optional(),
-    gstin: z.string().trim().toUpperCase().max(15).optional(),
+    gstin: gstinField.optional(),
   }).optional(),
+  /** GSTIN of the customer on this bill; a saved customer who had none gets it stored */
+  customerGstin: gstinField.optional(),
   vehicleNo:  z.string().trim().max(20).optional(),
   vehicleType: z.enum(TYRE_VEHICLE_TYPES).optional(),
   makeModel:  z.string().trim().max(60).optional(),
@@ -266,20 +273,41 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
   let partyId = body.partyId
   let customerName: string | null = body.customer?.name ?? null
   let customerPhone: string | null = body.customer?.phone ? tenDigits(body.customer.phone) : null
+  // The customer's GSTIN makes this a B2B bill (it goes to GSTR-1 table 4 under their GSTIN), so it is kept on
+  // the customer record: stored for a new customer, filled in for a saved one that had none.
+  const gstin = body.customerGstin ?? body.customer?.gstin
+  const partiesT = tbl(req.schemaName, 'parties')
+  const ctxFor = { db: req.db, branchId: req.branchId, userId: req.userId, role: req.role } as any
+  const saveGstin = async (id: string, current: string | null | undefined) => {
+    if (!gstin || current === gstin) return
+    if (current) throw httpError(422, `This customer already has GSTIN ${current} — change it from Customers if it is wrong`)
+    await run(req, `UPDATE ${partiesT} SET gstin = $2, "updatedAt" = NOW() WHERE id = $1::uuid`, id, gstin)
+  }
+  const byGstin = !partyId && gstin
+    ? await q1<any>(req, `SELECT id, name FROM ${partiesT} WHERE gstin = $1 AND "isActive" = true ORDER BY "createdAt" LIMIT 1`, gstin)
+    : null
   if (partyId) {
-    const p = await q1<any>(req, `SELECT id, name, phone FROM ${tbl(req.schemaName, 'parties')} WHERE id = $1::uuid`, partyId)
+    const p = await q1<any>(req, `SELECT id, name, phone, gstin FROM ${partiesT} WHERE id = $1::uuid`, partyId)
     if (!p) throw httpError(404, 'Customer not found')
     customerName = p.name; customerPhone = p.phone ?? customerPhone
+    await saveGstin(p.id, p.gstin)
+  } else if (byGstin) {
+    // the same GSTIN is the same business — reuse that customer instead of making a twin
+    partyId = byGstin.id; customerName = byGstin.name
   } else if (body.customer?.phone && customerPhone && /^[6-9]\d{9}$/.test(customerPhone)) {
-    const existing = await q1<any>(req, `SELECT id, name FROM ${tbl(req.schemaName, 'parties')} WHERE phone = $1 AND "isActive" = true`, customerPhone)
-    if (existing) { partyId = existing.id; customerName = existing.name }
+    const existing = await q1<any>(req, `SELECT id, name, gstin FROM ${partiesT} WHERE phone = $1 AND "isActive" = true`, customerPhone)
+    if (existing) { partyId = existing.id; customerName = existing.name; await saveGstin(existing.id, existing.gstin) }
     else {
       const created = await createParty({ type: 'customer', name: body.customer.name, phone: customerPhone, creditLimit: 0, meta: {},
           ...(body.customer.address ? { address: { line1: body.customer.address } } : {}),
-          ...(body.customer.gstin?.length === 15 ? { gstin: body.customer.gstin } : {}) },
-        { db: req.db, branchId: req.branchId, userId: req.userId, role: req.role } as any)
+          ...(gstin ? { gstin } : {}) }, ctxFor)
       partyId = created.id
     }
+  } else if (gstin && body.customer?.name) {
+    // a business bill with a GSTIN but no mobile number: still worth saving the customer
+    const created = await createParty({ type: 'customer', name: body.customer.name, creditLimit: 0, meta: {},
+        ...(body.customer.address ? { address: { line1: body.customer.address } } : {}), gstin }, ctxFor)
+    partyId = created.id
   }
 
   // Cheap pre-check so a credit sale never lands on "no customer" — rounding is the core's job.
