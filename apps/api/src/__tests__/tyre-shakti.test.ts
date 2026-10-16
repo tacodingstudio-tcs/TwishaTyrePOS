@@ -520,3 +520,61 @@ describe('Customer GSTIN on a bill (optional)', () => {
     expect(text).toContain(G1)
   })
 })
+
+describe('HSN code fills in by itself from the tyre', () => {
+  let owner: Session
+  const mk = async (name: string, sku: string, vt: string, extra: Record<string, unknown> = {}) =>
+    (await owner.api.post('/api/products', {
+      itemType: 'product', gstRate: 18, unit: 'pcs', trackStock: true, name, sku, salePrice: 5000, purchasePrice: 3500, openingStock: 20,
+      domainAttrs: { item_kind: 'tyre', brand: 'MRF', size: '185/65 R15', vehicle_type: vt }, ...extra,
+    })).data
+  const sale = (productId: string, item: Record<string, unknown> = {}) =>
+    owner.api.post('/api/tyre/sales', { customer: { name: 'Hsn Cust', phone: '9822200001' }, items: [{ productId, qty: 1, rate: 5000, ...item }], payments: [{ method: 'cash', amount: 5000 }] },
+      { headers: { 'Idempotency-Key': crypto.randomUUID() } })
+  const hsnOnBill = async (invoiceId: string) => (await owner.api.get(`/api/invoices/${invoiceId}`)).data.items[0].hsnSacCode
+
+  beforeAll(async () => { owner = await newShopTenant('Hsn Tyres') })
+
+  test('a new tyre gets the HSN of its vehicle class without anyone typing it', async () => {
+    expect((await mk('MRF Car', 'H-CAR', 'car')).hsnSacCode).toBe('401110')
+    expect((await mk('MRF Bike', 'H-2W', 'two_wheeler')).hsnSacCode).toBe('401140')
+    expect((await mk('MRF Truck', 'H-TRK', 'truck_bus')).hsnSacCode).toBe('401120')
+  })
+
+  test('a code typed on the product is respected', async () => {
+    expect((await mk('MRF Special', 'H-SPL', 'car', { hsnSacCode: '40111010' })).hsnSacCode).toBe('40111010')
+  })
+
+  test('the size finder returns the HSN, even for a tyre saved before this existed', async () => {
+    const old = await mk('MRF Old', 'H-OLD', 'car')
+    await owner.api.put(`/api/products/${old.id}`, { hsnSacCode: null }).catch(() => {})
+    const f = await owner.api.get('/api/tyre/finder', { params: { size: '185/65R15', limit: 50 } })
+    expect(f.data.data.length).toBeGreaterThan(0)
+    for (const r of f.data.data) expect(r.hsn).toMatch(/^\d{6,8}$/)
+  })
+
+  test('the bill carries the tyre’s HSN; a changed code on the line wins for that bill only', async () => {
+    const p = await mk('MRF Bill', 'H-BILL', 'car')
+    expect(await hsnOnBill((await sale(p.id)).data.invoice.id)).toBe('401110')
+    expect(await hsnOnBill((await sale(p.id, { hsnSacCode: '40111090' })).data.invoice.id)).toBe('40111090')
+    expect((await owner.api.get(`/api/products/${p.id}`)).data.hsnSacCode).toBe('401110')      // the product itself is unchanged
+  })
+
+  test('a tyre with no HSN on file gets the standard one saved when it is sold', async () => {
+    const p = await mk('MRF Blank', 'H-BLANK', 'two_wheeler')
+    // simulate a catalogue row that predates the auto-fill
+    const run = await owner.api.patch(`/api/products/${p.id}`, { hsnSacCode: '' })
+    void run
+    const inv = await sale(p.id)
+    expect(inv.status).toBe(201)
+    expect(await hsnOnBill(inv.data.invoice.id)).toMatch(/^4011/)
+  })
+
+  test('a malformed HSN is refused', async () => {
+    const p = await mk('MRF Bad', 'H-BAD', 'car')
+    const r = await sale(p.id, { hsnSacCode: 'ABC' })
+    expect(r.status).toBe(422)
+    expect(JSON.stringify(r.data)).toMatch(/HSN/)
+    expect((await sale(p.id, { hsnSacCode: '123' })).status).toBe(422)
+  })
+})

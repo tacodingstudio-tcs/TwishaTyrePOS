@@ -8,7 +8,7 @@
 
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
-import { normalizeTyreSize, TYRE_VEHICLE_TYPES, ITEM_KINDS } from '@billing/domain-registry'
+import { normalizeTyreSize, TYRE_VEHICLE_TYPES, ITEM_KINDS, defaultHsn } from '@billing/domain-registry'
 import { tbl, q, branchConfig } from '../lib/tyre-helpers.js'
 
 // SQL expression: a stored size reduced to the same canonical spelling normalizeTyreSize() produces.
@@ -77,6 +77,8 @@ export const tyreCatalogRoutes: FastifyPluginAsync = async (app) => {
     return {
       data: rows.map((r: any) => ({
         ...r,
+        // the HSN this tyre will print under: its own, else the standard one for its vehicle class
+        hsn: r.hsnSacCode || defaultHsn(r.domainAttrs?.item_kind ?? 'tyre', r.domainAttrs?.vehicle_type),
         // price floor hint for the counter: never show a margin figure to read-only users
         marginPct: req.role === 'viewer' || !r.purchasePrice || !r.salePrice
           ? null : Math.round(((r.salePrice - r.purchasePrice) / r.salePrice) * 1000) / 10,

@@ -49,6 +49,7 @@ interface Line {
   positions: string[]
   warrantyMonths?: number
   serviceType?: string
+  hsn: string                  // HSN (tyres) / SAC (services) printed on the bill — filled in from the item, editable
   readingsBefore: Record<string, string>
   readingsAfter: Record<string, string>
 }
@@ -71,6 +72,7 @@ function lineFromProduct(p: any, qty = 1): Line {
     gstRate: p.gstRate > 0 ? Number(p.gstRate) : DEFAULT_GST,
     serials: '', dots: '', positions: [], warrantyMonths: Number(a.warranty_months ?? 0) || undefined,
     serviceType: kind === 'service' ? a.service_type : undefined,
+    hsn: String(p.hsn ?? p.hsnSacCode ?? ''),
     readingsBefore: {}, readingsAfter: {},
   }
 }
@@ -267,6 +269,7 @@ export function QuickSalePage() {
         creditDays: balance > 0.5 ? Number(creditDays || 0) : undefined,
         items: lines.map((l) => ({
           productId: l.productId, qty: l.qty, rate: l.rate, finalPrice: l.price,
+          hsnSacCode: l.hsn || undefined,
           serialNos: splitList(l.serials), dotCodes: splitList(l.dots),
           positions: l.positions.filter(Boolean),
           warrantyMonths: l.warrantyMonths,
@@ -293,6 +296,7 @@ export function QuickSalePage() {
   for (const l of lines) {
     if (l.stock != null && l.qty > l.stock) problems.push(`${l.name}: only ${l.stock} in stock`)
     if (splitList(l.serials).length > l.qty) problems.push(`${l.name}: more serial numbers than quantity`)
+    if (l.hsn && !/^\d{4,8}$/.test(l.hsn)) problems.push(`${l.name}: HSN must be 4 to 8 digits`)
   }
   if (balance > 0.5 && !hasCustomer) problems.push('Add the customer name and mobile to leave a balance on credit')
   if (balance < -0.5) problems.push('Payments are more than the bill')
@@ -430,7 +434,15 @@ export function QuickSalePage() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="text-sm font-semibold text-gray-900">{l.name}</div>
-                        <div className="text-xs text-gray-500">{l.stock != null ? `${num(l.stock)} in stock` : 'Service'}</div>
+                        <div className="text-xs text-gray-500 flex items-center gap-2 flex-wrap">
+                          <span>{l.stock != null ? `${num(l.stock)} in stock` : 'Service'}</span>
+                          <label className="inline-flex items-center gap-1">
+                            <span className="text-gray-400">{l.kind === 'service' ? 'SAC' : 'HSN'}</span>
+                            <input aria-label={`${l.kind === 'service' ? 'SAC' : 'HSN'} for ${l.name}`} inputMode="numeric" maxLength={8}
+                              className={`w-20 rounded border px-1.5 py-0.5 font-mono text-xs ${l.hsn && !/^\d{4,8}$/.test(l.hsn) ? 'border-red-400 text-red-600' : 'border-gray-200 text-gray-700'}`}
+                              value={l.hsn} placeholder="auto" onChange={(e) => setLine(l.key, { hsn: e.target.value.replace(/\D/g, '') })} />
+                          </label>
+                        </div>
                       </div>
                       <div className="text-right shrink-0">
                         <div className="text-base font-semibold text-gray-900">{inr(price2(l.qty * l.price))}</div>

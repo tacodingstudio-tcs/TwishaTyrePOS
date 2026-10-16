@@ -45,6 +45,8 @@ const SaleItem = z.object({
   dotCodes:       z.array(z.string().trim().regex(/^\d{4}$/, 'DOT is week + year, e.g. 2325')).max(50).default([]),
   positions:      z.array(z.enum(TYRE_POSITIONS)).max(50).default([]),
   warrantyMonths: z.number().int().min(0).max(120).optional(),
+  /** HSN printed for this line when it should differ from the product's own (4–8 digits) */
+  hsnSacCode:     z.string().trim().regex(/^\d{4,8}$/, 'HSN must be 4 to 8 digits').optional(),
   // service lines (alignment / balancing): wheels done and the readings taken
   wheels:         z.number().int().min(1).max(30).optional(),
   readings:       z.object({
@@ -320,6 +322,13 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
   }
   if (paidNow + exchangeValue > approxTotal + 1.5) throw httpError(422, 'Payments are more than the bill total')
 
+  // A tyre sold before its HSN was ever filled in keeps the one used on this bill from now on.
+  for (const l of lines) {
+    if (l.p.hsnSacCode || l.kind === 'service') continue
+    const hsn = l.it.hsnSacCode ?? defaultHsn(l.kind, body.vehicleType ?? l.a['vehicle_type'])
+    await run(req, `UPDATE ${tbl(req.schemaName, 'products')} SET "hsnSacCode" = $2 WHERE id = $1::uuid AND COALESCE("hsnSacCode", '') = ''`, l.p.id, hsn)
+  }
+
   // ── Create the invoice ──────────────────────────────────────────────────────
   const regNo = body.vehicleNo ? normReg(body.vehicleNo) : undefined
   const creditDays = body.creditDays ?? undefined
@@ -365,7 +374,7 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
         description: l.p.name,
         qty: l.it.qty, unit: l.p.unit ?? 'pcs', rate: l.rate,
         discountPct: l.discountPct, gstRate: l.gstRate, gstExempt: !!l.p.gstExempt || !body.withGst, priceIncludesGst: inclusive,
-        hsnSacCode: l.p.hsnSacCode ?? defaultHsn(l.kind, vehicleType ?? l.a['vehicle_type'], String(conf('default_service_sac'))),
+        hsnSacCode: l.it.hsnSacCode || l.p.hsnSacCode || defaultHsn(l.kind, vehicleType ?? l.a['vehicle_type'], String(conf('default_service_sac'))),
         itemMeta: {
           item_kind: l.kind,
           serial_nos: l.it.serialNos, dot_codes: l.it.dotCodes, positions: l.it.positions,

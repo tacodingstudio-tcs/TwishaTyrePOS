@@ -20,7 +20,7 @@
 
 import { Prisma } from '@billing/db'
 import type { PrismaClient } from '@billing/db'
-import { DOMAIN_REGISTRY, validateProductAttrs, tyreCategorySlug, type DomainType } from '@billing/domain-registry'
+import { DOMAIN_REGISTRY, validateProductAttrs, tyreCategorySlug, defaultHsn, type DomainType } from '@billing/domain-registry'
 import { z } from 'zod'
 import { ai, parseAIJson } from '../lib/ai-provider.js'
 
@@ -209,6 +209,15 @@ export async function createProduct(input: CreateProductInput, ctx: RequestCtx) 
     }
   }
 
+  // Tyre shop: a tyre / tube / flap saved without an HSN gets the right one for its vehicle class
+  // (401110 car, 401120 bus/truck, 401140 motorcycle …) so it prints on the bill without anyone typing it.
+  // Services are seeded with their own SAC, so they are left alone.
+  let hsnSacCode = input.hsnSacCode
+  if (!hsnSacCode && ctx.branchDomainType === 'tyre' && input.itemType !== 'service') {
+    const a = (validatedAttrs ?? {}) as { item_kind?: string; vehicle_type?: string }
+    hsnSacCode = defaultHsn(a.item_kind ?? 'tyre', a.vehicle_type)
+  }
+
   // Tyre shop: file the item under its category (Car & SUV, Two-wheeler, …) when none was chosen
   let categoryId = input.categoryId
   if (!categoryId && ctx.branchDomainType === 'tyre') {
@@ -230,7 +239,7 @@ export async function createProduct(input: CreateProductInput, ctx: RequestCtx) 
         brandId:       input.brandId       ?? null,
         sku:           input.sku           ?? null,
         barcode:       input.barcode       ?? null,
-        hsnSacCode:    input.hsnSacCode    ?? null,
+        hsnSacCode:    hsnSacCode          ?? null,
         gstRate:       input.gstRate,
         gstExempt:     input.gstExempt,
         unit:          input.unit,
