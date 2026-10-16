@@ -16,6 +16,7 @@
 
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
+import { nullableGstin } from '../lib/validators.js'
 
 
 export const branchRoutes: FastifyPluginAsync = async (app) => {
@@ -169,7 +170,7 @@ export const branchRoutes: FastifyPluginAsync = async (app) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params)
     const body = z.object({
       name:         z.string().min(2).max(200).trim().optional(),
-      gstin:        z.string().max(15).optional().nullable(),
+      gstin:        nullableGstin,
       stateCode:    z.string().length(2).regex(/^\d{2}$/).optional().nullable(),
       address:      z.record(z.unknown()).optional(),
       domainConfig: z.record(z.unknown()).optional(),

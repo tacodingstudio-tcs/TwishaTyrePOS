@@ -10,6 +10,25 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/store/auth.store'
 import { getEntityConfig } from '@/lib/entityConfig'
 import { DomainAttrsForm } from '@/components/product/DomainAttrsForm'
+import { ValidatedInput } from '@/components/ui/ValidatedInput'
+import { check } from '@/lib/validate'
+
+/** The first thing wrong with a product form, in plain words ('' = fine). Prices and stock cannot be negative; HSN is 4–8 digits. */
+function productError(f: { name: string; salePrice: string; purchasePrice?: string; mrp?: string; openingStock?: string; hsn?: string; barcode?: string }): string {
+  if (!f.name.trim()) return 'Enter the product name'
+  const money = (label: string, v: string | undefined, required = false): string => {
+    if (v == null || v === '') return required ? `${label} is required` : ''
+    const n = Number(v)
+    if (!Number.isFinite(n) || n < 0) return `${label} cannot be negative`
+    if (n > 10_000_000) return `${label} looks too large`
+    return ''
+  }
+  const sale = money('Sale price', f.salePrice, true)
+  if (sale) return sale
+  if (Number(f.salePrice) === 0) return 'Sale price cannot be 0'
+  return money('Purchase price', f.purchasePrice) || money('MRP', f.mrp) || money('Opening stock', f.openingStock)
+    || check('hsn', f.hsn) || ((f.barcode ?? '').length > 40 ? 'Barcode is too long' : '')
+}
 
 // ── Barcode label printing ────────────────────────────────────────────────────
 // Generates a Code-128B barcode as SVG bars and opens a print window.
@@ -1028,9 +1047,10 @@ function AddProductModal({
   const unitOptions   = getUnitsForDomain(domainType)
   const [form, setForm] = useState({
     name: '', salePrice: '', purchasePrice: '', gstRate: '0',
-    unit: 'pcs', packSize: '', barcode: '', openingStock: '',
+    unit: 'pcs', packSize: '', barcode: '', openingStock: '', hsn: '',
     categoryId: '', brandId: '', isConsumable: false,
   })
+  const formError = productError(form)
   const [domainAttrs, setDomainAttrs]   = useState<Record<string, unknown>>({})
   const [imageFile, setImageFile]       = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
@@ -1045,7 +1065,7 @@ function AddProductModal({
   }
 
   async function handleSubmit() {
-    if (!form.name || !form.salePrice) return
+    if (formError) return
     const product = await createProduct.mutateAsync({
       name:          form.name,
       salePrice:     Number(form.salePrice),
@@ -1054,6 +1074,7 @@ function AddProductModal({
       unit:          form.unit,
       packSize:      form.packSize || undefined,
       barcode:       form.barcode || undefined,
+      hsnSacCode:    form.hsn || undefined,
       openingStock:  form.openingStock ? Number(form.openingStock) : undefined,
       categoryId:    form.categoryId || undefined,
       brandId:       form.brandId || undefined,
@@ -1160,7 +1181,7 @@ function AddProductModal({
               <label className="label" htmlFor="prod-sale">Sale price</label>
               <input
                 id="prod-sale"
-                type="number"
+                type="number" min={0}
                 placeholder="0"
                 value={form.salePrice}
                 onChange={(e) => setForm({ ...form, salePrice: e.target.value })}
@@ -1171,7 +1192,7 @@ function AddProductModal({
               <label className="label" htmlFor="prod-purchase">Purchase price</label>
               <input
                 id="prod-purchase"
-                type="number"
+                type="number" min={0}
                 placeholder="0"
                 value={form.purchasePrice}
                 onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })}
@@ -1229,10 +1250,15 @@ function AddProductModal({
           </div>
 
           <div>
+            <label className="label" htmlFor="prod-hsn">HSN code (optional)</label>
+            <ValidatedInput id="prod-hsn" kind="hsn" value={form.hsn} onChange={(v) => setForm({ ...form, hsn: v })} placeholder="leave blank — tyres get theirs automatically" />
+          </div>
+
+          <div>
             <label className="label" htmlFor="prod-stock">Opening stock (optional)</label>
             <input
               id="prod-stock"
-              type="number"
+              type="number" min={0}
               placeholder="0"
               value={form.openingStock}
               onChange={(e) => setForm({ ...form, openingStock: e.target.value })}
@@ -1260,12 +1286,14 @@ function AddProductModal({
           />
         </div>
 
+        {formError && form.name.trim() && <p className="text-xs text-red-600 mt-3" role="alert">{formError}</p>}
         <div className="flex gap-2 mt-5">
           <button type="button" onClick={onClose} className="btn-ghost flex-1 justify-center">Cancel</button>
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={createProduct.isPending}
+            disabled={createProduct.isPending || !!formError}
+            title={formError || undefined}
             className="btn-primary flex-1 justify-center"
           >
             {createProduct.isPending ? 'Saving...' : 'Add Product'}
@@ -1315,10 +1343,12 @@ function EditProductModal({
     unit:          product.unit ?? 'pcs',
     packSize:      product.packSize ?? '',
     barcode:       product.barcode ?? '',
+    hsn:           product.hsnSacCode ?? '',
     categoryId:    product.categoryId ?? '',
     brandId:       product.brandId ?? '',
     isConsumable:  product.isConsumable ?? false,
   })
+  const formError = productError(form)
 
   function handleImagePick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -1330,7 +1360,7 @@ function EditProductModal({
   }
 
   async function handleSubmit() {
-    if (!form.name || !form.salePrice) return
+    if (formError) return
     const metaUpdate: Record<string, unknown> = { ...(product.meta ?? {}) }
     if (priceMeta.wholesalePrice) metaUpdate.wholesalePrice = Number(priceMeta.wholesalePrice)
     else delete metaUpdate.wholesalePrice
@@ -1348,6 +1378,7 @@ function EditProductModal({
         unit:          form.unit,
         packSize:      form.packSize || undefined,
         barcode:       form.barcode || undefined,
+        hsnSacCode:    form.hsn || undefined,
         categoryId:    form.categoryId || undefined,
         brandId:       form.brandId || undefined,
         isConsumable:  form.isConsumable,
@@ -1450,7 +1481,7 @@ function EditProductModal({
               <label className="label" htmlFor="edit-sale">Sale price</label>
               <input
                 id="edit-sale"
-                type="number"
+                type="number" min={0}
                 value={form.salePrice}
                 onChange={(e) => setForm({ ...form, salePrice: e.target.value })}
                 className="input"
@@ -1460,7 +1491,7 @@ function EditProductModal({
               <label className="label" htmlFor="edit-purchase">Purchase price</label>
               <input
                 id="edit-purchase"
-                type="number"
+                type="number" min={0}
                 value={form.purchasePrice}
                 onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })}
                 className="input"
@@ -1470,7 +1501,7 @@ function EditProductModal({
               <label className="label" htmlFor="edit-mrp">MRP</label>
               <input
                 id="edit-mrp"
-                type="number"
+                type="number" min={0}
                 value={form.mrp}
                 onChange={(e) => setForm({ ...form, mrp: e.target.value })}
                 className="input"
@@ -1547,6 +1578,11 @@ function EditProductModal({
           </div>
 
           <div>
+            <label className="label" htmlFor="edit-hsn">HSN code</label>
+            <ValidatedInput id="edit-hsn" kind="hsn" value={form.hsn} onChange={(v) => setForm({ ...form, hsn: v })} placeholder="4 to 8 digits" />
+          </div>
+
+          <div>
             <label className="label" htmlFor="edit-barcode">Barcode</label>
             <input
               id="edit-barcode"
@@ -1582,7 +1618,8 @@ function EditProductModal({
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={updateProduct.isPending}
+            disabled={updateProduct.isPending || !!formError}
+            title={formError || undefined}
             className="btn-primary flex-1 justify-center"
           >
             {updateProduct.isPending ? 'Saving...' : 'Save Changes'}

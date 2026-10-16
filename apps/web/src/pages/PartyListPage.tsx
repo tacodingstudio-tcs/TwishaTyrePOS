@@ -1,4 +1,6 @@
 // src/pages/PartyListPage.tsx
+import { ValidatedInput } from '@/components/ui/ValidatedInput'
+import { check, firstError } from '@/lib/validate'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useParties, useCreateParty } from '@/hooks/useApi'
@@ -182,14 +184,20 @@ function AddEntityModal({ domainType, defaultType, onClose }: AddEntityModalProp
     phone:       '',
     creditLimit: '',
     email:       '',
+    gstin:       '',
+    pincode:     '',
   })
   const [meta, setMeta] = useState<Record<string, string>>({})
 
   function setF(k: string, v: string) { setForm(p => ({ ...p, [k]: v })) }
   function setM(k: string, v: string) { setMeta(p => ({ ...p, [k]: v })) }
 
+  const formError = form.name.trim() ? firstError(['mobile', form.phone], ['email', form.email], ['gstin', form.gstin], ['pincode', form.pincode]) : ''
+  const [showErrors, setShowErrors] = useState(false)
+
   async function handleSubmit() {
     if (!form.name.trim()) return
+    if (formError) { setShowErrors(true); return }
     // Remove empty meta values
     const cleanMeta = Object.fromEntries(Object.entries(meta).filter(([, v]) => v !== ''))
     await createParty.mutateAsync({
@@ -197,6 +205,8 @@ function AddEntityModal({ domainType, defaultType, onClose }: AddEntityModalProp
       name:        form.name.trim(),
       phone:       form.phone || undefined,
       email:       form.email || undefined,
+      gstin:       form.gstin || undefined,
+      address:     form.pincode ? { pincode: form.pincode } : undefined,
       creditLimit: form.creditLimit ? Number(form.creditLimit) : undefined,
       meta:        cleanMeta,
     })
@@ -251,24 +261,23 @@ function AddEntityModal({ domainType, defaultType, onClose }: AddEntityModalProp
 
             <div>
               <label className="label">Phone</label>
-              <input
-                type="tel"
-                value={form.phone}
-                onChange={(e) => setF('phone', e.target.value)}
-                className="input"
-                placeholder="10-digit mobile"
-              />
+              <ValidatedInput kind="mobile" value={form.phone} onChange={(v) => setF('phone', v)} showNow={showErrors} placeholder="10-digit mobile" />
             </div>
 
             <div>
               <label className="label">Email (optional)</label>
-              <input
-                type="email"
-                value={form.email}
-                onChange={(e) => setF('email', e.target.value)}
-                className="input"
-                placeholder="email@example.com"
-              />
+              <ValidatedInput kind="email" value={form.email} onChange={(v) => setF('email', v)} showNow={showErrors} placeholder="email@example.com" />
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2">
+                <label className="label">GSTIN (optional)</label>
+                <ValidatedInput kind="gstin" value={form.gstin} onChange={(v) => setF('gstin', v)} showNow={showErrors} placeholder="24AABCR1234A1Z5" />
+              </div>
+              <div>
+                <label className="label">Pincode</label>
+                <ValidatedInput kind="pincode" value={form.pincode} onChange={(v) => setF('pincode', v)} showNow={showErrors} placeholder="362720" />
+              </div>
             </div>
 
             {/* Domain-specific meta fields — only for customers */}
@@ -346,7 +355,7 @@ function AddEntityModal({ domainType, defaultType, onClose }: AddEntityModalProp
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={!form.name.trim() || createParty.isPending}
+              disabled={!form.name.trim() || createParty.isPending || (showErrors && !!formError)}
               className="btn-primary flex-1 justify-center"
             >
               {createParty.isPending ? 'Saving…' : `Add ${form.type !== 'supplier' && isService ? cfg.singular : 'Party'}`}

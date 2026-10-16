@@ -1,4 +1,6 @@
 // Customer vehicles and the "due for a check" list.
+import { ValidatedInput } from '@/components/ui/ValidatedInput'
+import { check, firstError } from '@/lib/validate'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
@@ -84,16 +86,16 @@ function NewVehicleModal({ onClose }: { onClose: () => void }) {
     <Modal title="Add vehicle" width="md" onClose={onClose}
       footer={<>
         <button type="button" className="btn-ghost flex-1 justify-center" onClick={onClose}>Cancel</button>
-        <button type="button" className="btn-primary flex-1 justify-center" disabled={f.regNo.trim().length < 4 || m.isPending} onClick={() => m.mutate()}>Save</button>
+        <button type="button" className="btn-primary flex-1 justify-center" disabled={!!check('vehicle', f.regNo, true) || !!check('mobile', f.ownerPhone) || m.isPending} onClick={() => m.mutate()}>Save</button>
       </>}>
       <div className="grid grid-cols-2 gap-3">
-        <div><label className="label">Vehicle number *</label><input className="input uppercase" value={f.regNo} onChange={set('regNo')} placeholder="GJ05AB1234" /></div>
+        <div><label className="label">Vehicle number *</label><ValidatedInput kind="vehicle" required value={f.regNo} onChange={(v) => setF((p) => ({ ...p, regNo: v }))} placeholder="GJ05AB1234" /></div>
         <div><label className="label">Type</label>
           <select className="input" value={f.vehicleType} onChange={set('vehicleType')}>{Object.entries(VEHICLE_TYPE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
         <div><label className="label">Make / model</label><input className="input" value={f.makeModel} onChange={set('makeModel')} placeholder="Swift VXi" /></div>
         <div><label className="label">Tyre size</label><input className="input" value={f.tyreSize} onChange={set('tyreSize')} placeholder="185/65 R15" /></div>
         <div><label className="label">Owner</label><input className="input" value={f.ownerName} onChange={set('ownerName')} /></div>
-        <div><label className="label">Mobile</label><input className="input" inputMode="numeric" value={f.ownerPhone} onChange={set('ownerPhone')} /></div>
+        <div><label className="label">Mobile</label><ValidatedInput kind="mobile" value={f.ownerPhone} onChange={(v) => setF((p) => ({ ...p, ownerPhone: v }))} placeholder="10-digit mobile" /></div>
       </div>
     </Modal>
   )

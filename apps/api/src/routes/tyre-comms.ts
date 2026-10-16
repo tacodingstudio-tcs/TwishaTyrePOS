@@ -10,6 +10,7 @@
 
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
+import { nullableMobile } from '../lib/validators.js'
 import { tbl, q, q1, httpError, requireWrite, requireManager, branchConfig, type Ctx } from '../lib/tyre-helpers.js'
 import { invoicePdf } from '../lib/tyre-docs.js'
 import { notifyInvoice, retryMessage, runDailyAlerts, notifySettings } from '../lib/tyre-notify.js'
@@ -85,7 +86,7 @@ export const tyreCommsRoutes: FastifyPluginAsync = async (app) => {
       notify_service_reminders:   z.boolean().optional(),
       notify_owner_alerts:        z.boolean().optional(),
       notify_reminder_every_days: z.number().int().min(1).max(60).optional(),
-      notify_owner_phone:         z.string().max(20).nullable().optional(),
+      notify_owner_phone:         nullableMobile,
     }).strict().parse(req.body ?? {})
     const patch = JSON.stringify(Object.fromEntries(Object.entries(body).filter(([, v]) => v !== undefined)))
     await req.db.$executeRawUnsafe(

@@ -19,6 +19,7 @@
 
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
+import { mobile, optionalEmail } from '../lib/validators.js'
 import { hashPin } from '../lib/password.js'
 import { revokeAllUserTokens } from '../lib/refreshToken.service.js'
 
@@ -92,8 +93,8 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
 
     const body = z.object({
       name:      z.string().min(2).max(100).trim(),
-      phone:     z.string().min(10).max(13),
-      email:     z.string().email().optional(),
+      phone:     mobile,
+      email:     optionalEmail,
       pin:       z.string().length(4).regex(/^\d{4}$/, 'PIN must be 4 digits'),
       role:      z.enum(['manager', 'cashier', 'viewer']).default('cashier'),
       branchIds: z.array(z.string().uuid()).default([]),

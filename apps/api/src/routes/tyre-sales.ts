@@ -12,6 +12,7 @@
 
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
+import { optionalMobile } from '../lib/validators.js'
 import { createHash } from 'crypto'
 import {
   DOMAIN_REGISTRY, SERIALISED_KINDS, TYRE_POSITIONS, TYRE_VEHICLE_TYPES, SALE_KINDS, defaultHsn,
@@ -59,7 +60,7 @@ const SaleBody = z.object({
   partyId:    z.string().uuid().optional(),
   customer:   z.object({
     name:  z.string().trim().min(1).max(120),
-    phone: z.string().trim().max(15).optional(),
+    phone: optionalMobile,
     address: z.string().trim().max(300).optional(),
     gstin: gstinField.optional(),
   }).optional(),

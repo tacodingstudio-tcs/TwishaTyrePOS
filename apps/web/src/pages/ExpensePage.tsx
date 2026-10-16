@@ -387,7 +387,7 @@ function ExpenseModal({
               <label className="label" htmlFor="exp-amount">Amount (₹)</label>
               <input
                 id="exp-amount"
-                type="number"
+                type="number" min={0.01} step="0.01"
                 placeholder="0"
                 autoFocus
                 value={form.amount}
@@ -504,7 +504,7 @@ function ExpenseModal({
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={isPending || !form.amount || !form.category}
+            disabled={isPending || !(Number(form.amount) > 0) || Number(form.amount) > 100_000_000 || !form.category}
             className="btn-primary flex-1 justify-center"
           >
             {isPending ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Expense'}

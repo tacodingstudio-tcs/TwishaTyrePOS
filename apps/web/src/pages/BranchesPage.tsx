@@ -1,4 +1,6 @@
 // src/pages/BranchesPage.tsx
+import { ValidatedInput } from '@/components/ui/ValidatedInput'
+import { check, firstError } from '@/lib/validate'
 import { useState } from 'react'
 import { HIDEABLE_MENU, hiddenMenu } from '@/lib/menu'
 import {
@@ -77,6 +79,8 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm({ ...form, [k]: e.target.value })
 
+  const shopError = firstError(['gstin', form.gstin], ['pincode', form.pincode], ['email', form.email], ['pan', form.pan], ['ifsc', form.bankIfsc], ['hsn', form.serviceSac])
+
   async function handleSubmit() {
     if (form.name.trim().length < 2) return
     await updateBranch.mutateAsync({
@@ -131,8 +135,7 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-2">
               <label className="label">GSTIN</label>
-              <input className="input" placeholder="24AAAAA0000A1Z5" maxLength={15} value={form.gstin}
-                onChange={(e) => setForm({ ...form, gstin: e.target.value.toUpperCase() })} />
+              <ValidatedInput kind="gstin" placeholder="24AAAAA0000A1Z5" value={form.gstin} onChange={(v) => setForm({ ...form, gstin: v })} />
             </div>
             <div>
               <label className="label">State code</label>
@@ -146,7 +149,7 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div><label className="label">City</label><input className="input" value={form.city} onChange={set('city')} /></div>
-            <div><label className="label">Pincode</label><input className="input" value={form.pincode} onChange={set('pincode')} /></div>
+            <div><label className="label">Pincode</label><ValidatedInput kind="pincode" value={form.pincode} onChange={(v) => setForm({ ...form, pincode: v })} /></div>
           </div>
 
           <div className="border-t border-gray-100 pt-4">
@@ -189,16 +192,16 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
               <div><label className="label">No-GST bills start at</label><input type="number" min="1" className="input" placeholder="e.g. 1" value={form.ngStart} onChange={set('ngStart')} /></div>
               <div><label className="label">No-GST prefix</label><input className="input" maxLength={6} value={form.ngPrefix} onChange={set('ngPrefix')} /></div>
             </div>
-            <div className="mt-3"><label className="label">Email (printed on bills)</label><input className="input" value={form.email} onChange={set('email')} /></div>
+            <div className="mt-3"><label className="label">Email (printed on bills)</label><ValidatedInput kind="email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} /></div>
           </div>
 
           <div className="border-t border-gray-100 pt-4">
             <h4 className="text-sm font-semibold text-gray-900 mb-3">Printed on your bills</h4>
             <div className="grid grid-cols-2 gap-3">
-              <div><label className="label">PAN</label><input className="input" maxLength={10} placeholder="AAAAA9999A" value={form.pan} onChange={set('pan')} /></div>
+              <div><label className="label">PAN</label><ValidatedInput kind="pan" placeholder="AAAAA9999A" value={form.pan} onChange={(v) => setForm({ ...form, pan: v })} /></div>
               <div><label className="label">Bank name</label><input className="input" value={form.bankName} onChange={set('bankName')} /></div>
               <div><label className="label">Account no</label><input className="input" value={form.bankAcc} onChange={set('bankAcc')} /></div>
-              <div><label className="label">IFSC</label><input className="input" maxLength={11} value={form.bankIfsc} onChange={set('bankIfsc')} /></div>
+              <div><label className="label">IFSC</label><ValidatedInput kind="ifsc" placeholder="SBIN0001234" value={form.bankIfsc} onChange={(v) => setForm({ ...form, bankIfsc: v })} /></div>
               <div className="col-span-2">
                 <label className="label">Terms &amp; conditions <span className="text-gray-400 font-normal">(one per line; blank = standard wording)</span></label>
                 <textarea className="input h-20 resize-none" value={form.terms} onChange={(e) => setForm({ ...form, terms: e.target.value })} />
@@ -220,7 +223,7 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
               </div>
               <div>
                 <label className="label">Service SAC code</label>
-                <input className="input" maxLength={8} value={form.serviceSac} onChange={set('serviceSac')} />
+                <ValidatedInput kind="hsn" value={form.serviceSac} onChange={(v) => setForm({ ...form, serviceSac: v })} />
               </div>
               <div>
                 <label className="label">Default warranty (months)</label>
@@ -257,7 +260,7 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
 
         <div className="flex justify-end gap-2 mt-6">
           <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
-          <button type="button" onClick={handleSubmit} disabled={updateBranch.isPending || form.name.trim().length < 2} className="btn-primary">
+          <button type="button" onClick={handleSubmit} disabled={updateBranch.isPending || form.name.trim().length < 2 || !!shopError} className="btn-primary" title={shopError || undefined}>
             {updateBranch.isPending ? 'Saving…' : 'Save changes'}
           </button>
         </div>
@@ -302,7 +305,7 @@ function AddUserModal({ branches, domainType, onClose }: { branches: any[]; doma
     onClose()
   }
 
-  const canSubmit = form.name.trim() && form.phone.length >= 10 && form.pin.length === 4 && !createUser.isPending
+  const canSubmit = form.name.trim() && !check('mobile', form.phone, true) && !check('pin', form.pin, true) && !createUser.isPending
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
@@ -318,8 +321,7 @@ function AddUserModal({ branches, domainType, onClose }: { branches: any[]; doma
 
           <div>
             <label className="label" htmlFor="u-phone">Phone number *</label>
-            <input id="u-phone" type="tel" className="input" placeholder="9876543210"
-              value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            <ValidatedInput id="u-phone" kind="mobile" placeholder="9876543210" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />
             <p className="text-xs text-gray-400 mt-1">Used to log in to the app</p>
           </div>
 

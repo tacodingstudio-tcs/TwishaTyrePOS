@@ -1,5 +1,7 @@
 // Team & salary — the shop's own people (with or without a login): daily attendance,
 // advances / bonus / deductions, monthly payroll and salary payments.
+import { ValidatedInput } from '@/components/ui/ValidatedInput'
+import { check, firstError } from '@/lib/validate'
 import { useMemo, useState } from 'react'
 import { localIso, localMonth } from '@/lib/dates'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -272,7 +274,7 @@ function People() {
         <div className="space-y-3">
           <div><label className="label" htmlFor="pn">Name</label><input id="pn" className="input" value={form.name} onChange={f('name')} /></div>
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="label" htmlFor="pp">Mobile</label><input id="pp" className="input" inputMode="numeric" value={form.phone} onChange={f('phone')} /></div>
+            <div><label className="label" htmlFor="pp">Mobile</label><ValidatedInput id="pp" kind="mobile" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} placeholder="10-digit mobile" /></div>
             <div><label className="label" htmlFor="pd">Role</label><input id="pd" className="input" placeholder="Fitter" value={form.designation} onChange={f('designation')} /></div>
             <div><label className="label" htmlFor="pt">Paid</label>
               <select id="pt" className="input" value={form.salaryType} onChange={f('salaryType')}><option value="monthly">Monthly</option><option value="daily">Daily wage</option></select></div>
@@ -285,7 +287,7 @@ function People() {
                 <option value="-1">None</option>
               </select></div>
           </div>
-          <button type="button" className="btn-primary w-full justify-center" disabled={!form.name.trim() || form.baseSalary === '' || add.isPending} onClick={() => add.mutate()}>
+          <button type="button" className="btn-primary w-full justify-center" disabled={!form.name.trim() || form.baseSalary === '' || Number(form.baseSalary) < 0 || !!check('mobile', form.phone) || add.isPending} onClick={() => add.mutate()}>
             {add.isPending ? 'Adding…' : 'Add'}
           </button>
         </div>

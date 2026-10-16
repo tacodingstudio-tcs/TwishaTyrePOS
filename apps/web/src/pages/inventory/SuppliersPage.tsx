@@ -1,4 +1,6 @@
 // src/pages/inventory/SuppliersPage.tsx
+import { ValidatedInput } from '@/components/ui/ValidatedInput'
+import { check, firstError } from '@/lib/validate'
 import { useState } from 'react'
 import { useSuppliers, useCreateSupplier, useUpdateSupplier, useDeleteSupplier } from '@/hooks/useApi'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -46,8 +48,12 @@ function SupplierModal({
       setForm({ ...form, [key]: e.target.value })
   }
 
+  const [showErrors, setShowErrors] = useState(false)
+  const formError = firstError(['mobile', form.phone], ['email', form.email], ['gstin', form.gstin])
+
   async function handleSubmit() {
     if (!form.name) return
+    if (formError) { setShowErrors(true); return }
     const payload = {
       name:          form.name,
       contactPerson: form.contactPerson || undefined,
@@ -89,18 +95,18 @@ function SupplierModal({
             </div>
             <div>
               <label className="label" htmlFor="sup-phone">Phone</label>
-              <input id="sup-phone" value={form.phone} onChange={f('phone')} className="input" placeholder="9876543210" />
+              <ValidatedInput id="sup-phone" kind="mobile" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} showNow={showErrors} placeholder="9876543210" />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label" htmlFor="sup-email">Email</label>
-              <input id="sup-email" type="email" value={form.email} onChange={f('email')} className="input" placeholder="supplier@email.com" />
+              <ValidatedInput id="sup-email" kind="email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} showNow={showErrors} placeholder="supplier@email.com" />
             </div>
             <div>
               <label className="label" htmlFor="sup-gstin">GSTIN</label>
-              <input id="sup-gstin" value={form.gstin} onChange={f('gstin')} className="input" placeholder="27AAAAA0000A1Z5" maxLength={15} />
+              <ValidatedInput id="sup-gstin" kind="gstin" value={form.gstin} onChange={(v) => setForm({ ...form, gstin: v })} showNow={showErrors} placeholder="27AAAAA0000A1Z5" />
             </div>
           </div>
 

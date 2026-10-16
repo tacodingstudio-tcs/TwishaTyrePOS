@@ -1,5 +1,7 @@
 // Counter sale — the screen used all day. Vehicle + customer, find tyres by size, add fitting
 // services, take an old tyre in exchange, split payment, save → bill with warranty card.
+import { ValidatedInput } from '@/components/ui/ValidatedInput'
+import { check, firstError } from '@/lib/validate'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -301,6 +303,8 @@ export function QuickSalePage() {
   if (balance > 0.5 && !hasCustomer) problems.push('Add the customer name and mobile to leave a balance on credit')
   if (balance < -0.5) problems.push('Payments are more than the bill')
   // the GSTIN is optional — it is only checked when something has been typed in
+  if (!party.id) { const e = firstError(['mobile', phone]); if (e) problems.push(e) }
+  { const e = check('vehicle', regNo); if (e) problems.push(e) }
   const gstinText = gstin.trim().toUpperCase()
   const gstinState = gstinText.length >= 2 ? GST_STATE[gstinText.slice(0, 2)] : undefined
   const gstinOk = gstinText.length === 15 && isValidGstin(gstinText)
@@ -348,7 +352,7 @@ export function QuickSalePage() {
             </div>
             <div className="sm:col-span-3">
               <label className="label" htmlFor="ph">Mobile</label>
-              <input id="ph" className="input" inputMode="numeric" maxLength={13} disabled={!!party.id} value={phone} onChange={(e) => setPhone(e.target.value)} />
+              <ValidatedInput id="ph" kind="mobile" disabled={!!party.id} value={phone} onChange={setPhone} placeholder="10-digit mobile" />
             </div>
             <div className="sm:col-span-3">
               <label className="label" htmlFor="gstin">Customer GSTIN <span className="text-gray-400 font-normal">(optional)</span></label>
@@ -367,8 +371,7 @@ export function QuickSalePage() {
             </div>
             <div className="sm:col-span-2">
               <label className="label" htmlFor="reg">Vehicle no.</label>
-              <input id="reg" className="input uppercase" placeholder="GJ05AB1234" value={regNo}
-                onChange={(e) => setRegNo(e.target.value)}
+              <ValidatedInput id="reg" kind="vehicle" placeholder="GJ05AB1234" value={regNo} onChange={setRegNo}
                 onBlur={() => { if (regNo.trim().length >= 4) lookup.mutate(regNo) }} />
             </div>
             <div className="sm:col-span-2">

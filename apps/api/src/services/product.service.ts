@@ -22,6 +22,7 @@ import { Prisma } from '@billing/db'
 import type { PrismaClient } from '@billing/db'
 import { DOMAIN_REGISTRY, validateProductAttrs, tyreCategorySlug, defaultHsn, type DomainType } from '@billing/domain-registry'
 import { z } from 'zod'
+import { optionalHsn } from '../lib/validators.js'
 import { ai, parseAIJson } from '../lib/ai-provider.js'
 
 // ── Input schemas ─────────────────────────────────────────────────────────────
@@ -111,7 +112,7 @@ export const CreateProductSchema = z.object({
   brandId:      z.string().uuid().optional(),
   sku:          z.string().max(100).optional(),
   barcode:      z.string().max(100).optional(),
-  hsnSacCode:   z.string().max(20).optional(),
+  hsnSacCode:   optionalHsn,
   gstRate:      z.number().min(0).max(100).default(0),
   gstExempt:    z.boolean().default(false),
   unit:         z.string().default('pcs'),

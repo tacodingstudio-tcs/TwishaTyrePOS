@@ -246,11 +246,20 @@ describe('Tyre edge cases', () => {
       expect((await sale(owner, base({ partyId: foreignParty.id, customer: undefined }))).status).toBe(404)
     })
 
-    test('a sale for a customer with no valid mobile is a walk-in; credit then needs a proper number', async () => {
-      const cash = await sale(owner, { customer: { name: 'No Phone', phone: '123' }, items: [{ productId: tube.id, qty: 1 }], payments: [{ method: 'cash', amount: 354 }] })
+    test('a mobile number that is not 10 digits is refused; no mobile at all is a walk-in; credit then needs a proper number', async () => {
+      for (const bad of ['123', '12345678901', '5876543210', 'abcdefghij']) {
+        const r = await sale(owner, { customer: { name: 'Bad Phone', phone: bad }, items: [{ productId: tube.id, qty: 1 }], payments: [{ method: 'cash', amount: 354 }] })
+        expect(r.status).toBe(422)
+        expect(JSON.stringify(r.data)).toMatch(/10-digit mobile/)
+      }
+      // +91 / 0 prefixes and spaces are tidied into the plain 10 digits
+      const tidy = await sale(owner, { customer: { name: 'Prefixed', phone: '+91 98765 43210' }, items: [{ productId: tube.id, qty: 1 }], payments: [{ method: 'cash', amount: 354 }] })
+      expect(tidy.status).toBe(201)
+      expect((await owner.api.get(`/api/parties/${tidy.data.invoice.partyId}`)).data.phone).toBe('9876543210')
+      const cash = await sale(owner, { customer: { name: 'No Phone' }, items: [{ productId: tube.id, qty: 1 }], payments: [{ method: 'cash', amount: 354 }] })
       expect(cash.status).toBe(201)
       expect(cash.data.invoice.partyId).toBeNull()
-      const credit = await sale(owner, { customer: { name: 'No Phone', phone: '123' }, items: [{ productId: tube.id, qty: 1 }], payments: [] })
+      const credit = await sale(owner, { customer: { name: 'No Phone' }, items: [{ productId: tube.id, qty: 1 }], payments: [] })
       expect(credit.status).toBe(422)
     })
 

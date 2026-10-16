@@ -4,6 +4,7 @@
 
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
+import { nullableMobile } from '../lib/validators.js'
 import { TYRE_VEHICLE_TYPES, CLAIM_OUTCOMES } from '@billing/domain-registry'
 import {
   tbl, q, q1, insertRow, updateRow, httpError, requireWrite, requireManager, todayStr, addDays, branchConfig, ymd,
@@ -21,7 +22,7 @@ const VehicleBody = z.object({
   makeModel:       z.string().trim().max(60).nullable().optional(),
   tyreSize:        z.string().trim().max(30).nullable().optional(),
   ownerName:       z.string().trim().max(120).nullable().optional(),
-  ownerPhone:      z.string().trim().max(15).nullable().optional(),
+  ownerPhone:      nullableMobile,
   lastServiceDate: dateStr.nullable().optional(),
   lastOdometer:    z.number().int().nonnegative().max(2_000_000).nullable().optional(),
   nextServiceDate: dateStr.nullable().optional(),

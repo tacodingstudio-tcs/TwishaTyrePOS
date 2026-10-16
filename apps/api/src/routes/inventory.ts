@@ -3,6 +3,7 @@
 
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
+import { optionalMobile, optionalEmail, optionalGstin, optionalPan } from '../lib/validators.js'
 
 export const inventoryRoutes: FastifyPluginAsync = async (app) => {
 
@@ -32,10 +33,10 @@ export const inventoryRoutes: FastifyPluginAsync = async (app) => {
   app.post('/suppliers', async (req, reply) => {
     const body = z.object({
       name:          z.string().min(1).max(200).trim(),
-      phone:         z.string().max(20).optional(),
-      email:         z.string().email().optional(),
-      gstin:         z.string().max(15).optional(),
-      pan:           z.string().max(10).optional(),
+      phone:         optionalMobile,
+      email:         optionalEmail,
+      gstin:         optionalGstin,
+      pan:           optionalPan,
       address:       z.record(z.unknown()).optional(),
       creditLimit:   z.coerce.number().nonnegative().optional(),
       meta:          z.record(z.unknown()).optional(),
@@ -56,9 +57,9 @@ export const inventoryRoutes: FastifyPluginAsync = async (app) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params)
     const body = z.object({
       name:        z.string().min(1).max(200).trim().optional(),
-      phone:       z.string().max(20).optional(),
-      email:       z.string().email().optional(),
-      gstin:       z.string().max(15).optional(),
+      phone:       optionalMobile,
+      email:       optionalEmail,
+      gstin:       optionalGstin,
       creditLimit: z.coerce.number().nonnegative().optional(),
       isActive:    z.boolean().optional(),
     }).parse(req.body)

@@ -1,4 +1,5 @@
 // src/pages/RegisterPage.tsx
+import { check, sanitize } from '@/lib/validate'
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
@@ -60,7 +61,7 @@ export function RegisterPage() {
 
   // Debounced phone availability check
   useEffect(() => {
-    if (phone.length !== 10) { setPhoneAvail(null); return }
+    if (check('mobile', phone)) { setPhoneAvail(null); return }
     setCheckingPhone(true)
     const t = setTimeout(async () => {
       try {
@@ -107,10 +108,10 @@ export function RegisterPage() {
 
   // ── Step validation ──────────────────────────────────────────────────────────
   const step1Valid = !!domainType
-  const step2Valid = businessName.trim().length >= 2
+  const step2Valid = businessName.trim().length >= 2 && !check('gstin', gstin)
   const step3Valid =
     ownerName.trim().length >= 2 &&
-    phone.length === 10 &&
+    !check('mobile', phone, true) &&
     phoneAvailable === true &&
     pin.length === 4 &&
     pin === confirmPin
@@ -204,10 +205,11 @@ export function RegisterPage() {
                   type="text"
                   placeholder="e.g. 24AABCR1234A1Z5"
                   value={gstin}
-                  onChange={(e) => setGstin(e.target.value.toUpperCase().replace(/\s/g, ''))}
-                  className="input font-mono tracking-wide"
+                  onChange={(e) => setGstin(sanitize('gstin', e.target.value))}
+                  className={`input font-mono tracking-wide ${check('gstin', gstin) && gstin.length === 15 ? 'border-red-400' : ''}`}
                   maxLength={15}
                 />
+                {gstin.length > 0 && check('gstin', gstin) && <p className="text-xs text-red-500 mt-1">{gstin.length === 15 ? 'This GSTIN does not look right — check each character' : `${gstin.length} of 15 characters`}</p>}
               </div>
             </div>
           )}
@@ -247,6 +249,7 @@ export function RegisterPage() {
                     {!checkingPhone && phoneAvailable === false && <span className="text-red-400 text-xs">Taken</span>}
                   </div>
                 </div>
+                {phone.length > 0 && phone.length === 10 && check('mobile', phone) && <p className="text-xs text-red-500 mt-1">{check('mobile', phone)}</p>}
                 {phoneAvailable === false && (
                   <p className="text-xs text-red-500 mt-1">
                     This number is already registered.{' '}

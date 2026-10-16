@@ -14,6 +14,7 @@
 
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
+import { nullableMobile } from '../lib/validators.js'
 import { tbl, q, q1, run, insertRow, updateRow, httpError, requireManager, todayStr, r2, ymd } from '../lib/tyre-helpers.js'
 
 const idParam = z.object({ id: z.string().uuid() })
@@ -24,7 +25,7 @@ const DAY_STATUS = ['present', 'half', 'absent', 'leave'] as const
 
 const StaffBody = z.object({
   name:        z.string().trim().min(1).max(100),
-  phone:       z.string().trim().max(15).nullable().optional(),
+  phone:       nullableMobile,
   designation: z.string().trim().max(60).nullable().optional(),
   joinDate:    dateStr.nullable().optional(),
   salaryType:  z.enum(['monthly', 'daily']).default('monthly'),

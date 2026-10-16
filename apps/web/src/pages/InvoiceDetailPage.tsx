@@ -413,7 +413,8 @@ export function InvoiceDetailPage() {
             <h3 className="text-base font-semibold text-gray-900">{isPurchase ? 'Pay Supplier' : 'Record Payment'}</h3>
             <div>
               <label className="label">Amount</label>
-              <input type="number" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} className="input" autoFocus />
+              <input type="number" min={0.01} step="0.01" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} className="input" autoFocus />
+              {paymentAmount !== '' && !(Number(paymentAmount) > 0) && <p className="mt-1 text-xs text-red-600">Enter an amount above 0</p>}
             </div>
             <div>
               <label className="label">Payment Method</label>
@@ -435,7 +436,7 @@ export function InvoiceDetailPage() {
             )}
             <div className="flex gap-2 pt-1">
               <button onClick={() => setShowPaymentModal(false)} className="btn-ghost flex-1 justify-center">Cancel</button>
-              <button onClick={handlePayment} disabled={recordPayment.isPending} className="btn-primary flex-1 justify-center">
+              <button onClick={handlePayment} disabled={recordPayment.isPending || !(Number(paymentAmount) > 0) || (paymentMethod === 'cheque' && !chequeNo.trim())} className="btn-primary flex-1 justify-center">
                 {recordPayment.isPending ? 'Saving…' : 'Confirm'}
               </button>
             </div>

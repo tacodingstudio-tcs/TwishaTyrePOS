@@ -6,19 +6,20 @@
 import { Prisma } from '@billing/db'
 import type { PrismaClient } from '@billing/db'
 import { z } from 'zod'
+import { optionalMobile, optionalEmail, optionalGstin, optionalPan, optionalPincode } from '../lib/validators.js'
 
 export const CreatePartySchema = z.object({
   type:        z.enum(['customer', 'supplier', 'both']),
   name:        z.string().min(1).max(200),
-  phone:       z.string().min(10).max(13).optional(),
-  email:       z.string().email().optional(),
-  gstin:       z.string().length(15).optional(),
-  pan:         z.string().length(10).optional(),
+  phone:       optionalMobile,
+  email:       optionalEmail,
+  gstin:       optionalGstin,
+  pan:         optionalPan,
   address:     z.object({
     line1:   z.string().optional(),
     city:    z.string().optional(),
     state:   z.string().optional(),
-    pincode: z.string().optional(),
+    pincode: optionalPincode,
     stateCode: z.string().optional(),
   }).optional(),
   creditLimit: z.number().nonnegative().default(0),
