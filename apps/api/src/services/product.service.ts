@@ -20,7 +20,7 @@
 
 import { Prisma } from '@billing/db'
 import type { PrismaClient } from '@billing/db'
-import { DOMAIN_REGISTRY, validateProductAttrs, tyreCategorySlug, defaultHsn, type DomainType } from '@billing/domain-registry'
+import { DOMAIN_REGISTRY, validateProductAttrs, tyreCategorySlug, defaultHsn, isRecognisedTyreSize, type DomainType } from '@billing/domain-registry'
 import { z } from 'zod'
 import { optionalHsn } from '../lib/validators.js'
 import { ai, parseAIJson } from '../lib/ai-provider.js'
@@ -192,9 +192,19 @@ function buildDomainAttrs(
 // =============================================================================
 // createProduct
 // =============================================================================
+/** A tyre saved with a mistyped size can never be found by the size finder — refuse it with a clear message instead. */
+function assertTyreSize(domainType: string | undefined, attrs: Record<string, unknown> | undefined): void {
+  if (domainType !== 'tyre' || !attrs) return
+  const size = attrs['size']
+  if ((attrs['item_kind'] ?? 'tyre') === 'tyre' && typeof size === 'string' && size.trim() !== '' && !isRecognisedTyreSize(size)) {
+    throw Object.assign(new Error('Tyre size "' + size + '" is not recognised — write it like 185/65 R15, 90/90-17 or 10.00 R20'), { statusCode: 422, code: 'INVALID_TYRE_SIZE' })
+  }
+}
+
 export async function createProduct(input: CreateProductInput, ctx: RequestCtx) {
   const mergedAttrs = buildDomainAttrs(input)
   const validatedAttrs = validateProductAttrs(ctx.branchDomainType, mergedAttrs)
+  assertTyreSize(ctx.branchDomainType, validatedAttrs as Record<string, unknown>)
 
   // Check for duplicate barcode within this tenant's schema
   if (input.barcode) {
@@ -295,6 +305,7 @@ export async function updateProduct(
       ctx.branchDomainType,
       { ...(existing.domainAttrs as object), ...incomingAttrs }
     )
+    if ('size' in incomingAttrs) assertTyreSize(ctx.branchDomainType, validatedAttrs)
   }
 
   // Barcode uniqueness check (exclude self)

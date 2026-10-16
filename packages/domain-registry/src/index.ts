@@ -354,3 +354,20 @@ export function normalizeTyreSize(raw: string | null | undefined): string {
   if (mt) return `${mt[1]}R${mt[2]}`
   return s.replace(/[^A-Z0-9./]/g, '')
 }
+
+/**
+ * Does this look like a tyre size at all? Used to refuse a typo ("185/65 R5", "abc") before it is stored, because a
+ * badly spelt size can never be found again by the size finder. Accepts every shape the shop meets:
+ * 185/65 R15 · 295/80 R22.5 · 90/90-17 · 10.00 R20 · 7.50-16 · 2.75/18 (as printed on bike tubes) · 31x10.5 R15.
+ */
+export function isRecognisedTyreSize(raw: string | null | undefined): boolean {
+  const n = normalizeTyreSize(raw)
+  if (!n) return false
+  const m = n.match(/R(\d{2}(?:\.\d)?)$/)
+  const rim = m ? Number(m[1]) : null
+  if (rim != null && (rim < 8 || rim > 40)) return false
+  return /^\d{2,3}\/\d{2,3}R\d{2}(\.\d)?$/.test(n)
+    || /^\d{1,2}\.\d{1,2}R\d{2}(\.\d)?$/.test(n)
+    || /^\d{2}X\d{1,2}(\.\d{1,2})?R\d{2}$/.test(n)
+    || /^\d{1,2}\.\d{2}\/\d{2}$/.test(n)
+}

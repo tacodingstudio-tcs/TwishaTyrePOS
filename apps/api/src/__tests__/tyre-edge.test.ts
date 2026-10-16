@@ -656,12 +656,12 @@ describe('Tyre edge cases', () => {
       expect(inverted.data.data).toEqual([])
       expect(inverted.data.totals.revenue).toBe(0)
 
-      const p = await mk(owner, { name: 'Cancel Report', sku: 'CR-1', salePrice: 1000, purchasePrice: 500, openingStock: 5, domainAttrs: { item_kind: 'tyre', size: '88/88 R88' } })
+      const p = await mk(owner, { name: 'Cancel Report', sku: 'CR-1', salePrice: 1000, purchasePrice: 500, openingStock: 5, domainAttrs: { item_kind: 'tyre', size: '88/88 R18' } })
       const b = await sale(owner, { customer: { name: 'CR', phone: phone() }, items: [{ productId: p.id, qty: 2 }], payments: [] })
-      const during = (await owner.api.get('/api/tyre/reports/sales', { params: { by: 'size' } })).data.data.find((x: any) => x.label === '88/88 R88')
+      const during = (await owner.api.get('/api/tyre/reports/sales', { params: { by: 'size' } })).data.data.find((x: any) => x.label === '88/88 R18')
       expect(during.units).toBe(2)
       await call(manager, 'POST', `/api/invoices/${b.data.invoice.id}/cancel`, {})
-      const after = (await owner.api.get('/api/tyre/reports/sales', { params: { by: 'size' } })).data.data.find((x: any) => x.label === '88/88 R88')
+      const after = (await owner.api.get('/api/tyre/reports/sales', { params: { by: 'size' } })).data.data.find((x: any) => x.label === '88/88 R18')
       expect(after).toBeUndefined()
       expect(await stock(owner, p.id)).toBe(5)              // stock came back
     })

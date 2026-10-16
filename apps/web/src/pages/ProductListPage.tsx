@@ -12,6 +12,11 @@ import { getEntityConfig } from '@/lib/entityConfig'
 import { DomainAttrsForm } from '@/components/product/DomainAttrsForm'
 import { ValidatedInput } from '@/components/ui/ValidatedInput'
 import { check } from '@/lib/validate'
+import { tyreSizeError } from '@/lib/tyreSize'
+
+/** A tyre cannot be saved without a size the search can find; other items (tubes, services, scrap) need none. */
+const sizeProblem = (domainType: string, attrs: Record<string, unknown>): string =>
+  domainType === 'tyre' && (attrs['item_kind'] ?? 'tyre') === 'tyre' ? tyreSizeError(String(attrs['size'] ?? ''), true) : ''
 
 /** The first thing wrong with a product form, in plain words ('' = fine). Prices and stock cannot be negative; HSN is 4–8 digits. */
 function productError(f: { name: string; salePrice: string; purchasePrice?: string; mrp?: string; openingStock?: string; hsn?: string; barcode?: string }): string {
@@ -1050,8 +1055,8 @@ function AddProductModal({
     unit: 'pcs', packSize: '', barcode: '', openingStock: '', hsn: '',
     categoryId: '', brandId: '', isConsumable: false,
   })
-  const formError = productError(form)
   const [domainAttrs, setDomainAttrs]   = useState<Record<string, unknown>>({})
+  const formError = productError(form) || sizeProblem(domainType, domainAttrs)
   const [imageFile, setImageFile]       = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
 
@@ -1139,6 +1144,12 @@ function AddProductModal({
               placeholder="e.g. Amul Butter 100g"
             />
           </div>
+
+          <DomainAttrsForm
+            domainType={domainType}
+            values={domainAttrs}
+            onChange={setDomainAttrs}
+          />
 
           {/* Category + Brand */}
           <div className={`grid gap-3 ${hasBrands ? 'grid-cols-2' : 'grid-cols-1'}`}>
@@ -1279,11 +1290,6 @@ function AddProductModal({
             </div>
           </label>
 
-          <DomainAttrsForm
-            domainType={domainType}
-            values={domainAttrs}
-            onChange={setDomainAttrs}
-          />
         </div>
 
         {formError && form.name.trim() && <p className="text-xs text-red-600 mt-3" role="alert">{formError}</p>}
@@ -1348,7 +1354,7 @@ function EditProductModal({
     brandId:       product.brandId ?? '',
     isConsumable:  product.isConsumable ?? false,
   })
-  const formError = productError(form)
+  const formError = productError(form) || sizeProblem(domainType, domainAttrs)
 
   function handleImagePick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -1439,6 +1445,12 @@ function EditProductModal({
               className="input"
             />
           </div>
+
+          <DomainAttrsForm
+            domainType={domainType}
+            values={domainAttrs}
+            onChange={setDomainAttrs}
+          />
 
           {/* Category + Brand */}
           <div className={`grid gap-3 ${hasBrands ? 'grid-cols-2' : 'grid-cols-1'}`}>
@@ -1606,11 +1618,6 @@ function EditProductModal({
             </div>
           </label>
 
-          <DomainAttrsForm
-            domainType={domainType}
-            values={domainAttrs}
-            onChange={setDomainAttrs}
-          />
         </div>
 
         <div className="flex gap-2 mt-5">

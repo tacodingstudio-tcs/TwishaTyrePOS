@@ -21,9 +21,9 @@ const DOMAIN_ATTRS: Record<string, AttrField[]> = {
       options: ['tyre', 'tube', 'flap', 'alloy_wheel', 'valve', 'battery', 'accessory', 'service', 'scrap'] },
     { key: 'brand', label: 'Brand', type: 'text', placeholder: 'MRF, Apollo, CEAT, JK, Michelin…' },
     { key: 'pattern', label: 'Pattern / model', type: 'text', placeholder: 'ZVTV, Amazer 4G Life…' },
-    { key: 'size', label: 'Size', type: 'text', placeholder: '205/55 R16 · 10.00 R20 · 90/90-17' },
     { key: 'vehicle_type', label: 'Fits', type: 'select',
       options: ['two_wheeler', 'three_wheeler', 'car', 'suv', 'lcv', 'truck_bus', 'tractor', 'otr', 'other'] },
+    { key: 'size', label: 'Size', type: 'text', wide: true, placeholder: '205/55 R16 · 10.00 R20 · 90/90-17' },
 
     { key: 'tube_type', label: 'Tubeless / tube', type: 'select', section: 'Specification', options: ['tubeless', 'tube'] },
     { key: 'construction', label: 'Construction', type: 'select', options: ['radial', 'bias'] },

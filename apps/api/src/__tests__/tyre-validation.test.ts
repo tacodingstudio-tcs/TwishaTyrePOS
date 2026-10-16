@@ -116,3 +116,44 @@ describe('Field validation', () => {
     })
   })
 })
+
+describe('Tyre size on the product', () => {
+  let owner: Session
+  const mk = (size: unknown, extra: Record<string, unknown> = {}) => owner.api.post('/api/products', {
+    itemType: 'product', gstRate: 18, unit: 'pcs', trackStock: true, name: `Tyre ${Math.random()}`, salePrice: 5000, openingStock: 2,
+    domainAttrs: { item_kind: 'tyre', brand: 'MRF', vehicle_type: 'car', size, ...extra },
+  })
+  beforeAll(async () => { owner = await newShopTenant('Size Tyres') })
+
+  test('every way a size is really written is accepted', async () => {
+    for (const s of ['185/65 R15', '185/65R15', '185 65 15', '1856515', '295/80 R22.5', '90/90-17', '10.00 R20', '7.50-16', '2.75/18', '205/55 ZR16']) {
+      const r = await mk(s)
+      expect([s, r.status]).toEqual([s, 201])
+    }
+  })
+
+  test('a typo is refused with a clear message instead of becoming a tyre nobody can find', async () => {
+    for (const s of ['185/65 R5', 'abc', '185', 'R15', '185/65 R99', '12345678']) {
+      const r = await mk(s)
+      expect([s, r.status]).toEqual([s, 422])
+      expect(JSON.stringify(r.data)).toMatch(/not recognised/)
+    }
+  })
+
+  test('only tyres need a size: tubes, scrap and services are left alone; a size is not forced on an edit that does not touch it', async () => {
+    expect((await mk('whatever', { item_kind: 'tube' })).status).toBe(201)
+    expect((await mk(undefined, { item_kind: 'scrap' })).status).toBe(201)
+    const t = (await mk('185/65 R15')).data
+    expect((await owner.api.patch(`/api/products/${t.id}`, { salePrice: 5200 })).status).toBe(200)
+    expect((await owner.api.patch(`/api/products/${t.id}`, { domainAttrs: { size: '195/60 R16' } })).status).toBe(200)
+    expect((await owner.api.patch(`/api/products/${t.id}`, { domainAttrs: { size: '195/60 R6' } })).status).toBe(422)
+  })
+
+  test('the size list for quick-pick shows one chip per size, however it was spelt', async () => {
+    await mk('155/70R13'); await mk('155/70 R13'); await mk('155 70 13')
+    const sizes = (await owner.api.get('/api/tyre/sizes')).data as Array<{ size: string; models: number }>
+    const k = sizes.filter((s) => /155\/?70/.test(s.size) || s.size.replace(/\D/g, '') === '1557013')
+    expect(k).toHaveLength(1)
+    expect(k[0]!.models).toBe(3)
+  })
+})

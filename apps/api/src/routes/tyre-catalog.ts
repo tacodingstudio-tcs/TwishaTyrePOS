@@ -90,7 +90,8 @@ export const tyreCatalogRoutes: FastifyPluginAsync = async (app) => {
   // GET /api/tyre/sizes — distinct sizes in the catalogue, with stock (for filter chips / quick pick)
   app.get('/sizes', async (req) => {
     return q(req,
-      `SELECT COALESCE(NULLIF(p."domainAttrs"->>'size',''), '—') AS size,
+      // grouped on the canonical key so "155/70 R13" and "155/70R13" are one size, not two chips
+      `SELECT COALESCE(NULLIF(MIN(p."domainAttrs"->>'size'),''), '—') AS size,
               COUNT(DISTINCT p.id)::int AS models,
               COALESCE(SUM(sl.qty), 0)::float AS stock
        FROM ${tbl(req.schemaName, 'products')} p
@@ -98,7 +99,7 @@ export const tyreCatalogRoutes: FastifyPluginAsync = async (app) => {
                    WHERE "branchId" = $1::uuid GROUP BY "productId") sl ON sl."productId" = p.id
        WHERE p."branchId" = $1::uuid AND p."isActive" = true AND p."itemType" <> 'service'
          AND COALESCE(p."domainAttrs"->>'item_kind','tyre') = 'tyre'
-       GROUP BY 1 ORDER BY stock DESC, size LIMIT 200`, req.branchId)
+       GROUP BY ${SIZE_DIGITS} ORDER BY stock DESC, size LIMIT 200`, req.branchId)
   })
 
   // GET /api/tyre/brands — brands in the catalogue (for pickers)

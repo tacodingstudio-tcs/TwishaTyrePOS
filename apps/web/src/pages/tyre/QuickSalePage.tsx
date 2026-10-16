@@ -166,6 +166,8 @@ export function QuickSalePage() {
     enabled: search.trim().length >= 2,
     placeholderData: (prev: any) => prev,
   })
+  const { data: sizeList } = useQuery({ queryKey: ['tyre-sizes'], queryFn: () => tyreApi.sizes(), staleTime: 60_000 })
+  const sizeChips = (sizeList ?? []).filter((s) => s.stock > 0 && s.size !== '—').slice(0, 14)
   const { data: services } = useQuery({
     queryKey: ['tyre-services'], queryFn: () => tyreApi.finder({ kind: 'service', limit: 30 }), staleTime: 60_000,
   })
@@ -398,6 +400,18 @@ export function QuickSalePage() {
                 <input type="checkbox" checked={onlyStock} onChange={(e) => setOnlyStock(e.target.checked)} /> In stock
               </label>
             </div>
+            {/* one tap on a size you actually have — nothing to type */}
+            {search.trim().length < 2 && sizeChips.length > 0 && (
+              <div className="mt-3 flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-gray-500">Sizes in stock:</span>
+                {sizeChips.map((s) => (
+                  <button key={s.size} type="button" onClick={() => setSearch(s.size)}
+                    className="px-2.5 py-1 rounded-full border border-gray-200 bg-white text-xs font-medium text-gray-700 hover:border-primary-400 hover:bg-primary-50">
+                    {s.size} <span className="text-gray-400 font-normal">· {num(s.stock)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             {search.trim().length >= 2 && (
               <div className="mt-3 border border-gray-100 rounded-lg divide-y divide-gray-100 max-h-72 overflow-y-auto">
                 {isFetching && <div className="p-3 text-sm text-gray-400">Searching…</div>}

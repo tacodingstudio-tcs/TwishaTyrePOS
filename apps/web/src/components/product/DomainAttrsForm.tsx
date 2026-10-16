@@ -1,4 +1,6 @@
 import { getDomainAttrs, type AttrField } from '@/config/domainProductAttrs'
+import { SizePicker } from '@/components/tyre/SizePicker'
+import { familyOf } from '@/lib/tyreSize'
 
 interface Props {
   domainType: string
@@ -101,7 +103,10 @@ export function DomainAttrsForm({ domainType, values, onChange }: Props) {
   if (fields.length === 0) return null
 
   function set(key: string, val: unknown) {
-    onChange({ ...values, [key]: val })
+    const next = { ...values, [key]: val }
+    // a car size means nothing on a bike: when "Fits" moves to another kind of vehicle, start the size again
+    if (domainType === 'tyre' && key === 'vehicle_type' && familyOf(String(values['vehicle_type'] ?? '')) !== familyOf(String(val ?? ''))) next['size'] = ''
+    onChange(next)
   }
 
   // Group fields into sections
@@ -134,7 +139,10 @@ export function DomainAttrsForm({ domainType, values, onChange }: Props) {
                   {f.label}
                   {f.unit && <span className="text-gray-400 font-normal ml-1">({f.unit})</span>}
                 </label>
-                <FieldInput f={f} val={values[f.key]} onSet={(v) => set(f.key, v)} />
+                {domainType === 'tyre' && f.key === 'size' && (values['item_kind'] ?? 'tyre') === 'tyre'
+                  ? <SizePicker key={familyOf(String(values['vehicle_type'] ?? ''))} value={String(values['size'] ?? '')} vehicleType={String(values['vehicle_type'] ?? '')}
+                      onChange={(v) => set('size', v)} />
+                  : <FieldInput f={f} val={values[f.key]} onSet={(v) => set(f.key, v)} />}
               </div>
             ))}
           </div>
