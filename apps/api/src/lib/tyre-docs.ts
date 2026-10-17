@@ -68,7 +68,10 @@ export async function loadInvoiceDoc(ctx: Ctx, invoiceId: string): Promise<{ dat
   const { config } = await loadBusiness(ctx)
 
   const data: InvoicePdfData = {
-    number: inv.number, gstBill: dd['gst_bill'] === false ? false : true, date: inv.date, dueDate: inv.dueDate, status: inv.status,
+    number: inv.number, layout: config['bill_layout'] === 'standard' ? 'standard' : 'shakti',
+    billKind: dd['bill_series'] === 'two_wheel' || ['two_wheeler', 'three_wheeler'].includes(String(dd['vehicle_type'] ?? '')) ? 'two_wheel' : 'car',
+    customTerms: !!config['invoice_terms'],
+    gstBill: dd['gst_bill'] === false ? false : true, date: inv.date, dueDate: inv.dueDate, status: inv.status,
     partyName: inv.partyName ?? '', partyPhone: inv.partyPhone ?? null, partyGstin: inv.partyGstin ?? null,
     partyAddress: addrText(inv.partyAddress) || null,
     vehicleNo: dd['vehicle_no'] ?? null, vehicleMake: dd['vehicle_make'] ?? null,
@@ -91,6 +94,7 @@ export async function loadInvoiceDoc(ctx: Ctx, invoiceId: string): Promise<{ dat
           : Number(it.rate),
         discountAmt: Number(it.discountAmt ?? 0), taxable: Number(it.taxableAmt), gstRate: Number(it.gstRate), total: Number(it.total),
         detail: detail || null,
+        kind: m['item_kind'] ?? null, brand: m['brand'] ?? null, size: m['size'] ?? null, serviceType: m['service_type'] ?? null,
         serials: Array.isArray(m['serial_nos']) ? m['serial_nos'] : [],
         dots: Array.isArray(m['dot_codes']) ? m['dot_codes'] : [],
         positions: Array.isArray(m['positions']) ? m['positions'] : [],

@@ -10,6 +10,7 @@
 // on Indian invoices.
 
 import PDFDocument from 'pdfkit'
+import { drawShaktiBill } from './tyre-bill-shakti.js'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
@@ -125,6 +126,11 @@ export interface InvoiceLine {
   serials?: string[]
   dots?: string[]
   positions?: string[]
+  /** item kind from the bill line: tyre | tube | … | service | charge */
+  kind?: string | null
+  brand?: string | null
+  size?: string | null
+  serviceType?: string | null
 }
 
 export interface WarrantyCardRow {
@@ -139,6 +145,12 @@ export interface WarrantyCardRow {
 
 export interface InvoicePdfData {
   number: string
+  /** 'shakti' = the bill as the shop prints it from its Excel bill book (default); 'standard' = the generic GST invoice */
+  layout?: 'shakti' | 'standard'
+  /** two-wheeler bills use the shorter column set */
+  billKind?: 'car' | 'two_wheel'
+  /** the shop wrote its own terms (otherwise none are printed on the Shakti layout) */
+  customTerms?: boolean
   /** false = a cash memo with no GST; printed as "Bill", not "Tax Invoice" */
   gstBill?: boolean
   date: unknown
@@ -177,6 +189,8 @@ export async function renderInvoicePdf(b: InvoicePdfData, biz: BusinessHeader): 
   const X = 30, W = doc.page.width - 60
   const pageBottom = () => doc.page.height - 40
 
+  if (b.layout !== 'standard') drawShaktiBill(doc, b, biz)
+  else {
   let y = letterhead(doc, biz, b.gstBill === false ? 'Cash Memo' : 'Tax Invoice', b.gstBill === false ? 'Original for recipient · Not a tax invoice' : 'Original for recipient · Tyres, tubes & fitting services', X, 30, W)
 
   // Bill-to / meta
@@ -288,6 +302,7 @@ export async function renderInvoicePdf(b: InvoicePdfData, biz: BusinessHeader): 
     doc.fillColor('#9CA3AF').font('Helvetica').fontSize(6.5)
       .text(biz.poweredBy, X, pageBottom() - 5.5, { width: W * 0.58, align: 'left', lineBreak: false })
   }
+  }   // end of the standard layout
 
   // ── Warranty card ─────────────────────────────────────────────────────────
   if (b.warranty.length) {

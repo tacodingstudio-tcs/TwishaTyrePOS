@@ -370,4 +370,5 @@ export function isRecognisedTyreSize(raw: string | null | undefined): boolean {
     || /^\d{1,2}\.\d{1,2}R\d{2}(\.\d)?$/.test(n)
     || /^\d{2}X\d{1,2}(\.\d{1,2})?R\d{2}$/.test(n)
     || /^\d{1,2}\.\d{2}\/\d{2}$/.test(n)
+    || /^\d{2,3}\/\d{2}\/\d{2}(\.\d)?$/.test(n)                  // 215/60/16 — how the bill book writes a car size
 }
