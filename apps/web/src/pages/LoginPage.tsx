@@ -1,7 +1,7 @@
 // src/pages/LoginPage.tsx
 // Twisha POS sign-in. Left: an immersive dark hero (a slowly turning tyre, a live-looking bill that shows the
 // product's signature trick — type one price, tax is split out). Right: a calm sign-in card with a 4-box PIN.
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { authApi } from '@/lib/api'
@@ -153,8 +153,29 @@ export function LoginPage() {
     return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
   }, [])
 
+  // The server sleeps when nobody has used it for a while and takes up to a minute to wake. Knock on its door the
+  // moment this page opens, so it is already waking while the person types their number and PIN.
+  const [waking, setWaking] = useState(false)
+  useEffect(() => { fetch('/api/tenants/domains', { cache: 'no-store' }).catch(() => {}) }, [])
+
   const loginMutation = useMutation({
-    mutationFn: (p: string) => authApi.login(phone, p, isStaff ? bizPhone : undefined),
+    mutationFn: async (p: string) => {
+      // A sleeping server answers 502 / 503 / 504 (or nothing at all) until it is up: wait and try again for about
+      // a minute instead of telling the person their PIN is wrong.
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const out = await authApi.login(phone, p, isStaff ? bizPhone : undefined)
+          setWaking(false)
+          return out
+        } catch (err: any) {
+          const status = err?.response?.status as number | undefined
+          const asleep = !status || status === 502 || status === 503 || status === 504
+          if (!asleep || attempt >= 7) { setWaking(false); throw err }
+          setWaking(true); toast.dismiss()
+          await new Promise((r) => setTimeout(r, 8000))
+        }
+      }
+    },
     onSuccess: (data) => {
       setAuth(data.accessToken, data.refreshToken, data.accessTokenExpiresIn, data.user, data.tenant, data.branch)
       toast.success(`Welcome back, ${data.user.name}!`)
@@ -163,7 +184,9 @@ export function LoginPage() {
     onError: (err: any) => {
       // No response = server unreachable/asleep; the api layer already shows that message.
       // the api layer has already toasted the server's wording; replace it with ours so there is one clear message
-      if (err?.response) { toast.dismiss(); toast.error(err.response.status === 429 ? 'Too many tries — wait a minute' : 'Wrong phone number or PIN') }
+      const st = err?.response?.status as number | undefined
+      if (!st || st === 502 || st === 503 || st === 504) { toast.dismiss(); toast.error('The server is not answering yet — wait a minute and try again') }
+      else { toast.dismiss(); toast.error(st === 429 ? 'Too many tries — wait a minute' : 'Wrong phone number or PIN') }
       // start the PIN again from the first box (a half-edited old PIN would otherwise re-submit on the 4th digit)
       setPin('')
       setTimeout(() => document.getElementById('login-pin')?.focus(), 30)
@@ -302,6 +325,11 @@ export function LoginPage() {
                 ? <><Loader2 className="w-4 h-4 animate-spin" /> Signing you in…</>
                 : <>Sign in <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" /></>}
             </button>
+            {waking && (
+              <p role="status" className="text-center text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                The server was asleep and is waking up — this takes up to a minute. Please wait, you will be signed in automatically.
+              </p>
+            )}
 
             <button type="button" onClick={() => setIsStaff((v) => !v)}
               className="block mx-auto text-xs text-gray-500 hover:text-primary-600">
