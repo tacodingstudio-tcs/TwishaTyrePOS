@@ -114,8 +114,11 @@ export async function loadInvoiceDoc(ctx: Ctx, invoiceId: string): Promise<{ dat
   return { data, invoice: inv }
 }
 
-export async function invoicePdf(ctx: Ctx, invoiceId: string): Promise<{ buffer: Buffer; filename: string; invoice: any; data: InvoicePdfData }> {
+export async function invoicePdf(
+  ctx: Ctx, invoiceId: string, opts: { copy?: 'Original' | 'Duplicate' | 'Triplicate' } = {},
+): Promise<{ buffer: Buffer; filename: string; invoice: any; data: InvoicePdfData }> {
   const [{ data, invoice }, biz] = await Promise.all([loadInvoiceDoc(ctx, invoiceId), loadBusiness(ctx)])
+  if (opts.copy) data.copyLabel = opts.copy
   const buffer = await renderInvoicePdf(data, biz.header)
   return { buffer, filename: `Invoice-${String(invoice.number).replace(/[^A-Za-z0-9._-]+/g, '_')}.pdf`, invoice, data }
 }

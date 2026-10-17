@@ -11,6 +11,7 @@ import { SaleExtras } from '@/components/tyre/SaleExtras'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { invoiceApi, tyreApi, apiError } from '@/lib/api'
 import { openPdf } from '@/components/tyre/openPdf'
+import { ReprintMenu } from '@/components/tyre/ReprintMenu'
 import {
   Download, MessageCircle, XCircle, IndianRupee, Mail, Send,
   ArrowRight, CheckCircle, Clock, AlertCircle, RotateCcw, FileX,
@@ -158,6 +159,7 @@ export function InvoiceDetailPage() {
           <div className="flex items-center gap-2 flex-wrap">
             {isSale ? (
               <>
+                {invoice.status !== 'cancelled' && invoice.status !== 'draft' && <ReprintMenu invoiceId={id!} number={String(invoice.number)} />}
                 <button type="button" className="btn-ghost" onClick={() => openPdf(`/invoices/${id}/pdf`, `${invoice.number}.pdf`)}>
                   <Download className="w-4 h-4" /> PDF
                 </button>

@@ -83,7 +83,7 @@ export function drawShaktiBill(doc: PDFKit.PDFDocument, b: InvoicePdfData, biz: 
   // copy / type labels, exactly as on the sheet
   text('Debit Memo', X + W * 0.059, y, { bold: true, size: 10 })
   text(gst ? 'Tax Invoice' : 'Cash Memo', X + W * 0.467, y, { bold: true, size: 10 })
-  text('Original', X + W * 0.749, y, { bold: true, size: 10 })
+  text(b.copyLabel ?? 'Original', X + W * 0.749, y, { bold: true, size: 10 })
   y += 22
 
   // bill no / date / PO

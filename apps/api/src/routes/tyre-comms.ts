@@ -22,7 +22,10 @@ export const tyreCommsRoutes: FastifyPluginAsync = async (app) => {
   // ── PDF ─────────────────────────────────────────────────────────────────────
   app.get('/invoices/:id/pdf', async (req, reply) => {
     const { id } = idParam.parse(req.params)
-    const { buffer, filename } = await invoicePdf(req, id)
+    // ?copy=duplicate | triplicate prints that word where the bill says "Original" (for reprints and the office copy)
+    const { copy } = z.object({ copy: z.enum(['original', 'duplicate', 'triplicate']).optional() }).parse(req.query)
+    const label = copy ? ((copy[0]!.toUpperCase() + copy.slice(1)) as 'Original' | 'Duplicate' | 'Triplicate') : undefined
+    const { buffer, filename } = await invoicePdf(req, id, { copy: label })
     return reply
       .header('Content-Type', 'application/pdf')
       .header('Content-Disposition', `inline; filename="${filename}"`)

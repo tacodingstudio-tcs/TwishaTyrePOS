@@ -151,6 +151,8 @@ export interface InvoicePdfData {
   billKind?: 'car' | 'two_wheel'
   /** the shop wrote its own terms (otherwise none are printed on the Shakti layout) */
   customTerms?: boolean
+  /** which copy this is: printed where the bill says "Original" — a reprint can say Duplicate / Triplicate */
+  copyLabel?: 'Original' | 'Duplicate' | 'Triplicate'
   /** false = a cash memo with no GST; printed as "Bill", not "Tax Invoice" */
   gstBill?: boolean
   date: unknown
@@ -191,7 +193,7 @@ export async function renderInvoicePdf(b: InvoicePdfData, biz: BusinessHeader): 
 
   if (b.layout !== 'standard') drawShaktiBill(doc, b, biz)
   else {
-  let y = letterhead(doc, biz, b.gstBill === false ? 'Cash Memo' : 'Tax Invoice', b.gstBill === false ? 'Original for recipient · Not a tax invoice' : 'Original for recipient · Tyres, tubes & fitting services', X, 30, W)
+  let y = letterhead(doc, biz, b.gstBill === false ? 'Cash Memo' : 'Tax Invoice', b.gstBill === false ? `${b.copyLabel ?? 'Original'} for recipient · Not a tax invoice` : `${b.copyLabel ?? 'Original'} for recipient · Tyres, tubes & fitting services`, X, 30, W)
 
   // Bill-to / meta
   doc.lineWidth(0.5).strokeColor(LINE).rect(X, y, W * 0.58, 86).stroke().rect(X + W * 0.58, y, W * 0.42, 86).stroke()

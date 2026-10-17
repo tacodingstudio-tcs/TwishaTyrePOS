@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Plus, Search } from 'lucide-react'
 import { format } from 'date-fns'
+import { ReprintMenu } from '@/components/tyre/ReprintMenu'
 
 const B2B_DOMAINS = new Set([
   'wholesale', 'enterprise', 'electronics', 'textile', 'hardware',
@@ -145,14 +146,15 @@ export function InvoiceListPage() {
                 <th className="text-left px-5 py-3 font-medium text-gray-500">Date</th>
                 <th className="text-right px-5 py-3 font-medium text-gray-500">Amount</th>
                 <th className="text-left px-5 py-3 font-medium text-gray-500">Status</th>
+                <th className="text-right px-5 py-3 font-medium text-gray-500">Print</th>
               </tr>
             </thead>
             <tbody>
               {isLoading && (
-                <tr><td colSpan={6} className="text-center py-12 text-gray-400">Loading…</td></tr>
+                <tr><td colSpan={7} className="text-center py-12 text-gray-400">Loading…</td></tr>
               )}
               {!isLoading && data?.data?.length === 0 && (
-                <tr><td colSpan={6} className="text-center py-12 text-gray-400">No documents found</td></tr>
+                <tr><td colSpan={7} className="text-center py-12 text-gray-400">No documents found</td></tr>
               )}
               {data?.data?.map((inv: any) => (
                 <tr key={inv.id} className="table-row">
@@ -174,6 +176,10 @@ export function InvoiceListPage() {
                     {formatINR(Number(inv.grandTotal))}
                   </td>
                   <td className="px-5 py-3"><StatusBadge status={inv.status} /></td>
+                  <td className="px-5 py-3 text-right">
+                    {inv.txnType === 'sale_invoice' && inv.status !== 'cancelled' && inv.status !== 'draft'
+                      ? <ReprintMenu invoiceId={inv.id} number={String(inv.number)} compact /> : null}
+                  </td>
                 </tr>
               ))}
             </tbody>

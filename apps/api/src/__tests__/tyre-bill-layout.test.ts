@@ -119,3 +119,29 @@ describe("Bill layout = the shop's Excel bill", () => {
     await owner.api.patch(`/api/branches/${b.id}`, { domainConfig: { bill_layout: 'shakti' } })
   })
 })
+
+describe('Reprint copies', () => {
+  test('the copy label follows ?copy= (Original by default) and a bad value is refused', async () => {
+    const owner = await newShopTenant('Reprint Tyres')
+    const p = (await owner.api.post('/api/products', { itemType: 'product', gstRate: 18, unit: 'pcs', trackStock: true, name: 'MRF 185/65 R15', sku: 'RP-1', salePrice: 5000, openingStock: 9,
+      domainAttrs: { item_kind: 'tyre', brand: 'MRF', size: '185/65 R15', vehicle_type: 'car' } })).data
+    const r = await owner.api.post('/api/tyre/sales', { customer: { name: 'Reprint Wala', phone: '9811100991' }, items: [{ productId: p.id, qty: 1 }], payments: [{ method: 'cash', amount: 5000 }] },
+      { headers: { 'Idempotency-Key': crypto.randomUUID() } })
+    const id = r.data.invoice.id
+    const text = async (q = '') => {
+      const zlib = await import('node:zlib')
+      const res = await owner.api.get(`/api/tyre/invoices/${id}/pdf${q}`, { responseType: 'arraybuffer' })
+      expect(res.status).toBe(200)
+      const s = Buffer.from(res.data).toString('latin1'); let all = '', i = 0
+      while ((i = s.indexOf('stream', i)) >= 0) { const a = s.indexOf('\n', i) + 1, e = s.indexOf('endstream', a); if (e < 0) break; try { all += zlib.inflateSync(Buffer.from(s.slice(a, e), 'latin1')).toString('latin1') + '\n' } catch { /* raw */ } i = e + 9 }
+      return [...all.matchAll(/\[((?:<[0-9a-fA-F]*>|\((?:\.|[^\)])*\)|[-\d.\s])*)\]\s*TJ|(<[0-9a-fA-F]*>|\((?:\.|[^\)])*\))\s*Tj/g)]
+        .map((m) => [...(m[1] ?? m[2] ?? '').matchAll(/<([0-9a-fA-F]*)>|\(((?:\.|[^\)])*)\)/g)].map((x) => (x[1] !== undefined ? Buffer.from(x[1], 'hex').toString('latin1') : x[2]!)).join('')).join(' ')
+    }
+    expect(await text()).toMatch(/Original/)
+    expect(await text('?copy=original')).toMatch(/Original/)
+    const dup = await text('?copy=duplicate')
+    expect(dup).toMatch(/Duplicate/); expect(dup).not.toMatch(/Original/)
+    expect(await text('?copy=triplicate')).toMatch(/Triplicate/)
+    expect((await owner.api.get(`/api/tyre/invoices/${id}/pdf?copy=fake`, { responseType: 'arraybuffer' })).status).toBe(422)
+  })
+})
