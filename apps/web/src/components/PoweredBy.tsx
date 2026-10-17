@@ -17,7 +17,7 @@ export function PoweredByBadge() {
       </span>
     </>
   )
-  const cls = 'group flex items-center gap-2 w-full px-2 py-1.5 rounded-lg border border-gray-200 bg-white/80 hover:border-primary-300 hover:bg-primary-50 transition-colors'
+  const cls = 'group inline-flex items-center gap-2 pl-1 pr-3 py-1 rounded-full border border-gray-200 bg-white/80 hover:border-primary-300 hover:bg-primary-50 transition-colors'
   return URL_
     ? <a href={URL_} target="_blank" rel="noopener noreferrer" className={cls} title={`Powered by ${NAME}`}>{inner}</a>
     : <span className={cls}>{inner}</span>

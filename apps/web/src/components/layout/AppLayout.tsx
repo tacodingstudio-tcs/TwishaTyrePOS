@@ -211,11 +211,8 @@ export function AppLayout() {
           </div>
         </nav>
 
-        {/* Credit */}
-        <div className="px-3 pt-3"><PoweredByBadge /></div>
-
         {/* User footer */}
-        <div className="p-3">
+        <div className="p-3 border-t border-gray-200">
           <div className="flex items-center gap-3 px-3 py-2">
             <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-semibold text-gray-600">
               {user?.name?.[0]?.toUpperCase()}
@@ -234,7 +231,8 @@ export function AppLayout() {
 
       {/* ── Main content ─────────────────────────────────────────────────── */}
       <main className="flex-1 overflow-y-auto flex flex-col">
-        <div className="h-12 flex items-center justify-end gap-1 px-4 border-b border-gray-100 bg-white shrink-0">
+        <div className="h-12 flex items-center justify-end gap-3 px-4 border-b border-gray-100 bg-white shrink-0">
+          <PoweredByBadge />
           <CelebrationsPanel businessName={branch?.name ?? tenant?.name ?? 'Our Business'} />
         </div>
         <div className="flex-1 overflow-y-auto">
