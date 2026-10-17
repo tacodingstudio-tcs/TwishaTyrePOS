@@ -10,12 +10,14 @@ const URL_ = (import.meta.env['VITE_POWERED_BY_URL'] as string | undefined)?.tri
 export function PoweredByBadge() {
   const inner = (
     <>
-      <span className="w-5 h-5 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 text-white text-[10px] font-bold flex items-center justify-center shrink-0">T</span>
-      <span className="text-[11px] leading-none text-gray-400 hidden sm:inline">Powered by</span>
-      <span className="text-xs font-semibold text-gray-700 group-hover:text-primary-700 whitespace-nowrap">{NAME}</span>
+      <span className="w-6 h-6 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 text-white text-[10px] font-bold flex items-center justify-center shrink-0">T</span>
+      <span className="flex flex-col min-w-0">
+        <span className="text-[10px] leading-tight text-gray-400">Powered by</span>
+        <span className="text-xs font-semibold leading-tight text-gray-700 group-hover:text-primary-700 truncate">{NAME}</span>
+      </span>
     </>
   )
-  const cls = 'group inline-flex items-center gap-2 pl-1 pr-3 py-1 rounded-full border border-gray-200 bg-white/80 hover:border-primary-300 hover:bg-primary-50 transition-colors'
+  const cls = 'group flex items-center gap-2 w-full px-2 py-1.5 rounded-lg border border-gray-200 bg-white/80 hover:border-primary-300 hover:bg-primary-50 transition-colors'
   return URL_
     ? <a href={URL_} target="_blank" rel="noopener noreferrer" className={cls} title={`Powered by ${NAME}`}>{inner}</a>
     : <span className={cls}>{inner}</span>
