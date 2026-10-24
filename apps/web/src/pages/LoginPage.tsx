@@ -39,6 +39,12 @@ function TyreArt({ className = '' }: { className?: string }) {
         <radialGradient id="tw-wall" cx="50%" cy="50%" r="50%">
           <stop offset="0.55" stopColor="#0b2417" /><stop offset="1" stopColor="#050f09" />
         </radialGradient>
+        <radialGradient id="tw-hub" cx="50%" cy="38%" r="70%">
+          <stop offset="0" stopColor="#f7fffa" /><stop offset="1" stopColor="#bbf7d0" />
+        </radialGradient>
+        <filter id="tw-hub-shadow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#052e16" floodOpacity="0.45" />
+        </filter>
         <path id="tw-arc" d="M200,200 m-141,0 a141,141 0 1,1 282,0 a141,141 0 1,1 -282,0" />
       </defs>
       {/* tread */}
@@ -59,7 +65,8 @@ function TyreArt({ className = '' }: { className?: string }) {
           <circle cx="200" cy="120" r="5" fill="#bbf7d0" />
         </g>
       ))}
-      <circle cx="200" cy="200" r="42" fill="#f8fafc" stroke="#4ade80" strokeWidth="3" />
+      <circle cx="200" cy="200" r="42" fill="url(#tw-hub)" stroke="#4ade80" strokeWidth="3" filter="url(#tw-hub-shadow)" />
+      <circle cx="200" cy="200" r="37" fill="none" stroke="#16a34a" strokeOpacity="0.35" strokeWidth="1.5" />
       <image href="/twisha-main.png" x="178" y="172" width="44" height="58" className="tw-unspin" />
     </svg>
   )
