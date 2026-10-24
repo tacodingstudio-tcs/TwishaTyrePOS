@@ -63,13 +63,6 @@ describe("Bill layout = the shop's Excel bill", () => {
     align = await svc('Wheel Alignment', 600, 'alignment')
   })
 
-  test("the shop's emblem is printed on the bill (one embedded image), and nothing else about the layout moves", async () => {
-    const r = await sale({ customer: { name: 'LOGO CHECK', phone: '9811100888' }, vehicleNo: 'GJ32AA0001', billSeries: 'car', items: [item(tyre)], payments: [] })
-    expect(r.status).toBe(201)
-    const res = await owner.api.get(`/api/tyre/invoices/${r.data.invoice.id}/pdf`, { responseType: 'arraybuffer' })
-    expect((Buffer.from(res.data).toString('latin1').match(/\/Subtype \/Image/g) ?? []).length).toBeGreaterThanOrEqual(1)
-  })
-
   test("car bill: same boxes, headings and figures as the Excel sheet, with the customer's GSTIN and the HSN", async () => {
     const r = await sale({
       customer: { name: 'BHAVINBHAI PARMAR', phone: '9811100777', address: 'NAVAGAM' }, customerGstin: G, vehicleNo: 'GJ32AA5467', makeModel: 'NEXON', billSeries: 'car',
@@ -124,6 +117,13 @@ describe("Bill layout = the shop's Excel bill", () => {
     expect(t).toMatch(/TAX INVOICE/)
     expect(t).not.toMatch(/Debit Memo/)
     await owner.api.patch(`/api/branches/${b.id}`, { domainConfig: { bill_layout: 'shakti' } })
+  })
+
+  test("the shop's emblem is printed on the bill (one embedded image), and nothing else about the layout moves", async () => {
+    const r = await sale({ customer: { name: 'LOGO CHECK', phone: '9811100888' }, vehicleNo: 'GJ32AA0001', billSeries: 'car', items: [item(tyre)], payments: [] })
+    expect(r.status).toBe(201)
+    const res = await owner.api.get(`/api/tyre/invoices/${r.data.invoice.id}/pdf`, { responseType: 'arraybuffer' })
+    expect((Buffer.from(res.data).toString('latin1').match(/\/Subtype \/Image/g) ?? []).length).toBeGreaterThanOrEqual(1)
   })
 })
 
