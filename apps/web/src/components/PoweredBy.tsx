@@ -34,14 +34,16 @@ export function PoweredBy({ className = '' }: { className?: string }) {
   )
 }
 
-/** Plain "Powered by …" line for the sign-in page. */
+/** Sign-in page credit: a pill with small-caps "Powered by" over the company name, so it reads as a brand line. */
 export function PoweredByCard({ className = '' }: { className?: string }) {
-  return (
-    <p className={`text-xs text-gray-500 ${className}`}>
-      Powered by{' '}
-      {URL_
-        ? <a href={URL_} target="_blank" rel="noopener noreferrer" className="font-semibold text-gray-700 hover:text-primary-700 hover:underline">{NAME}</a>
-        : <span className="font-semibold text-gray-700">{NAME}</span>}
-    </p>
+  const inner = (
+    <span className="flex flex-col items-center leading-tight">
+      <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-700/80">Powered by</span>
+      <span className="mt-0.5 text-lg font-extrabold tracking-tight text-gray-900 group-hover:text-primary-700">{NAME}</span>
+    </span>
   )
+  const cls = `group inline-flex rounded-2xl border border-emerald-200 bg-white px-7 py-3 shadow-md shadow-emerald-900/10 ring-4 ring-emerald-100/60 hover:border-primary-400 transition-colors ${className}`
+  return URL_
+    ? <a href={URL_} target="_blank" rel="noopener noreferrer" className={cls} title={`Powered by ${NAME}`}>{inner}</a>
+    : <span className={cls}>{inner}</span>
 }
