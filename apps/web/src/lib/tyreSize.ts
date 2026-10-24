@@ -34,6 +34,9 @@ export const SIZE_LISTS: Record<SizeFamily, Record<SizeFormat, { a: string[]; b?
   },
 }
 
+/** the Profile choice for a size that has none: "155 R13" */
+export const NO_PROFILE = '-'
+
 export interface ParsedSize { format: SizeFormat; a: string; b?: string; c: string }
 
 /** Understand a size however it was typed; null when it is not a size at all. */
@@ -45,6 +48,8 @@ export function parseSize(raw: string | null | undefined): ParsedSize | null {
   for (let n = s.replace(/ (?:\d{2,3}(?:\/\d{2,3})?[A-Z]{1,2}|\d{1,2} ?PR|LT|C|TL|TT)$/, ''); n !== s && /\d$/.test(n); n = s.replace(/ (?:\d{2,3}(?:\/\d{2,3})?[A-Z]{1,2}|\d{1,2} ?PR|LT|C|TL|TT)$/, '')) s = n
   let m = s.replace(/\s/g, '').match(/^(\d{3})(\d{2})(\d{2})$/)                                    // 1856515
   if (m) return { format: 'radial', a: m[1]!, b: m[2]!, c: m[3]! }
+  m = s.match(/^(\d{3})[ \/-]?R[ -]?(\d{2})$/)                                                      // 155 R13 · 155R13 · 155/R13 — no profile (older / light-commercial sizes)
+  if (m) return { format: 'radial', a: m[1]!, b: NO_PROFILE, c: m[2]! }
   m = s.match(/^(\d{2,3})[\/ -](\d{2,3})[ \/-]?R?[ -]?(\d{2}(?:\.\d)?)$/)                        // 185/65 R15 · 185 65 15 · 90/90-17 · 215/60/16
   if (m) return { format: 'radial', a: m[1]!, b: m[2]!, c: m[3]! }
   m = s.match(/^(\d{1,2}\.\d{1,2})[ \/-]?R?[ -]?(\d{1,2}(?:\.\d)?)$/)                              // 10.00-20 · 2.75-18 · 5.20/13 · 10.00 R20
@@ -54,6 +59,7 @@ export function parseSize(raw: string | null | undefined): ParsedSize | null {
 
 /** The spelling that is saved: "185/65 R15", "90/90-17", "10.00-20" / "295/80 R22.5". */
 export function formatSize(p: ParsedSize, family: SizeFamily): string {
+  if (p.format === 'radial' && p.b === NO_PROFILE) return `${p.a} R${p.c}`
   if (p.format === 'crossply') return `${p.a}-${p.c}`
   return family === 'bike' ? `${p.a}/${p.b}-${p.c}` : `${p.a}/${p.b} R${p.c}`
 }

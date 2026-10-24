@@ -76,6 +76,10 @@ export const TYRE_DDL: string[] = [
   `CREATE INDEX IF NOT EXISTS "idx_twarr_invoice" ON "tyre_warranty" ("invoiceId")`,
   `CREATE INDEX IF NOT EXISTS "idx_twarr_vehicle" ON "tyre_warranty" ("branchId", "vehicleNo")`,
   `CREATE INDEX IF NOT EXISTS "idx_twarr_until"   ON "tyre_warranty" ("branchId", "warrantyUntil")`,
+  // bill search ("starts with", ignoring case) on the bill number, and the customer name / mobile it also looks up
+  `CREATE INDEX IF NOT EXISTS "idx_inv_number_lower"   ON "invoices" (lower("number") text_pattern_ops)`,
+  `CREATE INDEX IF NOT EXISTS "idx_parties_name_lower" ON "parties" (lower("name") text_pattern_ops)`,
+  `CREATE INDEX IF NOT EXISTS "idx_parties_phone_pat"  ON "parties" ("phone" text_pattern_ops)`,
   `CREATE INDEX IF NOT EXISTS "idx_tveh_due"      ON "tyre_vehicles" ("branchId", "nextServiceDate")`,
 
   // ── Outbound WhatsApp messages ──────────────────────────────────────────────

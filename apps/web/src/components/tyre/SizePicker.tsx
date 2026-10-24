@@ -2,7 +2,7 @@
 // standard way. A "type it myself" box stays for unusual sizes, and says at once whether it understood what was typed.
 import { useEffect, useState } from 'react'
 import { Check } from 'lucide-react'
-import { SIZE_LISTS, familyOf, formatSize, parseSize, tyreSizeError, type SizeFormat } from '@/lib/tyreSize'
+import { SIZE_LISTS, NO_PROFILE, familyOf, formatSize, parseSize, tyreSizeError, type SizeFormat } from '@/lib/tyreSize'
 
 interface Props {
   value: string
@@ -17,7 +17,7 @@ export function SizePicker({ value, onChange, vehicleType }: Props) {
   const family = familyOf(vehicleType)
   const parsed = parseSize(value)
   // a saved size that is not in the lists (an unusual width, say) opens in type-it-yourself mode so nothing is lost
-  const fits = !!parsed && (() => { const L = SIZE_LISTS[family][parsed.format]; return L.a.includes(parsed.a) && L.c.includes(parsed.c) && (parsed.format === 'crossply' || !!L.b?.includes(parsed.b ?? '')) })()
+  const fits = !!parsed && (() => { const L = SIZE_LISTS[family][parsed.format]; return L.a.includes(parsed.a) && L.c.includes(parsed.c) && (parsed.format === 'crossply' || parsed.b === NO_PROFILE || !!L.b?.includes(parsed.b ?? '')) })()
   const [manual, setManual] = useState(() => !!value && !fits)
   const [format, setFormat] = useState<SizeFormat>(parsed?.format ?? (family === 'bike' && !value ? 'radial' : 'radial'))
   const [a, setA] = useState(parsed?.a ?? '')
@@ -31,7 +31,7 @@ export function SizePicker({ value, onChange, vehicleType }: Props) {
   useEffect(() => {
     if (manual) return
     if (a && !lists.a.includes(a)) setA('')
-    if (b && lists.b && !lists.b.includes(b)) setB('')
+    if (b && b !== NO_PROFILE && lists.b && !lists.b.includes(b)) setB('')
     if (c && !lists.c.includes(c)) setC('')
   }, [family, format]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -73,6 +73,7 @@ export function SizePicker({ value, onChange, vehicleType }: Props) {
               <label className="sr-only" htmlFor="size-b">{lists.labels[1]}</label>
               <select id="size-b" className={sel} value={b} onChange={(e) => setB(e.target.value)}>
                 <option value="">{lists.labels[1]}</option>
+                <option value={NO_PROFILE}>No profile (155 R13)</option>
                 {lists.b!.map((x) => <option key={x} value={x}>{x}</option>)}
               </select>
             </div>

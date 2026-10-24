@@ -450,6 +450,9 @@ export async function getInvoiceWithItems(db: PrismaClient, invoiceId: string, b
 // =============================================================================
 // listInvoices
 // =============================================================================
+/** A search stops counting here: "10,000+ matches" means narrow the search. */
+const SEARCH_COUNT_CAP = 10_000
+
 export async function listInvoices(
   ctx: RequestCtx,
   filters: {
@@ -480,31 +483,57 @@ export async function listInvoices(
           },
         }
       : {}),
-    // Prefix-only search so Postgres can use the B-tree index on `number`
-    // and a standard index on party.name. `contains` generates ILIKE '%q%'
-    // which forces a seq-scan on every keystroke; `startsWith` generates
-    // ILIKE 'q%' which is index-compatible.
-    ...(filters.search && {
-      OR: [
-        { number: { startsWith: filters.search, mode: 'insensitive' } },
-        { party:  { name: { startsWith: filters.search, mode: 'insensitive' } } },
-      ],
-    }),
+  }
+
+  // Search: bill number or customer name / mobile, each "starts with". Done as two index-driven look-ups merged in SQL —
+  // the old single OR over a relation filter read every bill (1.5 s at a million bills). Uses the lower(...)
+  // text_pattern_ops indexes from tyre-ddl.ts (idx_inv_number_lower, idx_parties_name_lower, idx_parties_phone_pat).
+  const term = filters.search?.trim().slice(0, 60)
+  let hitIds: string[] | null = null
+  let hitTotal = 0
+  let hitCapped = false
+  if (term) {
+    const like = `${term.toLowerCase().replace(/[\\%_]/g, (c) => '\\' + c)}%`          // a typed % or _ matches itself, not "anything"
+    const phoneLike = /^\d+$/.test(term) ? `${term}%` : null
+    const cond: Prisma.Sql[] = [Prisma.sql`i."branchId" = ${ctx.branchId}::uuid`]
+    if (filters.txnType) cond.push(Prisma.sql`i."txnType" = ${filters.txnType}`)
+    if (filters.status)  cond.push(Prisma.sql`i.status = ${filters.status}`)
+    if (filters.partyId) cond.push(Prisma.sql`i."partyId" = ${filters.partyId}::uuid`)
+    if (filters.fromDate) cond.push(Prisma.sql`i.date >= ${filters.fromDate}::date`)
+    if (filters.toDate)   cond.push(Prisma.sql`i.date <= ${filters.toDate}::date`)
+    const base = Prisma.join(cond, ' AND ')
+    const byParty = Prisma.sql`SELECT p.id FROM parties p WHERE lower(p.name) LIKE ${like} ${phoneLike ? Prisma.sql`OR p.phone LIKE ${phoneLike}` : Prisma.empty}`
+    // Each side only needs its newest (skip + limit) rows, so a very broad word ("LT-", "Customer") stops early instead of
+    // sorting every bill; the count is capped for the same reason (10,000 is "plenty — narrow it down").
+    const K = skip + limit
+    const side = (where: Prisma.Sql, n: number, ordered: boolean) => Prisma.sql`
+      SELECT i.id, i.date FROM invoices i WHERE ${base} AND ${where} ${ordered ? Prisma.sql`ORDER BY i.date DESC, i.id` : Prisma.empty} LIMIT ${n}`
+    const byNumber = Prisma.sql`lower(i.number) LIKE ${like}`
+    const byCustomer = Prisma.sql`i."partyId" IN (${byParty})`
+    const [rows, counted] = await Promise.all([
+      ctx.db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        WITH m AS ((${side(byNumber, K, true)}) UNION (${side(byCustomer, K, true)}))
+        SELECT id::text AS id FROM m ORDER BY date DESC, id LIMIT ${limit} OFFSET ${skip}`),
+      ctx.db.$queryRaw<Array<{ n: number }>>(Prisma.sql`
+        SELECT COUNT(*)::int AS n FROM ((${side(byNumber, SEARCH_COUNT_CAP, false)}) UNION (${side(byCustomer, SEARCH_COUNT_CAP, false)})) x`),
+    ])
+    hitIds = rows.map((r) => r.id)
+    hitTotal = Math.min(counted[0]?.n ?? 0, SEARCH_COUNT_CAP)
+    hitCapped = (counted[0]?.n ?? 0) >= SEARCH_COUNT_CAP
   }
 
   const [invoices, total] = await Promise.all([
     ctx.db.invoice.findMany({
-      where,
+      where: hitIds ? { id: { in: hitIds } } : where,
       select: {
         id: true, number: true, txnType: true, date: true,
         status: true, grandTotal: true, paidAmt: true, domainData: true,
         party: { select: { id: true, name: true, phone: true } },
       },
-      orderBy: { date: 'desc' },
-      skip,
-      take: limit,
+      orderBy: [{ date: 'desc' }, { id: 'asc' }],
+      ...(hitIds ? {} : { skip, take: limit }),
     }),
-    ctx.db.invoice.count({ where }),
+    hitIds ? Promise.resolve(hitTotal) : ctx.db.invoice.count({ where }),
   ])
 
   // Line counts for just this page. (Prisma's `_count: { items }` joins a GROUP BY over every invoice_items row in
@@ -516,7 +545,7 @@ export async function listInvoices(
 
   return {
     data: invoices.map((i) => ({ ...i, _count: { items: lines.get(i.id) ?? 0 } })),
-    meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    meta: { page, limit, total, totalPages: Math.ceil(total / limit), ...(hitCapped ? { capped: true } : {}) },
   }
 }
 

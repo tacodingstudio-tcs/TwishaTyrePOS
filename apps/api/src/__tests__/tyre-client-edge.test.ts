@@ -210,4 +210,49 @@ describe('Client edge cases', () => {
       expect((await tryPin(shop.tenantPhone, staff.phone, '5555')).status).toBe(200)
     })
   })
+
+  describe('bill search', () => {
+    let nums: Record<string, string> = {}
+    beforeAll(async () => {
+      for (const [k, name, phone] of [['a', 'Rameshbhai Patel', '9825078001'], ['b', 'ramesh Shah', '9825078002'], ['c', 'Kiran Desai', '9825078003']] as const) {
+        const r = await sale({ customer: { name, phone }, items: [{ productId: tyre.id, qty: 1 }], payments: cash(5900) })
+        nums[k] = r.data.invoice.number
+      }
+    })
+    const find = async (q: string, extra: Record<string, unknown> = {}) => (await owner.api.get('/api/invoices', { params: { search: q, limit: 50, ...extra } })).data
+    test('finds by the start of the customer name, ignoring case', async () => {
+      for (const q of ['rame', 'RAMESH', 'Ramesh']) { const r = await find(q); expect([q, r.meta.total]).toEqual([q, 2]) }
+      expect((await find('kir')).data[0].party.name).toBe('Kiran Desai')
+    })
+    test('finds by the start of the mobile number, and by the start of the bill number', async () => {
+      expect((await find('98250780')).meta.total).toBe(3)
+      expect((await find('9825078002')).data[0].party.name).toBe('ramesh Shah')
+      const byNo = await find(nums['c']!.slice(0, nums['c']!.length - 1).toLowerCase())
+      expect(byNo.data.some((x: any) => x.number === nums['c'])).toBe(true)
+    })
+    test('it is a "starts with" search: the middle of a name does not match; nothing found is an empty list, not an error', async () => {
+      expect((await find('patel')).meta.total).toBe(0)
+      const none = await find('zzzz-no-such')
+      expect(none.data).toEqual([]); expect(none.meta.total).toBe(0)
+    })
+    test('a typed % or _ means itself, never "anything"; quotes and SQL are harmless', async () => {
+      for (const q of ['%', '_', 'r%', "x' OR 1=1 --", '\\', 'a;DROP TABLE invoices']) {
+        const r = await owner.api.get('/api/invoices', { params: { search: q } })
+        expect([q, r.status]).toEqual([q, 200]); expect(r.data.meta.total).toBe(0)
+      }
+    })
+    test('works together with filters and paging: results stay newest first, each bill once', async () => {
+      const p1 = await find('ramesh', { limit: 1, page: 1 }), p2 = await find('ramesh', { limit: 1, page: 2 }), p3 = await find('ramesh', { limit: 1, page: 3 })
+      expect(p1.meta.total).toBe(2); expect(p1.meta.totalPages).toBe(2)
+      expect(p1.data).toHaveLength(1); expect(p2.data).toHaveLength(1); expect(p3.data).toHaveLength(0)
+      expect(p1.data[0].id).not.toBe(p2.data[0].id)
+      expect((await find('ramesh', { txnType: 'sale_invoice', status: 'paid' })).meta.total).toBe(2)
+      expect((await find('ramesh', { status: 'cancelled' })).meta.total).toBe(0)
+      expect((await find('ramesh', { fromDate: ymd(1) })).meta.total).toBe(0)
+    })
+    test('another business never shows up in the results', async () => {
+      const other = await newShopTenant('Search Other Tyres')
+      expect((await other.api.get('/api/invoices', { params: { search: 'ramesh' } })).data.meta.total).toBe(0)
+    })
+  })
 })

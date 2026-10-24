@@ -67,7 +67,7 @@ export function InvoiceListPage() {
     <div>
       <PageHeader
         title={isB2B ? 'Documents' : 'Bills'}
-        subtitle={data?.meta ? `${data.meta.total} total` : undefined}
+        subtitle={data?.meta ? `${data.meta.total.toLocaleString("en-IN")}${data.meta.capped ? "+" : ""} total${data.meta.capped ? " — type more to narrow it down" : ""}` : undefined}
         action={
           <div className="flex gap-2">
             {txnType === 'purchase_invoice' && (
@@ -186,7 +186,7 @@ export function InvoiceListPage() {
         {/* Pagination */}
         {data?.meta && data.meta.totalPages > 1 && (
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-500">Page {data.meta.page} of {data.meta.totalPages}</span>
+            <span className="text-sm text-gray-500">Page {data.meta.page} of {data.meta.totalPages}{data.meta.capped ? "+" : ""}</span>
             <div className="flex gap-2">
               <button type="button" disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="btn-ghost disabled:opacity-40">Previous</button>
               <button type="button" disabled={page >= data.meta.totalPages} onClick={() => setPage(p => p + 1)} className="btn-ghost disabled:opacity-40">Next</button>
