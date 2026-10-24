@@ -21,7 +21,7 @@ import {
   RecordPaymentSchema,
 } from '../services/invoice.service.js'
 import { DOMAIN_REGISTRY } from '@billing/domain-registry'
-import { voidWarrantyForInvoice } from '../lib/tyre-helpers.js'
+import { voidWarrantyForInvoice, voidWarrantyForReturn } from '../lib/tyre-helpers.js'
 import { withIdempotency, IdempotencyConflictError } from '../lib/idempotency.js'
 import { createPaymentLink } from '../services/razorpayPayment.service.js'
 import { whatsappQueue } from '../lib/queues.js'
@@ -107,6 +107,10 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
       )
 
       if (replayed) reply.header('X-Idempotent-Replay', 'true')
+      else if (input.txnType === 'sale_return' && input.linkedInvoiceId) {
+        // goods came back → their warranty is void (serials become sellable again)
+        await voidWarrantyForReturn(req, input.linkedInvoiceId, input.items.map((i) => ({ productId: i.productId, qty: Number(i.qty) })))
+      }
 
       return reply.status(201).send(invoice)
     } catch (err) {
@@ -401,6 +405,8 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
       items: z.array(z.object({
         invoiceItemId: z.string().uuid(),
         qty:           z.number().positive(),
+        // which tyres came back (optional): their warranty is the one voided; without it the first `qty` live ones go
+        serialNos:     z.array(z.string().trim().min(1).max(60)).max(50).optional(),
       })).optional(),
       notes: z.string().max(500).optional(),
       date:  z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -457,7 +463,12 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
       branchDomainType: branch.domainType,
     } as Parameters<typeof createInvoice>[1] & { branchDomainType: string })
 
-    return reply.status(201).send(ret)
+    const warrantyVoided = await voidWarrantyForReturn(req, original.id, sourceItems.map((it) => ({
+      productId: it.productId, qty: Number(it.qty),
+      serialNos: body.items?.find((o) => o.invoiceItemId === it.id)?.serialNos,
+    })))
+
+    return reply.status(201).send({ ...ret, warrantyVoided })
   })
 
   // ── POST /api/invoices/:id/debit-note ─────────────────────────────────────

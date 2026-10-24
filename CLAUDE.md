@@ -74,8 +74,8 @@ to exercise replay behaviour.
 
 ## Not done / ideas
 
-E-way bill generation for wholesale dispatch (the transportPlatform has a GSP adapter to port); returns
-that void warranty rows automatically (today: void by hand, or cancel an unpaid bill); per-DOT stock
+E-way bill generation for wholesale dispatch (the transportPlatform has a GSP adapter to port); credit notes
+that void warranty rows (a goods return, `POST /api/invoices/:id/return`, now does; a credit note is money-only and does not); per-DOT stock
 lots and FIFO by manufacture date; supplier tyre-claim tracking; barcode/QR on tyre sidewall; GPS-free
 vehicle service history import; retreading job cards. Package scope is intentionally still `@billing/*` to
 keep patches portable.

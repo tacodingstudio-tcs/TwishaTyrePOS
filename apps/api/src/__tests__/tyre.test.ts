@@ -382,6 +382,25 @@ describe('Tyre shop', () => {
       expect(again.status).toBe(201)
     })
 
+    test('a goods return voids the warranty of the tyres that came back, and only those', async () => {
+      const [s1, s2] = [uniqueSerial('RTA'), uniqueSerial('RTB')]
+      const r = await sale(owner, { customer: { name: 'Returner', phone: '9825065555' }, items: [{ productId: car.id, qty: 2, serialNos: [s1, s2] }], payments: [{ method: 'cash', amount: 9912 }] })
+      expect(r.status).toBe(201)
+      const inv = (await owner.api.get(`/api/invoices/${r.data.invoice.id}`)).data
+      const line = inv.items.find((i: any) => i.productId === car.id)
+      // one tyre back, named by serial → only that warranty goes
+      const part = await owner.api.post(`/api/invoices/${r.data.invoice.id}/return`, { items: [{ invoiceItemId: line.id, qty: 1, serialNos: [s1] }] })
+      expect(part.status).toBe(201)
+      expect(part.data.warrantyVoided).toBe(1)
+      const v1 = (await owner.api.get('/api/tyre/warranty', { params: { serial: s1, status: 'void' } })).data
+      expect(v1.data[0].status).toBe('void')
+      const live2 = (await owner.api.get('/api/tyre/warranty', { params: { serial: s2, status: 'active' } })).data
+      expect(live2.total).toBe(1)
+      // the returned serial can be sold again
+      const again = await sale(owner, { customer: { name: 'Resale 2', phone: '9825066666' }, items: [{ productId: car.id, qty: 1, serialNos: [s1] }], payments: [{ method: 'cash', amount: 4956 }] })
+      expect(again.status).toBe(201)
+    })
+
     test('the bill PDF is a real PDF with the warranty card page; other businesses cannot read it', async () => {
       const r = await owner.api.get(`/api/tyre/invoices/${billId}/pdf`, { responseType: 'arraybuffer' })
       expect(r.status).toBe(200)

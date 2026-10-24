@@ -193,6 +193,42 @@ export async function voidWarrantyForInvoice(req: FastifyRequest, invoiceId: str
   }
 }
 
+/**
+ * A goods return (sale_return) takes the tyres back, so their warranty goes with them. Rows are voided for the tyres
+ * returned: the serials named on the line if any, otherwise `qty` live rows of that product on the original bill
+ * (all of them when the whole line comes back). Claimed / already-void rows are left alone. Best-effort, like
+ * cancellation: a failure here must never undo the return itself.
+ */
+export async function voidWarrantyForReturn(
+  req: FastifyRequest,
+  originalInvoiceId: string,
+  lines: Array<{ productId?: string | null; qty: number; serialNos?: string[] }>,
+): Promise<number> {
+  let n = 0
+  try {
+    for (const l of lines) {
+      if (!l.productId) continue
+      const t = tbl(req.schemaName, 'tyre_warranty')
+      if (l.serialNos?.length) {
+        n += await run(req,
+          `UPDATE ${t} SET status = 'void', "updatedAt" = NOW()
+           WHERE "invoiceId" = $1::uuid AND "branchId" = $2::uuid AND status = 'active' AND "serialNo" = ANY($3::text[])`,
+          originalInvoiceId, req.branchId, l.serialNos)
+      } else {
+        n += await run(req,
+          `UPDATE ${t} SET status = 'void', "updatedAt" = NOW()
+           WHERE id IN (SELECT id FROM ${t}
+                         WHERE "invoiceId" = $1::uuid AND "branchId" = $2::uuid AND "productId" = $3::uuid AND status = 'active'
+                         ORDER BY "createdAt", "serialNo" LIMIT $4::int)`,
+          originalInvoiceId, req.branchId, l.productId, Math.max(0, Math.floor(l.qty)))
+      }
+    }
+  } catch (err) {
+    req.log.warn({ err, originalInvoiceId }, 'voidWarrantyForReturn failed')
+  }
+  return n
+}
+
 // ── Role guards ───────────────────────────────────────────────────────────────
 /** Throws 403 for read-only users. */
 export function requireWrite(req: FastifyRequest): void {
