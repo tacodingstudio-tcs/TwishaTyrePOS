@@ -5,6 +5,7 @@
 //   ~120,000 stock-ledger rows · 60,000 warranties        (about 265 MB in Postgres)
 //
 //   DATABASE_URL=<direct string> npx tsx scripts/load-bulk.ts [ownerPhone]            load
+//   DATABASE_URL=<direct string> npx tsx scripts/load-bulk.ts [ownerPhone] --n=1000000   other sizes (local volume tests)
 //   DATABASE_URL=<direct string> npx tsx scripts/load-bulk.ts [ownerPhone] --remove   delete exactly those rows again
 //
 // Everything it adds is recognisable (sku "LT-n", bill "LT-nnnnnn", customer "Customer n"), so --remove never
@@ -14,19 +15,22 @@ import { PrismaClient } from '@prisma/client'
 
 const OWNER = process.argv.slice(2).find((a) => /^\d{10}$/.test(a)) ?? '9200000001'
 const REMOVE = process.argv.includes('--remove')
-const N = 60000
+const opt = (k: string) => process.argv.find((a) => a.startsWith(`--${k}=`))?.split('=')[1]
+const N = Number(opt('n') ?? 60000)            // bills (and payments, warranties) — --n=1000000 for a volume test (local only)
+const P = Number(opt('products') ?? N)        // distinct tyres; a real shop has a few thousand, not one per bill
+const C = Number(opt('customers') ?? N)       // customers (and vehicles)
 
 const LOAD = [
   `CREATE TEMP TABLE cfg AS SELECT '__BRANCH__'::uuid b, '__USER__'::uuid u`,
   `INSERT INTO parties ("branchId", type, name, phone, balance)
-   SELECT (SELECT b FROM cfg), 'customer', 'Customer '||n, '9'||lpad(n::text,9,'0'), 0 FROM generate_series(1,${N}) n`,
+   SELECT (SELECT b FROM cfg), 'customer', 'Customer '||n, '9'||lpad(n::text,9,'0'), 0 FROM generate_series(1,${C}) n`,
   `INSERT INTO products ("branchId","itemType",name,sku,unit,"gstRate","salePrice",mrp,"purchasePrice","lowStockQty","trackStock","domainAttrs")
    SELECT (SELECT b FROM cfg),'product','LoadTyre '||n,'LT-'||n,'pcs',18,
      3000+(n%200)*40, 3600+(n%200)*40, 2400+(n%200)*35, 3, true,
      jsonb_build_object('item_kind','tyre','brand',(ARRAY['MRF','CEAT','Apollo','JK','Bridgestone','Michelin'])[1+n%6],
        'pattern','P'||(n%40),'size',(ARRAY['185/65 R15','205/55 R16','165/80 R14','195/65 R15','215/60 R16','245/45 R18'])[1+n%6],
        'vehicle_type',(ARRAY['car','suv','two_wheeler'])[1+n%3],'tube_type','tubeless','warranty_months',24)
-   FROM generate_series(1,${N}) n`,
+   FROM generate_series(1,${P}) n`,
   `CREATE TEMP TABLE tp AS SELECT id, row_number() OVER (ORDER BY sku) rn FROM products WHERE sku LIKE 'LT-%'`,
   `CREATE TEMP TABLE svc AS SELECT id, row_number() OVER (ORDER BY name) rn FROM products WHERE sku IS NULL OR sku NOT LIKE 'LT-%'`,
   `CREATE TEMP TABLE cp AS SELECT id, row_number() OVER (ORDER BY name) rn FROM parties WHERE name LIKE 'Customer %'`,
@@ -36,33 +40,33 @@ const LOAD = [
   `INSERT INTO stock_ledger ("branchId","productId","txnType",qty,rate,"refType","createdAt")
    SELECT (SELECT b FROM cfg), id, 'opening', 60, 2500, 'opening', now()-interval '3 years' FROM tp`,
   `INSERT INTO tyre_vehicles ("branchId","regNo","partyId","vehicleType","makeModel","tyreSize","ownerName","ownerPhone","lastServiceDate","nextServiceDate")
-   SELECT (SELECT b FROM cfg),'GJ'||lpad((n%40)::text,2,'0')||chr(65+n%26)||chr(65+(n/26)%26)||lpad(n::text,5,'0'),
+   SELECT (SELECT b FROM cfg),'GJ'||lpad((n%40)::text,2,'0')||chr(65+n%26)||chr(65+(n/26)%26)||lpad(n::text,8,'0'),
      (SELECT id FROM cp WHERE rn=n),'car','Swift','185/65 R15','Customer '||n,'9'||lpad(n::text,9,'0'),
      current_date-(n%900), current_date+((n%120)-30)
-   FROM generate_series(1,${N}) n`,
+   FROM generate_series(1,${C}) n`,
   `CREATE TEMP TABLE inv AS SELECT n, gen_random_uuid() id FROM generate_series(1,${N}) n`,
   `INSERT INTO invoices (id,"branchId","partyId","createdBy","txnType",number,date,status,subtotal,"taxableAmt","cgstTotal","sgstTotal","grandTotal","paidAmt","domainData","createdAt")
-   SELECT i.id,(SELECT b FROM cfg),(SELECT id FROM cp WHERE rn=1+(i.n*7)%${N}),(SELECT u FROM cfg),'sale_invoice',
-     'LT-'||lpad(i.n::text,6,'0'), current_date-(i.n%1000), 'paid',
+   SELECT i.id,(SELECT b FROM cfg),(SELECT id FROM cp WHERE rn=1+(i.n*7)%${C}),(SELECT u FROM cfg),'sale_invoice',
+     'LT-'||lpad(i.n::text,8,'0'), current_date-(i.n%1000), 'paid',
      ROUND(((3000+(i.n%200)*40)+200)::numeric,2), ROUND(((3000+(i.n%200)*40)+200)::numeric,2),
      ROUND((((3000+(i.n%200)*40)+200)*0.09)::numeric,2), ROUND((((3000+(i.n%200)*40)+200)*0.09)::numeric,2),
      ROUND((((3000+(i.n%200)*40)+200)*1.18)::numeric,2), ROUND((((3000+(i.n%200)*40)+200)*1.18)::numeric,2),'{}'::jsonb,
      (current_date-(i.n%1000))::timestamptz + interval '11 hours'
    FROM inv i`,
   `INSERT INTO invoice_items ("invoiceId","productId",description,qty,unit,rate,"taxableAmt","gstRate","cgstAmt","sgstAmt",total,"sortOrder","itemMeta")
-   SELECT i.id,(SELECT id FROM tp WHERE rn=1+(i.n*13)%${N}),'LoadTyre',1,'pcs',3000+(i.n%200)*40,3000+(i.n%200)*40,18,
+   SELECT i.id,(SELECT id FROM tp WHERE rn=1+(i.n*13)%${P}),'LoadTyre',1,'pcs',3000+(i.n%200)*40,3000+(i.n%200)*40,18,
      ROUND(((3000+(i.n%200)*40)*0.09)::numeric,2),ROUND(((3000+(i.n%200)*40)*0.09)::numeric,2),ROUND(((3000+(i.n%200)*40)*1.18)::numeric,2),0,
      jsonb_build_object('serialNos',jsonb_build_array('SN'||i.n))
    FROM inv i`,
   `INSERT INTO invoice_items ("invoiceId","productId",description,qty,unit,rate,"taxableAmt","gstRate","cgstAmt","sgstAmt",total,"sortOrder","itemMeta")
    SELECT i.id,(SELECT id FROM svc WHERE rn=1+i.n%(SELECT max(rn) FROM svc)),'Fitting',1,'pcs',200,200,18,18,18,236,1,'{}'::jsonb FROM inv i`,
   `INSERT INTO payments ("branchId","partyId",amount,method,"paymentDate","createdBy")
-   SELECT (SELECT b FROM cfg),(SELECT id FROM cp WHERE rn=1+(i.n*7)%${N}),ROUND((((3000+(i.n%200)*40)+200)*1.18)::numeric,2),(ARRAY['cash','upi','card'])[1+i.n%3],current_date-(i.n%1000),(SELECT u FROM cfg) FROM inv i`,
+   SELECT (SELECT b FROM cfg),(SELECT id FROM cp WHERE rn=1+(i.n*7)%${C}),ROUND((((3000+(i.n%200)*40)+200)*1.18)::numeric,2),(ARRAY['cash','upi','card'])[1+i.n%3],current_date-(i.n%1000),(SELECT u FROM cfg) FROM inv i`,
   `INSERT INTO stock_ledger ("branchId","productId","txnType",qty,rate,"refType","refId","createdAt")
-   SELECT (SELECT b FROM cfg),(SELECT id FROM tp WHERE rn=1+(i.n*13)%${N}),'sale',-1,3000,'invoice',i.id,(current_date-(i.n%1000))::timestamptz FROM inv i`,
+   SELECT (SELECT b FROM cfg),(SELECT id FROM tp WHERE rn=1+(i.n*13)%${P}),'sale',-1,3000,'invoice',i.id,(current_date-(i.n%1000))::timestamptz FROM inv i`,
   `INSERT INTO tyre_warranty ("branchId","invoiceId","invoiceNo","productId","itemName","brand","size","serialNo","partyId","customerName","soldOn","warrantyMonths","warrantyUntil","status")
-   SELECT (SELECT b FROM cfg),i.id,'LT-'||lpad(i.n::text,6,'0'),(SELECT id FROM tp WHERE rn=1+(i.n*13)%${N}),'LoadTyre','MRF','185/65 R15','LTSN'||i.n,
-     (SELECT id FROM cp WHERE rn=1+(i.n*7)%${N}),'Customer','2026-01-01'::date-(i.n%1000),24,'2028-01-01'::date-(i.n%1000),'active' FROM inv i`,
+   SELECT (SELECT b FROM cfg),i.id,'LT-'||lpad(i.n::text,8,'0'),(SELECT id FROM tp WHERE rn=1+(i.n*13)%${P}),'LoadTyre','MRF','185/65 R15','LTSN'||i.n,
+     (SELECT id FROM cp WHERE rn=1+(i.n*7)%${C}),'Customer','2026-01-01'::date-(i.n%1000),24,'2028-01-01'::date-(i.n%1000),'active' FROM inv i`,
 ]
 
 const UNLOAD = [

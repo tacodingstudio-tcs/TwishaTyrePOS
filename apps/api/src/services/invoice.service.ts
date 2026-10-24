@@ -499,7 +499,6 @@ export async function listInvoices(
         id: true, number: true, txnType: true, date: true,
         status: true, grandTotal: true, paidAmt: true, domainData: true,
         party: { select: { id: true, name: true, phone: true } },
-        _count: { select: { items: true } },
       },
       orderBy: { date: 'desc' },
       skip,
@@ -508,8 +507,15 @@ export async function listInvoices(
     ctx.db.invoice.count({ where }),
   ])
 
+  // Line counts for just this page. (Prisma's `_count: { items }` joins a GROUP BY over every invoice_items row in
+  // the shop: 8 s at 1 million bills, versus a few ms for the 20-100 ids on the page.)
+  const counts = invoices.length
+    ? await ctx.db.invoiceItem.groupBy({ by: ['invoiceId'], where: { invoiceId: { in: invoices.map((i) => i.id) } }, _count: { _all: true } })
+    : []
+  const lines = new Map(counts.map((c) => [c.invoiceId, c._count._all]))
+
   return {
-    data: invoices,
+    data: invoices.map((i) => ({ ...i, _count: { items: lines.get(i.id) ?? 0 } })),
     meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
   }
 }
