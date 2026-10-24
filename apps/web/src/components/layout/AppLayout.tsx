@@ -127,8 +127,8 @@ export function AppLayout() {
       <aside className="w-60 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col">
 
         {/* Logo / business name */}
-        <div className="h-16 flex items-center gap-2 px-5 border-b border-gray-200">
-          <img src="/logo.png" alt="" className="w-9 h-9 rounded-full flex-shrink-0" />
+        <div className="h-20 flex items-center gap-3 px-4 border-b border-gray-200">
+          <img src="/logo.png" alt="" className="w-14 h-14 flex-shrink-0" />
           <div className="overflow-hidden">
             <div className="text-sm font-semibold text-gray-900 truncate">{tenant?.name ?? PRODUCT_NAME}</div>
             <div className="text-xs text-gray-500 truncate">{branch?.name}</div>
