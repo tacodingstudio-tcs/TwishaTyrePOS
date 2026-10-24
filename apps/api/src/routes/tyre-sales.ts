@@ -12,7 +12,7 @@
 
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
-import { optionalMobile } from '../lib/validators.js'
+import { optionalMobile, dateStr } from '../lib/validators.js'
 import { createHash } from 'crypto'
 import {
   DOMAIN_REGISTRY, SERIALISED_KINDS, TYRE_POSITIONS, TYRE_VEHICLE_TYPES, SALE_KINDS, defaultHsn,
@@ -27,7 +27,6 @@ import { notifyInvoice, safely } from '../lib/tyre-notify.js'
 import { loadInvoiceDoc } from '../lib/tyre-docs.js'
 import { isValidGstin } from '../lib/gstin.js'
 
-const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
 const idParam = z.object({ id: z.string().uuid() })
 /** A customer's GSTIN: blank is fine, anything typed must be a real one (format + check digit). */
 const gstinField = z.string().trim().toUpperCase()
@@ -36,7 +35,7 @@ const gstinField = z.string().trim().toUpperCase()
 
 const SaleItem = z.object({
   productId:      z.string().uuid(),
-  qty:            z.number().positive().max(1000),
+  qty:            z.number({ invalid_type_error: 'Enter the quantity' }).positive('Quantity must be at least 1').max(1000, 'Quantity looks too large — check it'),
   rate:           z.number().nonnegative().max(1e7).optional(),      // defaults to the catalogue sale price
   discountPct:    z.number().min(0).max(100).default(0),
   /** the price actually charged per unit (the "Data Entry" box). When it is below the list rate the
@@ -59,7 +58,7 @@ const SaleItem = z.object({
 const SaleBody = z.object({
   partyId:    z.string().uuid().optional(),
   customer:   z.object({
-    name:  z.string().trim().min(1).max(120),
+    name:  z.string().trim().min(1, 'Enter the customer name').max(120),
     phone: optionalMobile,
     address: z.string().trim().max(300).optional(),
     gstin: gstinField.optional(),
@@ -179,6 +178,12 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
   const defaults = DOMAIN_REGISTRY.tyre.defaultDomainConfig as Record<string, any>
   const conf = (k: string) => cfg[k] ?? defaults[k]
   const date = body.date ?? todayStr()
+  // a mistyped year (2016 for 2026) or a day that has not happened would file the bill in the wrong GST month
+  if (body.date) {
+    const today = todayStr()
+    if (body.date > today) throw httpError(422, `The bill date ${body.date} is in the future — check it`)
+    if (body.date < addDays(today, -366)) throw httpError(422, `The bill date ${body.date} is more than a year ago — check the year`)
+  }
   const warnings: string[] = []
   const ctx: Ctx = req
 
@@ -356,6 +361,7 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
     notes: body.notes,
     domainData: {
       sale_kind: body.saleKind,
+      customer_name: !partyId ? body.customer?.name : undefined, customer_address: !partyId ? body.customer?.address : undefined,
       vehicle_no: regNo, vehicle_type: vehicleType, odometer: body.odometer, fitted_by: body.fittedBy,
       exchange_qty: body.exchange?.qty ?? 0, exchange_value: exchangeValue,
       next_service_km: body.nextServiceKm ?? (body.odometer && due && due.km > 0 ? body.odometer + due.km : undefined),

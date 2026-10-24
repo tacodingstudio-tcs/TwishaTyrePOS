@@ -12,8 +12,8 @@ import { z } from 'zod'
 import { createInvoice, recordPayment } from '../services/invoice.service.js'
 import { createParty } from '../services/party.service.js'
 import { tbl, q1, run, httpError, requireManager, branchConfig, r2 } from '../lib/tyre-helpers.js'
+import { dateStr } from '../lib/validators.js'
 
-const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
 const normReg = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '')
 const tenDigits = (s: string) => {
   const d = s.replace(/\D/g, '')

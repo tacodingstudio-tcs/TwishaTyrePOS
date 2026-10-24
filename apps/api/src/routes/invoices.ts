@@ -422,15 +422,31 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
     if (original.status === 'cancelled')
       return reply.status(409).send({ error: 'Cannot return a cancelled invoice' })
 
+    // what has already come back on earlier returns of this bill, per item — a bill can be returned in parts, but never
+    // for more than was sold in total (otherwise stock would grow with every repeat)
+    const earlier = await req.db.invoice.findMany({
+      where: { linkedInvoiceId: original.id, txnType: 'sale_return', status: { not: 'cancelled' } },
+      select: { items: { select: { productId: true, description: true, qty: true } } },
+    })
+    const keyOf = (i: { productId: string | null; description: string }) => i.productId ?? `d:${i.description}`
+    const returned = new Map<string, number>()
+    for (const r of earlier) for (const i of r.items) returned.set(keyOf(i), (returned.get(keyOf(i)) ?? 0) + Number(i.qty))
+    const left = (i: { productId: string | null; description: string; qty: unknown }) => Math.max(0, Number(i.qty) - (returned.get(keyOf(i)) ?? 0))
+
     const sourceItems = body.items
       ? body.items.map((override) => {
           const orig = original.items.find((i) => i.id === override.invoiceItemId)
           if (!orig) throw Object.assign(new Error(`Item ${override.invoiceItemId} not found`), { statusCode: 422 })
           if (override.qty > Number(orig.qty))
             throw Object.assign(new Error(`Return qty ${override.qty} exceeds original qty ${orig.qty}`), { statusCode: 422 })
+          if (override.qty > left(orig))
+            throw Object.assign(new Error(left(orig) === 0
+              ? `${orig.description} has already been returned in full`
+              : `Only ${left(orig)} of ${orig.description} can still be returned (${Number(orig.qty) - left(orig)} already came back)`), { statusCode: 422 })
           return { ...orig, qty: override.qty }
         })
-      : original.items
+      : original.items.map((i) => ({ ...i, qty: left(i) })).filter((i) => Number(i.qty) > 0)
+    if (sourceItems.length === 0) return reply.status(422).send({ error: 'This bill has already been returned in full' })
 
     const branch = await req.db.branch.findUniqueOrThrow({
       where: { id: req.branchId }, select: { domainType: true },

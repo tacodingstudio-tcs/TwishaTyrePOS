@@ -167,7 +167,7 @@ export function InvoiceListPage() {
                       </span>
                     </td>
                   )}
-                  <td className="px-5 py-3 text-gray-700">{inv.party?.name ?? 'Walk-in'}</td>
+                  <td className="px-5 py-3 text-gray-700">{inv.party?.name ?? inv.domainData?.customer_name ?? 'Walk-in'}</td>
                   <td className="px-5 py-3 text-gray-500">{format(new Date(inv.date), 'd MMM yyyy')}</td>
                   <td className="px-5 py-3 text-right font-semibold text-gray-900">
                     {formatINR(Number(inv.grandTotal))}

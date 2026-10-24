@@ -185,6 +185,22 @@ export const branchRoutes: FastifyPluginAsync = async (app) => {
       ? { ...(existing.domainConfig as object), ...body.domainConfig }
       : undefined
 
+    // Every bill book (car, two wheel …) numbers from its own counter, but bill numbers must stay unique across the
+    // shop: two books with the same prefix would both issue "1" and the second sale would fail at the counter.
+    const series = (mergedConfig as Record<string, any> | undefined)?.['bill_series']
+    if (series && typeof series === 'object') {
+      const seen = new Map<string, string>()
+      for (const [key, v] of Object.entries(series as Record<string, { prefix?: unknown }>)) {
+        const prefix = String(v?.prefix ?? '').trim().toUpperCase()
+        const clash = seen.get(prefix)
+        if (clash) return reply.status(422).send({
+          error: 'Validation failed',
+          message: `The "${clash}" and "${key}" bill books use the same prefix${prefix ? ` ("${prefix}")` : ' (none)'}, so they would repeat bill numbers. Give each book its own prefix, e.g. "2W-" for two wheelers.`,
+        })
+        seen.set(prefix, key)
+      }
+    }
+
     return db.branch.update({
       where: { id },
       data:  {

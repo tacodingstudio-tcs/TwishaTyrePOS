@@ -266,7 +266,7 @@ export function InvoiceDetailPage() {
                 {isSale ? 'Billed to' : isPurchase ? 'Supplier' : 'Party'}
               </div>
               <div className="text-base font-semibold text-gray-900">
-                {invoice.party?.name ?? 'Walk-in customer'}
+                {invoice.party?.name ?? invoice.domainData?.customer_name ?? 'Walk-in customer'}
               </div>
               {invoice.party?.phone && <div className="text-sm text-gray-500">{invoice.party.phone}</div>}
             </div>

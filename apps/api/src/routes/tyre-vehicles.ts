@@ -4,7 +4,7 @@
 
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
-import { nullableMobile } from '../lib/validators.js'
+import { nullableMobile, dateStr } from '../lib/validators.js'
 import { TYRE_VEHICLE_TYPES, CLAIM_OUTCOMES } from '@billing/domain-registry'
 import {
   tbl, q, q1, insertRow, updateRow, httpError, requireWrite, requireManager, todayStr, addDays, branchConfig, ymd,
@@ -12,7 +12,6 @@ import {
 import { notifyServiceDue } from '../lib/tyre-notify.js'
 
 const idParam = z.object({ id: z.string().uuid() })
-const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
 const normReg = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '')
 
 const VehicleBody = z.object({

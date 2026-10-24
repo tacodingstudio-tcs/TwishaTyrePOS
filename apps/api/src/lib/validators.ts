@@ -41,3 +41,7 @@ export const optionalEmail = z.preprocess(blankToUndefined, email.optional())
 /** Percentages and money that must be sane numbers. */
 export const percent = z.number().min(0, 'Cannot be below 0').max(100, 'Cannot be above 100')
 export const money = z.number().min(0, 'Cannot be negative').max(1e9, 'That amount is too large')
+
+/** YYYY-MM-DD that is a real calendar day — "2026-13-45" is refused and "2026-02-30" does not quietly become 2 March. */
+export const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
+  .refine((v) => { const d = new Date(`${v}T00:00:00Z`); return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v }, 'That date does not exist — check the day and month')

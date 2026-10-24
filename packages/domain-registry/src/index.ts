@@ -98,6 +98,9 @@ const TyreProductAttrs = z.object({
 const TyreInvoiceData = z.object({
   sale_kind:           z.enum(SALE_KINDS).default('retail'),
   vehicle_no:          z.string().max(20).optional(),
+  /** a customer typed by name with no mobile number: no customer record is made, the bill keeps the name */
+  customer_name:       z.string().max(120).optional(),
+  customer_address:    z.string().max(300).optional(),
   vehicle_type:        z.enum(TYRE_VEHICLE_TYPES).optional(),
   customer_vehicle_id: z.string().uuid().optional(),
   odometer:            z.number().int().nonnegative().optional(),
@@ -335,6 +338,7 @@ export function validateInvoiceData(domainType: string, data: unknown) {
 export function normalizeTyreSize(raw: string | null | undefined): string {
   let s = String(raw ?? '').toUpperCase().replace(/[ZVHST]R/g, 'R').trim()
   if (!s) return ''
+  s = stripSizeRatings(s)
   // "2055516" — seven digits with no separators: WWW AA RR
   const compact = s.replace(/\s+/g, '')
   const m7 = compact.match(/^(\d{3})(\d{2})(\d{2})$/)
@@ -346,13 +350,33 @@ export function normalizeTyreSize(raw: string | null | undefined): string {
   // "205/55 16" / "205/55 R16" / "205/55R16" / "90/90 17"
   const mw = s.match(/^(\d{2,3})\/(\d{2}) ?R?(\d{2})$/)
   if (mw) return `${mw[1]}/${mw[2]}R${mw[3]}`
+  // no profile: "155 R13" / "155/R13" / "165-14" (older and light-commercial sizes) → "155R13"
+  const mnp = s.match(/^(\d{3})(?:\/| ?)R(\d{2})$/)
+  if (mnp) return `${mnp[1]}R${mnp[2]}`
   // truck: "295/80 R22.5"
   const mt2 = s.match(/^(\d{3})\/(\d{2}) ?R?(\d{2}\.\d)$/)
   if (mt2) return `${mt2[1]}/${mt2[2]}R${mt2[3]}`
-  // truck bias / radial: "10.00 R20" / "10.00 20" / "7.50-16"
-  const mt = s.match(/^(\d{1,2}\.\d{2}) ?R?(\d{2})$/)
+  // truck bias / radial / scooter: "10.00 R20" / "10.00 20" / "7.50-16" / "4.00-8" (rims 8 and 10 are one or two digits)
+  const mt = s.match(/^(\d{1,2}\.\d{2}) ?R?(\d{1,2})$/)
   if (mt) return `${mt[1]}R${mt[2]}`
+  // tractor / farm: "13.6-28" / "14.9 R30" / "16.9-34" (one decimal in the width)
+  const mf = s.match(/^(\d{1,2}\.\d) ?R?(\d{2})$/)
+  if (mf) return `${mf[1]}R${mf[2]}`
   return s.replace(/[^A-Z0-9./]/g, '')
+}
+
+/**
+ * Load index / speed symbol / ply rating / light-truck marking are printed after the size ("215/60 R16 95H",
+ * "7.00-15 12PR", "155 R13 LT", "195/70R15C") but are not part of it: the same tyre is the same size with or without
+ * them, so they are dropped for matching and for the spelling that is saved (the tyre's name carries them).
+ */
+function stripSizeRatings(s: string): string {
+  let t = s.trim().replace(/\/(LT|C)$/, '').replace(/(?<=\d)(LT|C)$/, '')
+  for (;;) {
+    const n = t.replace(/\s+(?:\d{2,3}(?:\/\d{2,3})?[A-Z]{1,2}|\d{1,2} ?PR|LT|C|TL|TT)$/, '').trim()
+    if (n === t || !/\d$/.test(n)) return n === t ? t : (/\d$/.test(n) ? n : t)
+    t = n
+  }
 }
 
 /**
@@ -363,12 +387,13 @@ export function normalizeTyreSize(raw: string | null | undefined): string {
 export function isRecognisedTyreSize(raw: string | null | undefined): boolean {
   const n = normalizeTyreSize(raw)
   if (!n) return false
-  const m = n.match(/R(\d{2}(?:\.\d)?)$/)
+  const m = n.match(/R(\d{1,2}(?:\.\d)?)$/)
   const rim = m ? Number(m[1]) : null
   if (rim != null && (rim < 8 || rim > 40)) return false
   return /^\d{2,3}\/\d{2,3}R\d{2}(\.\d)?$/.test(n)
-    || /^\d{1,2}\.\d{1,2}R\d{2}(\.\d)?$/.test(n)
+    || /^\d{1,2}\.\d{1,2}R\d{1,2}(\.\d)?$/.test(n)
     || /^\d{2}X\d{1,2}(\.\d{1,2})?R\d{2}$/.test(n)
     || /^\d{1,2}\.\d{2}\/\d{2}$/.test(n)
+    || /^\d{3}R\d{2}$/.test(n)                                                  // 155R13 — no profile
     || /^\d{2,3}\/\d{2}\/\d{2}(\.\d)?$/.test(n)                  // 215/60/16 — how the bill book writes a car size
 }

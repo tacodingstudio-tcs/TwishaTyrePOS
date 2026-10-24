@@ -357,8 +357,8 @@ describe('Tyre shop', () => {
     test('a claim on an expired warranty can only be recorded as rejected', async () => {
       const s = uniqueSerial('EXP')
       const r = await sale(owner, {
-        date: today(-400), customer: { name: 'Old Timer', phone: '9825062222' },
-        items: [{ productId: car.id, qty: 1, serialNos: [s] }], payments: [{ method: 'cash', amount: 4956 }],
+        date: today(-300), customer: { name: 'Old Timer', phone: '9825062222' },       // within the one-year back-date limit; a 6-month warranty has run out
+        items: [{ productId: car.id, qty: 1, serialNos: [s], warrantyMonths: 6 }], payments: [{ method: 'cash', amount: 4956 }],
       })
       const w = r.data.warranty[0]
       expect(String(w.warrantyUntil).slice(0, 10) < today()).toBe(true)

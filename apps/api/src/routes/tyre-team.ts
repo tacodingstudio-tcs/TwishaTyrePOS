@@ -14,11 +14,10 @@
 
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
-import { nullableMobile } from '../lib/validators.js'
+import { nullableMobile, dateStr } from '../lib/validators.js'
 import { tbl, q, q1, run, insertRow, updateRow, httpError, requireManager, todayStr, r2, ymd } from '../lib/tyre-helpers.js'
 
 const idParam = z.object({ id: z.string().uuid() })
-const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
 const monthStr = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Use YYYY-MM')
 const METHODS = ['cash', 'upi', 'bank_transfer', 'cheque'] as const
 const DAY_STATUS = ['present', 'half', 'absent', 'leave'] as const

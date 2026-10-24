@@ -38,13 +38,16 @@ export interface ParsedSize { format: SizeFormat; a: string; b?: string; c: stri
 
 /** Understand a size however it was typed; null when it is not a size at all. */
 export function parseSize(raw: string | null | undefined): ParsedSize | null {
-  const s = String(raw ?? '').toUpperCase().replace(/[ZVHST]R/g, 'R').replace(/\s+/g, ' ').trim()
+  let s = String(raw ?? '').toUpperCase().replace(/[ZVHST]R/g, 'R').replace(/\s+/g, ' ').trim()
   if (!s) return null
+  // load index / speed symbol / ply rating / LT / C come after the size and are not part of it (mirrors the registry)
+  s = s.replace(/\/(LT|C)$/, '').replace(/(?<=\d)(LT|C)$/, '')
+  for (let n = s.replace(/ (?:\d{2,3}(?:\/\d{2,3})?[A-Z]{1,2}|\d{1,2} ?PR|LT|C|TL|TT)$/, ''); n !== s && /\d$/.test(n); n = s.replace(/ (?:\d{2,3}(?:\/\d{2,3})?[A-Z]{1,2}|\d{1,2} ?PR|LT|C|TL|TT)$/, '')) s = n
   let m = s.replace(/\s/g, '').match(/^(\d{3})(\d{2})(\d{2})$/)                                    // 1856515
   if (m) return { format: 'radial', a: m[1]!, b: m[2]!, c: m[3]! }
   m = s.match(/^(\d{2,3})[\/ -](\d{2,3})[ \/-]?R?[ -]?(\d{2}(?:\.\d)?)$/)                        // 185/65 R15 · 185 65 15 · 90/90-17 · 215/60/16
   if (m) return { format: 'radial', a: m[1]!, b: m[2]!, c: m[3]! }
-  m = s.match(/^(\d{1,2}\.\d{1,2})[ \/-]?R?[ -]?(\d{2}(?:\.\d)?)$/)                              // 10.00-20 · 2.75-18 · 5.20/13 · 10.00 R20
+  m = s.match(/^(\d{1,2}\.\d{1,2})[ \/-]?R?[ -]?(\d{1,2}(?:\.\d)?)$/)                              // 10.00-20 · 2.75-18 · 5.20/13 · 10.00 R20
   if (m) return { format: 'crossply', a: m[1]!, c: m[2]! }
   return null
 }

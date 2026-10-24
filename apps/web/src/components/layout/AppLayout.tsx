@@ -1,5 +1,5 @@
 // src/components/layout/AppLayout.tsx
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/store/auth.store'
 import { authApi } from '@/lib/api'
@@ -7,7 +7,7 @@ import {
   LayoutDashboard, FileText, Warehouse, Users, LogOut, Plus, BarChart2, Building2, ShoppingCart,
   ClipboardCheck, ArrowLeftRight, Package, ChevronDown, TrendingDown, UserCheck, GitBranch, Clock,
   Wallet, TrendingUp, MessageCircle, ReceiptText, LineChart, Container,
-  CircleDot, Car, ShieldCheck, BellRing, Wrench,
+  CircleDot, Car, ShieldCheck, BellRing, Wrench, Menu,
 } from 'lucide-react'
 import { usePendingApprovals, useBranches } from '@/hooks/useApi'
 import { hiddenMenu } from '@/lib/menu'
@@ -97,6 +97,8 @@ export function AppLayout() {
   const location = useLocation()
   const { user, tenant, branch, refreshToken, logout, canManage } = useAuthStore()
   const inventoryOpen = location.pathname.startsWith('/inventory')
+  const [navOpen, setNavOpen] = useState(false)        // the menu is a slide-in drawer below the large-screen width
+  useEffect(() => { setNavOpen(false) }, [location.pathname, location.search])
   const [moreOpen, setMoreOpen] = useState(() => OTHER.some((i) => location.pathname.startsWith(i.to)))
 
   const isManager = canManage()
@@ -121,7 +123,8 @@ export function AppLayout() {
     <div className="flex h-screen bg-gray-50">
 
       {/* ── Sidebar ──────────────────────────────────────────────────────── */}
-      <aside className="w-60 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col">
+      {navOpen && <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setNavOpen(false)} aria-hidden="true" />}
+      <aside className={`fixed inset-y-0 left-0 z-40 w-64 max-w-[85vw] transform transition-transform duration-200 lg:static lg:z-auto lg:w-60 lg:max-w-none lg:translate-x-0 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col ${navOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
 
         {/* Logo / business name */}
         <div className="flex flex-col items-center text-center px-4 py-4 border-b border-gray-200">
@@ -225,9 +228,13 @@ export function AppLayout() {
       </aside>
 
       {/* ── Main content ─────────────────────────────────────────────────── */}
-      <main className="flex-1 overflow-y-auto flex flex-col">
-        <div className="h-12 flex items-center justify-end gap-3 px-4 border-b border-gray-100 bg-white shrink-0">
-          <PoweredByBadge />
+      <main className="flex-1 min-w-0 overflow-y-auto flex flex-col">
+        <div className="h-12 flex items-center justify-end gap-3 px-3 sm:px-4 border-b border-gray-100 bg-white shrink-0">
+          <button type="button" onClick={() => setNavOpen(true)} aria-label="Open menu"
+            className="lg:hidden mr-auto p-2 -ml-1 rounded-lg text-gray-600 hover:bg-gray-100">
+            <Menu className="w-5 h-5" />
+          </button>
+          <div className="hidden sm:block"><PoweredByBadge /></div>
           <CelebrationsPanel businessName={branch?.name ?? tenant?.name ?? 'Our Business'} />
         </div>
         <div className="flex-1 overflow-y-auto">

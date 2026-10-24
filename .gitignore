@@ -56,3 +56,7 @@ apps/api/scripts/routes.txt
 # local secrets (never commit)
 .env.neon
 .env.*.local
+
+# Real customer data from the client workbook (used by the replay test; never commit)
+apps/api/e2e/data/
+apps/api/e2e-out/

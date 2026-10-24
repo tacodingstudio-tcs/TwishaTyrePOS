@@ -72,6 +72,21 @@ local Postgres/Redis (`host.docker.internal`), then `TEST_API_PORT=<mapped port>
 depends on seed data. The jest harness adds a unique `Idempotency-Key` to POSTs; pass an explicit header
 to exercise replay behaviour.
 
+## End-to-end checks (client view)
+
+* `apps/api/e2e/crawl.ts` opens every screen as owner / manager / viewer and on a phone-size screen and reports
+  crashes, stuck loaders, failed requests and console errors. `apps/api/e2e/flow-sale.ts` drives the real New Sale
+  screen (bill, double-tap, empty bill, credit with no customer, expired session, read-only user).
+  Both need the API (:3200), the web app (:5175) and the demo shop: `npx tsx e2e/crawl.ts`.
+* `src/__tests__/tyre-workbook.test.ts` replays the shop's paper book (`Shakti Bill Book.xlsx`, CAR + Two Wheel) and
+  checks totals / taxable / GST against the sheet's own formulas. The data file holds real customers, so it lives in
+  `apps/api/e2e/data/` (git-ignored); without it the suite is skipped. `tyre-client-edge.test.ts` covers dates,
+  name-only customers, repeat returns, credit instalments, big bills, forgotten PIN.
+* Rules these checks introduced: a bill date must be a real day, not in the future and not older than a year; a
+  customer typed without a mobile keeps the name in `domainData.customer_name` (no party record); returns are totalled
+  against the original bill; two bill books cannot share a prefix; sizes may carry load/speed/ply/LT ratings (dropped
+  by `normalizeTyreSize`), single-digit rims and tractor sizes.
+
 ## Not done / ideas
 
 E-way bill generation for wholesale dispatch (the transportPlatform has a GSP adapter to port); credit notes

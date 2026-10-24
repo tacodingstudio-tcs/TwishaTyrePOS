@@ -72,8 +72,8 @@ export async function loadInvoiceDoc(ctx: Ctx, invoiceId: string): Promise<{ dat
     billKind: dd['bill_series'] === 'two_wheel' || ['two_wheeler', 'three_wheeler'].includes(String(dd['vehicle_type'] ?? '')) ? 'two_wheel' : 'car',
     customTerms: !!config['invoice_terms'],
     gstBill: dd['gst_bill'] === false ? false : true, date: inv.date, dueDate: inv.dueDate, status: inv.status,
-    partyName: inv.partyName ?? '', partyPhone: inv.partyPhone ?? null, partyGstin: inv.partyGstin ?? null,
-    partyAddress: addrText(inv.partyAddress) || null,
+    partyName: inv.partyName ?? dd['customer_name'] ?? '', partyPhone: inv.partyPhone ?? null, partyGstin: inv.partyGstin ?? null,
+    partyAddress: addrText(inv.partyAddress) || dd['customer_address'] || null,
     vehicleNo: dd['vehicle_no'] ?? null, vehicleMake: dd['vehicle_make'] ?? null,
     poNo: dd['po_no'] ?? null, poDate: dd['po_date'] ?? null, odometer: dd['odometer'] ?? null, fittedBy: dd['fitted_by'] ?? null,
     lines: items.map((it) => {

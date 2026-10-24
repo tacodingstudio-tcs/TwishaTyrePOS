@@ -731,5 +731,7 @@ export const tyreApi = {
 export function apiError(err: unknown, fallback = 'Something went wrong'): string {
   const e = err as AxiosError<{ error?: string; message?: string; detail?: string[] }>
   const d = e?.response?.data
-  return d?.message ?? d?.detail?.[0] ?? d?.error ?? e?.message ?? fallback
+  // a validation detail reads "items.0.qty: Quantity must be at least 1" — the person at the counter needs the sentence only
+  const detail = d?.detail?.[0]?.replace(/^[\w.[\]-]+:\s+/, '')
+  return d?.message ?? detail ?? d?.error ?? e?.message ?? fallback
 }

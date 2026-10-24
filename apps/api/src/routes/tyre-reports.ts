@@ -5,8 +5,8 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { tbl, q, q1, todayStr, addDays, r2, branchConfig } from '../lib/tyre-helpers.js'
+import { dateStr } from '../lib/validators.js'
 
-const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
 
 const SALE_ITEM_BASE = (s: string) => `
   FROM ${tbl(s, 'invoice_items')} ii
@@ -190,7 +190,7 @@ export const tyreReportRoutes: FastifyPluginAsync = async (app) => {
         const unitTaxable = qty > 0 ? r2((t.taxable + t.disc) / qty) : 0
         rows.push({
           'Date': b.date, 'Bill No': b.number, 'Series': b.dd?.bill_series ?? '',
-          'Customer': b.partyName ?? '', 'Mobile': b.partyPhone ?? '', 'Address': addr(b.partyAddress),
+          'Customer': b.partyName ?? b.dd?.customer_name ?? '', 'Mobile': b.partyPhone ?? '', 'Address': addr(b.partyAddress) || (b.dd?.customer_address ?? ''),
           'Vehicle Make': b.dd?.vehicle_make ?? '', 'Vehicle No': b.dd?.vehicle_no ?? '', 'KM': b.dd?.odometer ?? '',
           'Tyre': t?.meta?.brand ?? t?.description ?? '', 'Size': t?.meta?.size ?? '', 'HSN': t?.hsn ?? '',
           'Qty': qty, 'Unit Rate': unitTaxable, 'Discount': t?.disc ?? 0, 'Taxable': t?.taxable ?? 0,

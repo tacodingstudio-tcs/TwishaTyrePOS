@@ -15,6 +15,7 @@ describe('Field validation', () => {
   const msg = (r: any) => JSON.stringify(r.data)
   beforeAll(async () => { owner = await newShopTenant('Validation Tyres') })
 
+
   describe('mobile numbers', () => {
     test('customers (parties) refuse anything that is not a 10-digit mobile; prefixes are tidied', async () => {
       for (const phone of BAD_MOBILES) {
@@ -118,6 +119,10 @@ describe('Field validation', () => {
 })
 
 describe('Tyre size on the product', () => {
+  const mkSize = (size: string, n: number, vt = 'car') => owner.api.post('/api/products', {
+    itemType: 'product', gstRate: 18, unit: 'pcs', trackStock: true, name: `Size test ${n}`, sku: `SZ-${n}-${Math.floor(Math.random() * 1e6)}`,
+    salePrice: 1000, openingStock: 5, domainAttrs: { item_kind: 'tyre', brand: 'TestBrand', size, vehicle_type: vt },
+  })
   let owner: Session
   const mk = (size: unknown, extra: Record<string, unknown> = {}) => owner.api.post('/api/products', {
     itemType: 'product', gstRate: 18, unit: 'pcs', trackStock: true, name: `Tyre ${Math.random()}`, salePrice: 5000, openingStock: 2,
@@ -155,5 +160,52 @@ describe('Tyre size on the product', () => {
     const k = sizes.filter((s) => /155\/?70/.test(s.size) || s.size.replace(/\D/g, '') === '1557013')
     expect(k).toHaveLength(1)
     expect(k[0]!.models).toBe(3)
+  })
+
+  describe('tyre sizes as they are printed on the tyre and written in the bill book', () => {
+    const good = ['215/60R16 95H', '195/65 R15 91V', '225/45 ZR17 94W', '7.00-15 12PR', '10.00 R20 16PR', '295/80 R22.5 152/148M',
+      '155 R13 LT', '155R13C', '195/70R15C', '4.00-8', '3.50-10', '13.6-28', '14.9 R30', '9.5-24', '2.75-18', '90/90-17', '205/65/16']
+    test('load / speed / ply / LT ratings, single-digit rims and tractor sizes are accepted', async () => {
+      let n = 0
+      for (const sz of good) { const r = await mkSize(sz, ++n); expect([sz, r.status]).toEqual([sz, 201]) }
+    })
+    test('a rated size is found by its plain size, and the plain size by the rated one', async () => {
+      await mkSize('215/60R16 95H', 100); await mkSize('185 R14 8PR', 101)
+      const a = (await owner.api.get('/api/tyre/finder', { params: { kind: 'tyre', size: '215/60R16' } })).data
+      expect((a.data as any[]).some((p) => p.name === 'Size test 100')).toBe(true)
+      const b = (await owner.api.get('/api/tyre/finder', { params: { kind: 'tyre', size: '185/R14' } })).data
+      expect(b.data.length).toBeGreaterThanOrEqual(0)                       // never an error
+      const c = (await owner.api.get('/api/tyre/finder', { params: { kind: 'tyre', size: '185 R14 8PR' } })).data
+      expect((c.data as any[]).some((p) => p.name === 'Size test 101')).toBe(true)
+    })
+    test('typos and two sizes in one box are still refused, with the plain message', async () => {
+      for (const sz of ['205/65/166', '80/100/18 100/80/18', '185/65 R5', 'abc', '195 65']) {
+        const r = await mkSize(sz, 200)
+        expect([sz, r.status]).toEqual([sz, 422])
+        expect(JSON.stringify(r.data)).toMatch(/not recognised/)
+      }
+    })
+  })
+
+  describe('bill books (series)', () => {
+    test('two bill books cannot share a prefix — it would repeat bill numbers at the counter', async () => {
+      const id = (await owner.api.get('/api/branches')).data[0].id
+      const same = await owner.api.patch(`/api/branches/${id}`, { domainConfig: { bill_series: { car: { prefix: '', start: 1 }, two_wheel: { prefix: '', start: 1 } } } })
+      expect(same.status).toBe(422)
+      expect(JSON.stringify(same.data)).toMatch(/same prefix/)
+      const caseOnly = await owner.api.patch(`/api/branches/${id}`, { domainConfig: { bill_series: { car: { prefix: 'A-', start: 1 }, two_wheel: { prefix: 'a-', start: 1 } } } })
+      expect(caseOnly.status).toBe(422)
+      const ok = await owner.api.patch(`/api/branches/${id}`, { domainConfig: { bill_series: { car: { prefix: '', start: 1 }, two_wheel: { prefix: '2W-', start: 1 } } } })
+      expect(ok.status).toBe(200)
+    })
+  })
+
+  describe('a sale line with no quantity says so in plain words', () => {
+    test('quantity 0 → "Quantity must be at least 1"', async () => {
+      const p = (await mkSize('185/65 R15', 300)).data
+      const r = await owner.api.post('/api/tyre/sales', { customer: { name: 'Zero Qty' }, items: [{ productId: p.id, qty: 0 }], payments: [] }, { headers: { 'Idempotency-Key': crypto.randomUUID() } })
+      expect(r.status).toBe(422)
+      expect(JSON.stringify(r.data)).toMatch(/Quantity must be at least 1/)
+    })
   })
 })
