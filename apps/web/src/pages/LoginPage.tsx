@@ -8,6 +8,7 @@ import { authApi } from '@/lib/api'
 import { useAuthStore } from '@/store/auth.store'
 import { Loader2, CircleDot, ShieldCheck, BellRing, Phone, ArrowRight, Check } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { BrandLockup } from '@/components/BrandLockup'
 import { PoweredByCard } from '@/components/PoweredBy'
 import { PRODUCT_NAME } from '@/lib/branding'
 
@@ -216,7 +217,7 @@ export function LoginPage() {
         </div>
 
         <header className="relative tw-rise">
-          <img src="/twisha-pos-logo-light.png" alt={PRODUCT_NAME} className="h-16 w-auto" />
+          <BrandLockup tone="light" />
         </header>
 
         <div className="relative max-w-xl">
@@ -269,7 +270,7 @@ export function LoginPage() {
         </svg>
         <div className="relative w-full max-w-md tw-rise">
 
-          <img src="/twisha-pos-logo.png" alt={PRODUCT_NAME} className="h-12 w-auto mx-auto mb-6 lg:hidden" />
+          <div className="flex justify-center mb-6 lg:hidden"><BrandLockup className="scale-90" /></div>
           <div className="rounded-3xl bg-white shadow-xl shadow-emerald-900/10 ring-1 ring-black/5 overflow-hidden">
             <div className="h-1.5 bg-gradient-to-r from-amber-300 via-lime-300 to-emerald-400" />
             <div className="px-7 pt-7 pb-8 sm:px-9">
