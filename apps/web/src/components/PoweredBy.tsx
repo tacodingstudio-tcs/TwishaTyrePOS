@@ -39,9 +39,8 @@ export function PoweredByCard({ className = '' }: { className?: string }) {
   const inner = (
     <>
       <span className="text-gray-500">Powered by</span>{' '}
-      <span className="font-bold text-gray-900 transition-colors duration-200 group-hover:text-primary-700
-        bg-gradient-to-r from-primary-500 to-emerald-400 bg-no-repeat bg-[length:0%_2px] bg-[position:0_100%] group-hover:bg-[length:100%_2px]
-        [transition:background-size_.3s_ease,color_.2s] pb-0.5">{NAME}</span>
+      <span className="font-bold text-primary-700 transition-colors duration-200 group-hover:text-primary-800
+        bg-gradient-to-r from-primary-500 to-emerald-400 bg-no-repeat bg-[length:100%_2px] bg-[position:0_100%] pb-0.5">{NAME}</span>
     </>
   )
   const cls = `group inline-block text-sm text-center transition-transform duration-200 hover:-translate-y-0.5 ${className}`
