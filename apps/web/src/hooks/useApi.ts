@@ -938,6 +938,16 @@ export function useUpdateUser() {
   })
 }
 
+/** Lifts a sign-in lock (five wrong PINs) so the person can try again at once. */
+export function useUnlockUser() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => usersApi.unlock(id),
+    onSuccess: (r: any) => { qc.invalidateQueries({ queryKey: ['users'] }); toast.success(r?.message ?? 'Unlocked') },
+    onError: (err: any) => toast.error(err?.response?.data?.error ?? 'Could not unlock'),
+  })
+}
+
 export function useResetUserPin() {
   return useMutation({
     mutationFn: ({ id, pin }: { id: string; pin: string }) => usersApi.resetPin(id, pin),

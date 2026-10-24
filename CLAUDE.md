@@ -86,6 +86,9 @@ to exercise replay behaviour.
   customer typed without a mobile keeps the name in `domainData.customer_name` (no party record); returns are totalled
   against the original bill; two bill books cannot share a prefix; sizes may carry load/speed/ply/LT ratings (dropped
   by `normalizeTyreSize`), single-digit rims and tractor sizes.
+* Sign-in lock (5 wrong PINs, 15 min) lives in `lib/login-throttle.ts`. Owner or manager lifts it with
+  `POST /api/users/:id/unlock` (Staff screen shows "Locked · N min" + Unlock; a manager may unlock the owner; a PIN
+  reset also lifts it). Nobody left inside: `REDIS_URL=… npx tsx scripts/unlock-account.ts <ownerPhone> [userPhone]`.
 
 ## Not done / ideas
 

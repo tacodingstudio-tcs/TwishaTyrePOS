@@ -4,6 +4,7 @@ import { db } from '@billing/db'               // public-schema client (tenants 
 import { getTenantDb, schemaFromSlug } from '../lib/tenant-db.js'
 import { verifyPin } from '../lib/password.js'
 import { redis } from '../lib/redis.js'
+import { checkLoginThrottle, recordFailedAttempt, clearLoginAttempts, LOCKOUT_SECONDS } from '../lib/login-throttle.js'
 import { invalidateBranch } from '../lib/cache.js'
 import {
   issueRefreshToken,
@@ -30,28 +31,6 @@ const LogoutSchema = z.object({
   refreshToken: z.string().min(20),
 })
 
-// ── Login throttle ────────────────────────────────────────────────────────────
-const MAX_ATTEMPTS    = 5
-const LOCKOUT_SECONDS = 15 * 60
-
-async function checkLoginThrottle(key: string) {
-  const attempts = await redis.get(`login_attempts:${key}`)
-  const count = attempts ? parseInt(attempts, 10) : 0
-  if (count >= MAX_ATTEMPTS) {
-    const ttl = await redis.ttl(`login_attempts:${key}`)
-    return { allowed: false, retryAfterSec: ttl > 0 ? ttl : LOCKOUT_SECONDS }
-  }
-  return { allowed: true }
-}
-async function recordFailedAttempt(key: string) {
-  const k = `login_attempts:${key}`
-  const n = await redis.incr(k)
-  if (n === 1) await redis.expire(k, LOCKOUT_SECONDS)
-}
-async function clearLoginAttempts(key: string) {
-  await redis.del(`login_attempts:${key}`)
-}
-
 export const authRoutes: FastifyPluginAsync = async (app) => {
 
   // ── POST /api/auth/login ────────────────────────────────────────────────
@@ -68,7 +47,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     if (!throttle.allowed) {
       return reply.status(429).send({
         error: 'Too many failed attempts',
-        message: `Account temporarily locked. Try again in ${Math.ceil((throttle.retryAfterSec ?? LOCKOUT_SECONDS) / 60)} minutes.`,
+        message: `Account temporarily locked. Try again in ${Math.ceil((throttle.retryAfterSec ?? LOCKOUT_SECONDS) / 60)} minutes — or ask the owner or a manager to unlock it.`,
         retryAfterSec: throttle.retryAfterSec,
       })
     }

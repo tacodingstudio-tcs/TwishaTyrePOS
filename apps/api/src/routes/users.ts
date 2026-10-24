@@ -22,6 +22,8 @@ import { z } from 'zod'
 import { mobile, optionalEmail } from '../lib/validators.js'
 import { hashPin } from '../lib/password.js'
 import { revokeAllUserTokens } from '../lib/refreshToken.service.js'
+import { db as publicDb } from '@billing/db'
+import { throttleKey, lockedMinutes, clearLoginAttempts } from '../lib/login-throttle.js'
 
 const ROLES = ['owner', 'manager', 'cashier', 'viewer'] as const
 
@@ -81,7 +83,13 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
       }),
     ])
 
-    return { total, page: q.page, limit: q.limit, users }
+    // who is locked out right now (five wrong PINs), so the screen can offer "Unlock"
+    const tenant = await publicDb.tenant.findUnique({ where: { id: req.tenantId }, select: { ownerPhone: true } })
+    const withLock = await Promise.all(users.map(async (u) => ({
+      ...u, lockedMinutes: tenant?.ownerPhone ? await lockedMinutes(throttleKey(tenant.ownerPhone, u.phone)) : 0,
+    })))
+
+    return { total, page: q.page, limit: q.limit, users: withLock }
   })
 
   // ── POST / — create staff user (owner only) ───────────────────────────────
@@ -209,6 +217,23 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
     })
   })
 
+  // ── POST /:id/unlock — lift a sign-in lock (owner or manager) ───────────────
+  // Five wrong PINs lock an account for 15 minutes. The owner or a manager can lift that at once, so a forgotten PIN
+  // at opening time does not stop the shop; a manager can unlock the owner too. The PIN is still needed to sign in.
+  app.post('/:id/unlock', async (req, reply) => {
+    if (!['owner', 'manager'].includes(req.role))
+      return reply.status(403).send({ error: 'Only the owner or a manager can unlock an account' })
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params)
+    const user = await req.db.user.findUnique({ where: { id }, select: { id: true, phone: true, role: true } })
+    if (!user) return reply.status(404).send({ error: 'User not found' })
+    const tenant = await publicDb.tenant.findUnique({ where: { id: req.tenantId }, select: { ownerPhone: true } })
+    if (!tenant?.ownerPhone) return reply.status(404).send({ error: 'Business not found' })
+    const key = throttleKey(tenant.ownerPhone, user.phone)
+    const was = await lockedMinutes(key)
+    await clearLoginAttempts(key)
+    return reply.send({ success: true, userId: id, wasLocked: was > 0, message: was > 0 ? 'Unlocked — they can sign in now' : 'This account was not locked' })
+  })
+
   // ── POST /:id/reset-pin — change a user's PIN (owner only) ────────────────
   app.post('/:id/reset-pin', async (req, reply) => {
     if (req.role !== 'owner')
@@ -231,6 +256,11 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
     // Revoke all active refresh tokens for this user so an attacker who held
     // a stolen token is forced to re-authenticate with the new PIN immediately.
     await revokeAllUserTokens(req.tenantId, id)
+
+    // a new PIN also lifts any sign-in lock (the person was probably locked out by the old one)
+    const t = await publicDb.tenant.findUnique({ where: { id: req.tenantId }, select: { ownerPhone: true } })
+    const u = await db.user.findUnique({ where: { id }, select: { phone: true } })
+    if (t?.ownerPhone && u) await clearLoginAttempts(throttleKey(t.ownerPhone, u.phone))
 
     return reply.send({ success: true, userId: id, message: 'PIN updated successfully' })
   })

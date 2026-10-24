@@ -580,6 +580,9 @@ export const usersApi = {
   resetPin: (id: string, pin: string) =>
     api.post(`/users/${id}/reset-pin`, { pin }).then((r) => r.data),
 
+  unlock: (id: string) =>
+    api.post(`/users/${id}/unlock`).then((r) => r.data),
+
   deactivate: (id: string) =>
     api.post(`/users/${id}/deactivate`).then((r) => r.data),
 

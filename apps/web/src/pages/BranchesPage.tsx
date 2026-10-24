@@ -5,12 +5,12 @@ import { useState } from 'react'
 import { HIDEABLE_MENU, hiddenMenu } from '@/lib/menu'
 import {
   useBranches, useUpdateBranch,
-  useUsers, useCreateUser, useResetUserPin, useDeactivateUser, useActivateUser,
+  useUsers, useCreateUser, useResetUserPin, useUnlockUser, useDeactivateUser, useActivateUser,
 } from '@/hooks/useApi'
 import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/PageHeader'
 import {
-  Plus, Building2, MapPin, FileText, Users, KeyRound, UserX, UserCheck, ArrowLeft, CircleDot, Pencil,
+  Plus, Building2, MapPin, FileText, Users, KeyRound, LockOpen, UserX, UserCheck, ArrowLeft, CircleDot, Pencil,
 } from 'lucide-react'
 
 // Role display names — underlying values stay 'manager' / 'cashier' / 'viewer'
@@ -412,6 +412,7 @@ function UsersPanel({ branches, domainType, onBack }: { branches: any[]; domainT
   const { data, isLoading } = useUsers()
   const deactivate = useDeactivateUser()
   const activate   = useActivateUser()
+  const unlock     = useUnlockUser()
   const rn = getRoleNames(domainType)
 
   const [showAdd,     setShowAdd]     = useState(false)
@@ -474,10 +475,21 @@ function UsersPanel({ branches, domainType, onBack }: { branches: any[]; domainT
                     {!u.isActive && (
                       <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">Inactive</span>
                     )}
+                    {u.lockedMinutes > 0 && (
+                      <span className="text-xs bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full">Locked · {u.lockedMinutes} min</span>
+                    )}
                   </div>
                   <div className="text-xs text-gray-500 mt-0.5">{u.phone}</div>
                   <div className="text-xs text-gray-400 mt-0.5 truncate">{branchNames}</div>
                 </div>
+
+                {/* A locked account (five wrong PINs) can be opened at once by the owner or a manager */}
+                {u.lockedMinutes > 0 && (role === 'owner' || role === 'manager') && (
+                  <button type="button" onClick={() => unlock.mutate(u.id)} disabled={unlock.isPending}
+                    className="flex items-center gap-1 text-xs font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 hover:bg-amber-100 flex-shrink-0">
+                    <LockOpen className="w-3.5 h-3.5" /> Unlock
+                  </button>
+                )}
 
                 {/* Actions — owner only, not on self */}
                 {role === 'owner' && !isSelf && (

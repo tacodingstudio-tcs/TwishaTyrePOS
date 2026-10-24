@@ -3,7 +3,7 @@
 // Excel export with Gujarati names, and a forgotten PIN.
 
 import axios from 'axios'
-import { newShopTenant, BASE, type Session } from './helpers'
+import { newShopTenant, testPhone, login, BASE, type Session } from './helpers'
 
 describe('Client edge cases', () => {
   let owner: Session, tyre: any, tube: any
@@ -146,6 +146,68 @@ describe('Client edge cases', () => {
       expect(right.status).toBe(429)
       const ok = await axios.post(`${BASE}/api/auth/login`, { tenantPhone: other.tenantPhone, phone: other.tenantPhone, pin: '1234' }, { validateStatus: () => true })
       expect(ok.status).toBe(200)
+    })
+  })
+
+  describe('owner / manager unlock', () => {
+    const tryPin = (tenant: string, phone: string, pin: string) => axios.post(`${BASE}/api/auth/login`, { tenantPhone: tenant, phone, pin }, { validateStatus: () => true })
+    const lockOut = async (tenant: string, phone: string) => { for (let i = 0; i < 5; i++) await tryPin(tenant, phone, '9999') }
+    const addUser = async (shop: Session, role: string) => {
+      const phone = testPhone()
+      const r = await shop.api.post('/api/users', { name: `${role} person`, phone, pin: '4321', role })
+      expect(r.status).toBe(201)
+      return { id: r.data.id as string, phone }
+    }
+
+    test('the owner lifts a staff lock at once; the list shows who is locked; the staff member signs in straight away', async () => {
+      const shop = await newShopTenant('Unlock Tyres')
+      const staff = await addUser(shop, 'cashier')
+      await lockOut(shop.tenantPhone, staff.phone)
+      expect((await tryPin(shop.tenantPhone, staff.phone, '4321')).status).toBe(429)
+      const listed = (await shop.api.get('/api/users')).data.users.find((u: any) => u.id === staff.id)
+      expect(listed.lockedMinutes).toBeGreaterThan(0)
+      const un = await shop.api.post(`/api/users/${staff.id}/unlock`)
+      expect(un.status).toBe(200); expect(un.data.wasLocked).toBe(true)
+      expect((await shop.api.get('/api/users')).data.users.find((u: any) => u.id === staff.id).lockedMinutes).toBe(0)
+      expect((await tryPin(shop.tenantPhone, staff.phone, '4321')).status).toBe(200)
+    })
+    test('a manager can unlock the owner who forgot the PIN; the PIN is still needed (a wrong one counts again)', async () => {
+      const shop = await newShopTenant('Owner Locked Tyres')
+      const mgr = await addUser(shop, 'manager')
+      await lockOut(shop.tenantPhone, shop.tenantPhone)
+      expect((await tryPin(shop.tenantPhone, shop.tenantPhone, '1234')).status).toBe(429)
+      const mgrSession = await login(mgr.phone, '4321', shop.tenantPhone)
+      const owner = (await mgrSession.api.get('/api/users')).data.users.find((u: any) => u.role === 'owner')
+      expect(owner.lockedMinutes).toBeGreaterThan(0)
+      expect((await mgrSession.api.post(`/api/users/${owner.id}/unlock`)).status).toBe(200)
+      expect((await tryPin(shop.tenantPhone, shop.tenantPhone, '9999')).status).toBe(401)    // not a bypass: wrong PIN still fails
+      expect((await tryPin(shop.tenantPhone, shop.tenantPhone, '1234')).status).toBe(200)
+    })
+    test('counter staff and viewers cannot unlock anyone; an unknown user is 404; unlocking an open account is harmless', async () => {
+      const shop = await newShopTenant('Unlock Rules Tyres')
+      const cashier = await addUser(shop, 'cashier'), viewer = await addUser(shop, 'viewer'), other = await addUser(shop, 'cashier')
+      await lockOut(shop.tenantPhone, other.phone)
+      const c = await login(cashier.phone, '4321', shop.tenantPhone), v = await login(viewer.phone, '4321', shop.tenantPhone)
+      expect((await c.api.post(`/api/users/${other.id}/unlock`)).status).toBe(403)
+      expect((await v.api.post(`/api/users/${other.id}/unlock`)).status).toBe(403)
+      expect((await tryPin(shop.tenantPhone, other.phone, '4321')).status).toBe(429)         // still locked
+      expect((await shop.api.post('/api/users/00000000-0000-4000-8000-000000000000/unlock')).status).toBe(404)
+      const open = await shop.api.post(`/api/users/${cashier.id}/unlock`)
+      expect(open.status).toBe(200); expect(open.data.wasLocked).toBe(false)
+    })
+    test('another business cannot unlock the people of this one', async () => {
+      const a = await newShopTenant('Shop A'), b = await newShopTenant('Shop B')
+      const staff = await addUser(a, 'cashier')
+      await lockOut(a.tenantPhone, staff.phone)
+      expect((await b.api.post(`/api/users/${staff.id}/unlock`)).status).toBe(404)
+      expect((await tryPin(a.tenantPhone, staff.phone, '4321')).status).toBe(429)
+    })
+    test('resetting a PIN lifts the lock too', async () => {
+      const shop = await newShopTenant('Reset Lifts Tyres')
+      const staff = await addUser(shop, 'cashier')
+      await lockOut(shop.tenantPhone, staff.phone)
+      expect((await shop.api.post(`/api/users/${staff.id}/reset-pin`, { pin: '5555' })).status).toBe(200)
+      expect((await tryPin(shop.tenantPhone, staff.phone, '5555')).status).toBe(200)
     })
   })
 })
