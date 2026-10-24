@@ -16,7 +16,15 @@
 // Two details differ from the spreadsheet on purpose: "Alignment" is spelt correctly, and the empty last column
 // of the sheet is folded into "Grand Total".
 
+import { existsSync, readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import type { InvoicePdfData, BusinessHeader } from './tyre-pdf.js'
+
+// The shop's emblem, printed at the left of the title band. A deployment serves one shop, so the file is
+// assets/shop-logo.png (transparent PNG, any square size); BILL_LOGO_FILE points elsewhere. No file = no logo,
+// and the bill is exactly the spreadsheet's.
+const LOGO_PATH = process.env['BILL_LOGO_FILE'] || fileURLToPath(new URL('../../assets/shop-logo.png', import.meta.url))
+const LOGO: Buffer | null = existsSync(LOGO_PATH) ? readFileSync(LOGO_PATH) : null
 
 const TEAL = '#31859C'
 const PEACH = '#FDE9D9'
@@ -73,6 +81,7 @@ export function drawShaktiBill(doc: PDFKit.PDFDocument, b: InvoicePdfData, biz: 
   doc.rect(bandX, y, X + W - bandX, 38).fill(PEACH)
   doc.font('Helvetica-Bold').fontSize(24).fillColor(TEAL)
     .text(biz.name.toUpperCase(), bandX, y + 7, { width: X + W - bandX, align: 'center', underline: true, lineBreak: false })
+  if (LOGO) doc.image(LOGO, bandX + 6, y + 1, { fit: [60, 60] })      // the title stays centred; the emblem sits in the empty left of the band
   y += 44
   const cx = bandX, cw = X + W - bandX
   if (biz.address) { text(biz.address, cx, y, { w: cw, align: 'center', bold: true, size: 10 }); y += 14 }
