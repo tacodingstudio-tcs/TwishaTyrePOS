@@ -2,7 +2,7 @@
 // Twisha POS sign-in. Left: an immersive dark hero (a slowly turning tyre, a live-looking bill that shows the
 // product's signature trick — type one price, tax is split out). Right: a calm sign-in card with a 4-box PIN.
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { authApi } from '@/lib/api'
 import { useAuthStore } from '@/store/auth.store'
@@ -347,10 +347,6 @@ export function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-8 pt-6 border-t border-gray-200/80 text-center text-sm text-gray-500">
-            New shop?{' '}
-            <Link to="/register" className="text-primary-600 font-semibold hover:underline">Create your {PRODUCT_NAME} account</Link>
-          </div>
 
             </div>
           </div>
