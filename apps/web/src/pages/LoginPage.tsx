@@ -17,15 +17,17 @@ const CSS = `
 @keyframes tw-unspin { to { transform: rotate(-360deg) } }
 @keyframes tw-float { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-9px) } }
 @keyframes tw-rise  { from { opacity: 0; transform: translateY(16px) } to { opacity: 1; transform: none } }
+@keyframes tw-shine { 0%,55% { background-position: 160% 0 } 100% { background-position: -60% 0 } }
 @keyframes tw-glow  { 0%,100% { opacity: .55 } 50% { opacity: .9 } }
 @keyframes tw-sweep { from { background-position: -200% 0 } to { background-position: 200% 0 } }
 .tw-spin  { animation: tw-spin 70s linear infinite }
 .tw-unspin { animation: tw-unspin 70s linear infinite; transform-box: fill-box; transform-origin: center }
 .tw-float { animation: tw-float 6s ease-in-out infinite }
 .tw-rise  { animation: tw-rise .7s cubic-bezier(.2,.7,.2,1) both }
+.tw-shine { background: linear-gradient(105deg, transparent 38%, rgba(255,255,255,.75) 50%, transparent 62%) no-repeat; background-size: 60% 100%; animation: tw-shine 5.5s ease-in-out infinite }
 .tw-glow  { animation: tw-glow 5s ease-in-out infinite }
 .tw-title { background: linear-gradient(100deg,#fff 20%,#86efac 45%,#fff 70%); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: tw-sweep 7s linear infinite }
-@media (prefers-reduced-motion: reduce) { .tw-spin,.tw-unspin,.tw-float,.tw-rise,.tw-glow,.tw-title { animation: none } }
+@media (prefers-reduced-motion: reduce) { .tw-spin,.tw-unspin,.tw-float,.tw-rise,.tw-glow,.tw-shine,.tw-title { animation: none } }
 `
 
 /** The tyre: tread blocks, sidewall lettering, a five-spoke rim and a hub. Pure SVG. */
