@@ -127,11 +127,11 @@ export function AppLayout() {
       <aside className="w-60 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col">
 
         {/* Logo / business name */}
-        <div className="h-20 flex items-center gap-3 px-4 border-b border-gray-200">
-          <img src="/logo.png" alt="" className="w-14 h-14 flex-shrink-0" />
-          <div className="overflow-hidden">
+        <div className="flex flex-col items-center text-center px-4 py-4 border-b border-gray-200">
+          <img src="/logo.png" alt={tenant?.name ?? PRODUCT_NAME} className="w-28 h-28" />
+          <div className="mt-2 w-full overflow-hidden">
             <div className="text-sm font-semibold text-gray-900 truncate">{tenant?.name ?? PRODUCT_NAME}</div>
-            <div className="text-xs text-gray-500 truncate">{branch?.name}</div>
+            {branch?.name && branch.name !== tenant?.name && <div className="text-xs text-gray-500 truncate">{branch.name}</div>}
           </div>
         </div>
 
