@@ -70,7 +70,7 @@ const TYRES: Tyre[] = [
   { name: 'TVS Eurogrip 100/90-17',      sku: 'TVS-EUR-100-90-17',  brand: 'TVS',      pattern: 'Eurogrip',       size: '100/90-17',  vt: 'two_wheeler', mrp: 2500, cost: 2000, price: 2300, stock: 9,  warranty: 0, tubeless: true },
   { name: 'Apollo Amar 10.00 R20',       sku: 'APL-AMR-1000-20',    brand: 'Apollo',   pattern: 'Amar',           size: '10.00 R20',  vt: 'truck_bus', mrp: 21500, cost: 17500, price: 19900, stock: 6, warranty: 0 },
   { name: 'JK Jetway 295/80 R22.5',      sku: 'JK-JET-295-80-22',   brand: 'JK',       pattern: 'Jetway JUH5',    size: '295/80 R22.5', vt: 'truck_bus', mrp: 29800, cost: 24500, price: 27500, stock: 4, warranty: 0, tubeless: true },
-  { name: 'CEAT Farmax 13.6-28',         sku: 'CEAT-FAR-136-28',    brand: 'CEAT',     pattern: 'Farmax R',       size: '13.6-28',    vt: 'tractor', mrp: 24500, cost: 20000, price: 22800, stock: 2, warranty: 0 },
+  { name: 'CEAT Farmax 13.6-28',         sku: 'CEAT-FAR-136-28',    brand: 'CEAT',     pattern: 'Farmax R',       size: '13.6 R28',    vt: 'tractor', mrp: 24500, cost: 20000, price: 22800, stock: 2, warranty: 0 },
 ]
 
 async function main() {
@@ -91,7 +91,8 @@ async function main() {
   token = login.accessToken
 
   const present = await get<any>('/api/tyre/finder?kind=tyre&limit=1')
-  if ((present.data ?? []).length > 0) { console.log('Demo data already present — nothing to do.'); return }
+  const hasSales = ((await get<any>('/api/invoices?limit=1')).data ?? []).length > 0
+  if (hasSales) { console.log('Demo data already present — nothing to do.'); return }   // a half-finished run (no sales yet) resumes below
 
   // staff
   for (const u of [
@@ -107,12 +108,17 @@ async function main() {
     { name: 'MRF Ltd — Surat Depot', phone: '9825000101' },
     { name: 'Apollo Tyres Distributor', phone: '9825000102' },
     { name: 'CEAT Authorised Dealer', phone: '9825000103' },
-  ]) await post('/api/parties', { type: 'supplier', ...s, address: { city: 'Surat', state: 'Gujarat', stateCode: '24' } })
+  ]) {
+    const have = ((await get<any>('/api/parties?type=supplier&limit=100')).data ?? []).some((x: any) => x.phone === s.phone)
+    if (!have) await post('/api/parties', { type: 'supplier', ...s, address: { city: 'Surat', state: 'Gujarat', stateCode: '24' } })
+  }
   log('3 suppliers')
 
   // ── 3. catalogue with opening stock ────────────────────────────────────────
   const created: Array<{ t: Tyre; id: string }> = []
+  const bySku = new Map<string, string>(((await get<any>('/api/products?limit=500')).data ?? []).map((x: any) => [x.sku, x.id]))
   for (const t of TYRES) {
+    if (bySku.has(t.sku)) { created.push({ t, id: bySku.get(t.sku)! }); continue }
     const p = await post('/api/products', {
       itemType: 'product', name: t.name, sku: t.sku, unit: 'pcs', gstRate: 18,
       salePrice: t.price, mrp: t.mrp, purchasePrice: t.cost, lowStockQty: 3, trackStock: true,
@@ -124,10 +130,10 @@ async function main() {
     })
     created.push({ t, id: p.id })
   }
-  const tube = await post('/api/products', {
+  const tube = bySku.has('TUBE-400-8') ? { id: bySku.get('TUBE-400-8')! } : await post('/api/products', {
     itemType: 'product', name: 'Tube 4.00-8 (scooter)', sku: 'TUBE-400-8', unit: 'pcs', gstRate: 18,
     salePrice: 380, mrp: 420, purchasePrice: 290, lowStockQty: 5, openingStock: 25, openingRate: 290,
-    domainAttrs: { item_kind: 'tube', brand: 'MRF', size: '4.00-8', vehicle_type: 'two_wheeler' },
+    domainAttrs: { item_kind: 'tube', brand: 'MRF', size: '4.00-10', vehicle_type: 'two_wheeler' },
   })
   log(`${created.length} tyres + 1 tube with opening stock`)
 
