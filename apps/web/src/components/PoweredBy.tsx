@@ -34,19 +34,14 @@ export function PoweredBy({ className = '' }: { className?: string }) {
   )
 }
 
-/** Larger pill for the sign-in page: Twisha mark, small-caps "Powered by", then the name. */
+/** Plain "Powered by …" line for the sign-in page. */
 export function PoweredByCard({ className = '' }: { className?: string }) {
-  const inner = (
-    <>
-      <img src="/twisha-mark.png" alt="" className="w-10 h-10 rounded-full shrink-0" />
-      <span className="flex flex-col text-left">
-        <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-gray-400">Powered by</span>
-        <span className="text-sm font-semibold text-gray-800 group-hover:text-primary-700">{NAME}</span>
-      </span>
-    </>
+  return (
+    <p className={`text-xs text-gray-500 ${className}`}>
+      Powered by{' '}
+      {URL_
+        ? <a href={URL_} target="_blank" rel="noopener noreferrer" className="font-semibold text-gray-700 hover:text-primary-700 hover:underline">{NAME}</a>
+        : <span className="font-semibold text-gray-700">{NAME}</span>}
+    </p>
   )
-  const cls = `group inline-flex items-center gap-3 pl-2 pr-5 py-2 rounded-full border border-gray-200 bg-white shadow-sm hover:border-primary-300 transition-colors ${className}`
-  return URL_
-    ? <a href={URL_} target="_blank" rel="noopener noreferrer" className={cls} title={`Powered by ${NAME}`}>{inner}</a>
-    : <span className={cls}>{inner}</span>
 }
