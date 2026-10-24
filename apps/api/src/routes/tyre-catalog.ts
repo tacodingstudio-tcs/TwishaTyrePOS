@@ -116,6 +116,8 @@ export const tyreCatalogRoutes: FastifyPluginAsync = async (app) => {
     const cfg = await branchConfig(req)
     const qy = z.object({
       days: z.coerce.number().int().min(7).max(720).default(Number(cfg['dead_stock_days'] ?? 90)),
+      limit: z.coerce.number().int().min(1).max(1000).default(200),
+      offset: z.coerce.number().int().min(0).default(0),
     }).parse(req.query)
     // Tyres that sold inside the window are not dead, so they are ruled out with one cheap date-indexed look-up;
     // only the few that did not sell are then asked for their last sale date. Stock and first receipt come from a
@@ -133,30 +135,33 @@ export const tyreCatalogRoutes: FastifyPluginAsync = async (app) => {
        SELECT p.id, p.name, p."domainAttrs"->>'brand' AS brand, p."domainAttrs"->>'size' AS size,
               bal.stock::float AS stock, p."purchasePrice"::float AS "purchasePrice",
               (bal.stock * COALESCE(p."purchasePrice", 0))::float AS "stockValue",
-              ls."lastSold", bal."firstIn"
+              ls."lastSold", bal."firstIn",
+              COUNT(*) OVER()::int AS "deadCount", (SUM(bal.stock * COALESCE(p."purchasePrice", 0)) OVER())::float AS "deadValue"
        FROM ${tbl(req.schemaName, 'products')} p
        JOIN bal ON bal."productId" = p.id
-       LEFT JOIN LATERAL (
-         SELECT MAX(i.date) AS "lastSold"
+       LEFT JOIN (
+         SELECT ii."productId", MAX(i.date) AS "lastSold"
            FROM ${tbl(req.schemaName, 'invoice_items')} ii JOIN ${tbl(req.schemaName, 'invoices')} i ON i.id = ii."invoiceId"
-          WHERE ii."productId" = p.id AND i."txnType" = 'sale_invoice' AND i.status <> 'cancelled') ls ON true
+          WHERE i."txnType" = 'sale_invoice' AND i.status <> 'cancelled' AND ii."productId" IS NOT NULL
+          GROUP BY ii."productId") ls ON ls."productId" = p.id
        WHERE p."branchId" = $1::uuid AND p."isActive" = true AND p."trackStock" = true AND p."itemType" <> 'service'
          AND COALESCE(p."domainAttrs"->>'item_kind','tyre') <> 'scrap' AND bal.stock > 0
-         AND NOT EXISTS (SELECT 1 FROM recent r WHERE r."productId" = p.id)`, req.branchId, sinceIso)
+         AND NOT EXISTS (SELECT 1 FROM recent r WHERE r."productId" = p.id)
+         AND COALESCE(ls."lastSold"::timestamptz, bal."firstIn") < $2::date
+       ORDER BY "stockValue" DESC, p.id LIMIT $3 OFFSET $4`, req.branchId, sinceIso, qy.limit, qy.offset)
 
-    const cutoff = Date.now() - qy.days * 86_400_000
-    const dead = rows
-      .map((r) => {
-        const ref = r.lastSold ?? r.firstIn
-        const t = ref ? new Date(ref).getTime() : 0
-        return { ...r, idleDays: t ? Math.floor((Date.now() - t) / 86_400_000) : null, neverSold: !r.lastSold }
-      })
-      .filter((r) => r.idleDays != null && new Date(r.lastSold ?? r.firstIn).getTime() < cutoff)
-      .sort((a, b) => b.stockValue - a.stockValue)
+    const dead = rows.map((r) => {
+      const ref = r.lastSold ?? r.firstIn
+      const t = ref ? new Date(ref).getTime() : 0
+      const { deadCount, deadValue, ...row } = r
+      return { ...row, idleDays: t ? Math.floor((Date.now() - t) / 86_400_000) : null, neverSold: !r.lastSold }
+    })
     return {
       days: qy.days,
-      count: dead.length,
-      stockValue: Math.round(dead.reduce((s, r) => s + r.stockValue, 0) * 100) / 100,
+      count: rows[0]?.deadCount ?? 0,
+      stockValue: Math.round((rows[0]?.deadValue ?? 0) * 100) / 100,
+      // the totals above cover every dead tyre; the list is one page of them, biggest money first
+      limit: qy.limit, offset: qy.offset,
       data: dead,
     }
   })

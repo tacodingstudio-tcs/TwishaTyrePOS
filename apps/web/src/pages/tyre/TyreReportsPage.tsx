@@ -103,6 +103,7 @@ export function TyreReportsPage() {
               <>
                 <div className="p-5 border-b border-gray-100 text-sm text-gray-700">
                   <strong>{dead.data?.count ?? 0}</strong> item{dead.data?.count === 1 ? '' : 's'} not sold for {days}+ days · <strong>{inr(dead.data?.stockValue)}</strong> of stock at purchase cost
+                  {(dead.data?.count ?? 0) > (dead.data?.data ?? []).length && <span className="text-gray-400"> · showing the {(dead.data?.data ?? []).length} with the most money tied up</span>}
                 </div>
                 {(dead.data?.data ?? []).length === 0 ? <p className="p-8 text-center text-sm text-gray-500">Nothing is stuck. 🎉</p> : (
                   <table className="w-full text-sm">

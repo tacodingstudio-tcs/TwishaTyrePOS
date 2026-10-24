@@ -149,7 +149,46 @@ export const reportRoutes: FastifyPluginAsync = async (app) => {
       ? Prisma.sql`AND p."categoryId" = ${q.categoryId}::uuid`
       : Prisma.empty
 
-    const rows = await db.$queryRaw<Array<{
+    const page = z.object({
+      limit:  z.coerce.number().int().min(1).max(1000).default(200),
+      offset: z.coerce.number().int().min(0).default(0),
+    }).parse(req.query)
+
+    // One grouped pass over the ledger, then everything else is computed from that in SQL — a shop with tens of
+    // thousands of tyres used to send every product to the browser (20 MB); now only one page goes, and the totals
+    // and category rollup are computed in the database.
+    const statusFilter = q.zeroStockOnly ? Prisma.sql`AND qty <= 0`
+      : q.lowStockOnly ? Prisma.sql`AND qty <= low` : Prisma.empty
+    const withRows = Prisma.sql`
+      WITH led AS (
+        SELECT "productId", SUM(qty) AS qty,
+               MAX(CASE WHEN "txnType" = 'purchase' THEN "createdAt" END) AS lp,
+               MAX(CASE WHEN "txnType" = 'sale' THEN "createdAt" END)     AS ls
+          FROM stock_ledger WHERE "branchId" = ${branchId}::uuid GROUP BY "productId"),
+      rows AS (
+        SELECT p.id, p.name, p.sku, cat.name AS category, p.unit,
+               COALESCE(led.qty, 0)::float AS qty, p."lowStockQty"::float AS low,
+               p."purchasePrice"::float AS purchase_price, p."salePrice"::float AS sale_price,
+               (COALESCE(led.qty, 0) * COALESCE(p."purchasePrice", 0))::float AS cost_value,
+               (COALESCE(led.qty, 0) * p."salePrice")::float AS retail_value,
+               led.lp, led.ls
+          FROM products p
+          LEFT JOIN categories cat ON cat.id = p."categoryId"
+          LEFT JOIN led ON led."productId" = p.id
+         WHERE p."branchId" = ${branchId}::uuid AND p."isActive" = true AND p."trackStock" = true ${categoryFilter}),
+      f AS (SELECT * FROM rows WHERE true ${statusFilter})`
+
+    const [tot] = await db.$queryRaw<Array<{ n: number; oos: number; lowc: number; cost: number; retail: number }>>(Prisma.sql`
+      ${withRows}
+      SELECT COUNT(*)::int AS n, COUNT(*) FILTER (WHERE qty <= 0)::int AS oos,
+             COUNT(*) FILTER (WHERE qty > 0 AND qty <= low)::int AS lowc,
+             COALESCE(SUM(cost_value), 0)::float AS cost, COALESCE(SUM(retail_value), 0)::float AS retail FROM f`)
+    const cats = await db.$queryRaw<Array<{ category: string; cost: number; retail: number; items: number }>>(Prisma.sql`
+      ${withRows}
+      SELECT COALESCE(category, 'Uncategorised') AS category, SUM(cost_value)::float AS cost,
+             SUM(retail_value)::float AS retail, COUNT(*)::int AS items
+        FROM f GROUP BY 1 ORDER BY cost DESC`)
+    const list = await db.$queryRaw<Array<{
       product_id: string; name: string; sku: string | null
       category: string | null; unit: string
       qty_on_hand: number; low_stock_qty: number
@@ -157,77 +196,25 @@ export const reportRoutes: FastifyPluginAsync = async (app) => {
       cost_value: number; retail_value: number; potential_margin: number
       last_purchase_date: string | null; last_sale_date: string | null
       status: string
-    }>>`
-      SELECT
-        p.id::text                                          AS product_id,
-        p.name,
-        p.sku,
-        cat.name                                            AS category,
-        p.unit,
-        COALESCE(SUM(sl.qty), 0)::float                   AS qty_on_hand,
-        p."lowStockQty"::float                             AS low_stock_qty,
-        p."purchasePrice"::float                           AS purchase_price,
-        p."salePrice"::float                               AS sale_price,
-        COALESCE(SUM(sl.qty) * COALESCE(p."purchasePrice", 0), 0)::float AS cost_value,
-        COALESCE(SUM(sl.qty) * p."salePrice", 0)::float   AS retail_value,
-        COALESCE(
-          SUM(sl.qty) * (p."salePrice" - COALESCE(p."purchasePrice", 0)), 0
-        )::float                                           AS potential_margin,
-        MAX(CASE WHEN sl."txnType" = 'purchase'
-            THEN TO_CHAR(sl."createdAt",'YYYY-MM-DD') END) AS last_purchase_date,
-        MAX(CASE WHEN sl."txnType" = 'sale'
-            THEN TO_CHAR(sl."createdAt",'YYYY-MM-DD') END) AS last_sale_date,
-        CASE
-          WHEN COALESCE(SUM(sl.qty),0) <= 0                     THEN 'out_of_stock'
-          WHEN COALESCE(SUM(sl.qty),0) <= p."lowStockQty"       THEN 'low_stock'
-          ELSE                                                        'in_stock'
-        END                                                AS status
-      FROM products p
-      LEFT JOIN categories cat     ON cat.id  = p."categoryId"
-      LEFT JOIN stock_ledger sl    ON sl."productId" = p.id
-                                  AND sl."branchId"  = ${branchId}::uuid
-      WHERE p."branchId" = ${branchId}::uuid
-        AND p."isActive" = true
-        AND p."trackStock" = true
-        ${categoryFilter}
-      GROUP BY p.id, p.name, p.sku, cat.name, p.unit,
-               p."lowStockQty", p."purchasePrice", p."salePrice"
-      ORDER BY cost_value DESC
-    `
+    }>>(Prisma.sql`
+      ${withRows}
+      SELECT id::text AS product_id, name, sku, category, unit, qty AS qty_on_hand, low AS low_stock_qty,
+             purchase_price, sale_price, cost_value, retail_value,
+             (retail_value - cost_value)::float AS potential_margin,
+             TO_CHAR(lp, 'YYYY-MM-DD') AS last_purchase_date, TO_CHAR(ls, 'YYYY-MM-DD') AS last_sale_date,
+             CASE WHEN qty <= 0 THEN 'out_of_stock' WHEN qty <= low THEN 'low_stock' ELSE 'in_stock' END AS status
+        FROM f ORDER BY cost_value DESC, name LIMIT ${page.limit} OFFSET ${page.offset}`)
 
-    // Apply post-query JS filters (avoids SQL param type issues)
-    const filtered = rows.filter(r => {
-      if (q.lowStockOnly  && r.qty_on_hand > r.low_stock_qty) return false
-      if (q.zeroStockOnly && r.qty_on_hand > 0)               return false
-      return true
-    })
-
-    const totalCostValue   = filtered.reduce((s: number, r) => s + r.cost_value, 0)
-    const totalRetailValue = filtered.reduce((s: number, r) => s + r.retail_value, 0)
-    const outOfStock       = filtered.filter(r => r.status === 'out_of_stock').length
-    const lowStock         = filtered.filter(r => r.status === 'low_stock').length
-
-    // Category-wise rollup
-    const byCategoryMap = new Map<string, { cost: number; retail: number; items: number }>()
-    for (const r of filtered) {
-      const cat = r.category ?? 'Uncategorised'
-      const existing = byCategoryMap.get(cat) ?? { cost: 0, retail: 0, items: 0 }
-      byCategoryMap.set(cat, {
-        cost:   existing.cost   + r.cost_value,
-        retail: existing.retail + r.retail_value,
-        items:  existing.items  + 1,
-      })
-    }
-    const byCategory = Array.from(byCategoryMap.entries())
-      .map(([category, v]) => ({ category, ...v }))
-      .sort((a, b) => b.cost - a.cost)
+    const totalCostValue   = tot!.cost
+    const totalRetailValue = tot!.retail
+    const byCategory = cats.map((c) => ({ category: c.category, cost: c.cost, retail: c.retail, items: c.items }))
 
     return reply.send({
       as_of:              new Date().toISOString().slice(0, 10),
       summary: {
-        total_products:   filtered.length,
-        out_of_stock:     outOfStock,
-        low_stock:        lowStock,
+        total_products:   tot!.n,
+        out_of_stock:     tot!.oos,
+        low_stock:        tot!.lowc,
         total_cost_value:   Math.round(totalCostValue),
         total_retail_value: Math.round(totalRetailValue),
         potential_margin:   Math.round(totalRetailValue - totalCostValue),
@@ -236,7 +223,8 @@ export const reportRoutes: FastifyPluginAsync = async (app) => {
           : 0,
       },
       by_category: byCategory,
-      products:    filtered,
+      products:    list,
+      page: { limit: page.limit, offset: page.offset, total: tot!.n },
     })
   })
 
