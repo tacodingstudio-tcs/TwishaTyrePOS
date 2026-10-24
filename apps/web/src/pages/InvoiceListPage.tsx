@@ -25,6 +25,7 @@ const ALL_DOC_TYPE_TABS = [
   { key: 'purchase_invoice',label: 'Purchases',    b2bOnly: false },
   { key: 'quotation',       label: 'Quotations',   b2bOnly: true  },
   { key: 'credit_note',     label: 'Credit Notes', b2bOnly: true  },
+  { key: 'sale_return',     label: 'Returns',      b2bOnly: false },
 ]
 
 const TXN_BADGE: Record<string, string> = {
