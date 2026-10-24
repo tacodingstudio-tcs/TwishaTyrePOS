@@ -324,7 +324,10 @@ export function LoginPage() {
             )}
 
             <div>
-              <label className="label" htmlFor="login-pin">PIN</label>
+              <div className="flex items-baseline justify-between">
+                <label className="label" htmlFor="login-pin">4-digit PIN</label>
+                <span className="text-xs text-slate-400">signs in automatically</span>
+              </div>
               <PinBoxes value={pin} onChange={setPin} onComplete={(p) => { if (phone.length >= 10 && (!isStaff || bizPhone.length >= 10) && !loginMutation.isPending) loginMutation.mutate(p) }} />
             </div>
 
@@ -337,6 +340,9 @@ export function LoginPage() {
                 ? <><Loader2 className="w-4 h-4 animate-spin" /> Signing you in…</>
                 : <>Sign in <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" /></>}
             </button>
+            <p className="flex items-center justify-center gap-1.5 text-xs text-slate-400">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> Your PIN is never stored or shown
+            </p>
             {waking && (
               <p role="status" className="text-center text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                 The server was asleep and is waking up — this takes up to a minute. Please wait, you will be signed in automatically.
@@ -353,9 +359,6 @@ export function LoginPage() {
             </div>
           </div>
 
-          <p className="mt-4 flex items-center justify-center gap-1.5 text-xs text-gray-500">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> Your PIN is never stored or shown
-          </p>
           <div className="mt-6 flex justify-center"><PoweredByCard /></div>
         </div>
       </main>
