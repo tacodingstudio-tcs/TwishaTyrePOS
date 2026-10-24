@@ -60,9 +60,6 @@ function TyreArt({ className = '' }: { className?: string }) {
         </g>
       ))}
       <circle cx="200" cy="200" r="42" fill="#f8fafc" stroke="#4ade80" strokeWidth="3" />
-      {[0, 72, 144, 216, 288].map((a) => (
-        <circle key={a} cx={200 + 28 * Math.cos((a - 90) * Math.PI / 180)} cy={200 + 28 * Math.sin((a - 90) * Math.PI / 180)} r="3.2" fill="#86efac" />
-      ))}
       <image href="/twisha-main.png" x="178" y="172" width="44" height="58" className="tw-unspin" />
     </svg>
   )
