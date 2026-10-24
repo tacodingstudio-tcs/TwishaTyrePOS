@@ -14,16 +14,18 @@ import { PRODUCT_NAME } from '@/lib/branding'
 
 const CSS = `
 @keyframes tw-spin  { to { transform: rotate(360deg) } }
+@keyframes tw-unspin { to { transform: rotate(-360deg) } }
 @keyframes tw-float { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-9px) } }
 @keyframes tw-rise  { from { opacity: 0; transform: translateY(16px) } to { opacity: 1; transform: none } }
 @keyframes tw-glow  { 0%,100% { opacity: .55 } 50% { opacity: .9 } }
 @keyframes tw-sweep { from { background-position: -200% 0 } to { background-position: 200% 0 } }
 .tw-spin  { animation: tw-spin 70s linear infinite }
+.tw-unspin { animation: tw-unspin 70s linear infinite; transform-box: fill-box; transform-origin: center }
 .tw-float { animation: tw-float 6s ease-in-out infinite }
 .tw-rise  { animation: tw-rise .7s cubic-bezier(.2,.7,.2,1) both }
 .tw-glow  { animation: tw-glow 5s ease-in-out infinite }
 .tw-title { background: linear-gradient(100deg,#fff 20%,#86efac 45%,#fff 70%); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: tw-sweep 7s linear infinite }
-@media (prefers-reduced-motion: reduce) { .tw-spin,.tw-float,.tw-rise,.tw-glow,.tw-title { animation: none } }
+@media (prefers-reduced-motion: reduce) { .tw-spin,.tw-unspin,.tw-float,.tw-rise,.tw-glow,.tw-title { animation: none } }
 `
 
 /** The tyre: tread blocks, sidewall lettering, a five-spoke rim and a hub. Pure SVG. */
@@ -57,11 +59,11 @@ function TyreArt({ className = '' }: { className?: string }) {
           <circle cx="200" cy="120" r="5" fill="#bbf7d0" />
         </g>
       ))}
-      <circle cx="200" cy="200" r="42" fill="#052e16" stroke="#4ade80" strokeWidth="3" />
+      <circle cx="200" cy="200" r="42" fill="#f8fafc" stroke="#4ade80" strokeWidth="3" />
       {[0, 72, 144, 216, 288].map((a) => (
         <circle key={a} cx={200 + 28 * Math.cos((a - 90) * Math.PI / 180)} cy={200 + 28 * Math.sin((a - 90) * Math.PI / 180)} r="3.2" fill="#86efac" />
       ))}
-      <text x="200" y="212" textAnchor="middle" fontSize="34" fontWeight="800" fill="#f0fdf4">T</text>
+      <image href="/twisha-main.png" x="178" y="172" width="44" height="58" className="tw-unspin" />
     </svg>
   )
 }
