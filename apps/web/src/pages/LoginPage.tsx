@@ -6,9 +6,9 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { authApi } from '@/lib/api'
 import { useAuthStore } from '@/store/auth.store'
-import { Loader2, ShieldCheck, BellRing, Phone, ArrowRight, Check } from 'lucide-react'
+import { Loader2, CircleDot, ShieldCheck, BellRing, Phone, ArrowRight, Check } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { PoweredBy } from '@/components/PoweredBy'
+import { PoweredByCard } from '@/components/PoweredBy'
 import { PRODUCT_NAME } from '@/lib/branding'
 
 const CSS = `
@@ -217,7 +217,7 @@ export function LoginPage() {
 
         <header className="relative tw-rise">
           <div className="inline-flex items-center gap-3">
-            <span className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-300 to-emerald-600 text-emerald-950 flex items-center justify-center font-extrabold text-xl shadow-lg shadow-emerald-500/30">T</span>
+            <img src="/logo.png" alt="" className="w-12 h-12 rounded-full shadow-lg shadow-black/30" />
             <span className="text-lg font-semibold tracking-tight">{PRODUCT_NAME}</span>
           </div>
         </header>
@@ -260,28 +260,34 @@ export function LoginPage() {
           </div>
         </div>
 
-        <footer className="relative text-xs text-white/55 tw-rise" style={{ animationDelay: '.7s' }}>
-          Powered by{' '}
-          <a href="https://www.twishaconsultancyservices.com/" target="_blank" rel="noopener noreferrer"
-            className="font-semibold text-white/90 hover:text-white hover:underline">Twisha Consultancy Services</a>
-        </footer>
+        <div />
       </aside>
 
       {/* ══ Sign in ════════════════════════════════════════════════════════════════ */}
-      <main className="relative flex items-center justify-center px-5 py-10 bg-white lg:rounded-l-[2.5rem] lg:-ml-8 z-10 shadow-[-24px_0_60px_rgba(0,0,0,0.25)]">
-        <div className="w-full max-w-sm tw-rise">
+      <main className="relative flex items-center justify-center px-5 py-10 lg:rounded-l-[2.5rem] lg:-ml-8 z-10 shadow-[-24px_0_60px_rgba(0,0,0,0.25)] overflow-hidden"
+        style={{ background: 'linear-gradient(135deg, #ffffff 0%, #f0fdf4 55%, #fefce8 100%)' }}>
+        <svg className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true" preserveAspectRatio="none" viewBox="0 0 400 600" fill="none">
+          <path d="M-20 520 C 120 440, 220 560, 420 470" stroke="#fcd34d" strokeWidth="1.5" strokeDasharray="7 9" opacity=".7" />
+          <path d="M-20 90 C 140 150, 260 40, 420 110" stroke="#86efac" strokeWidth="1.5" strokeDasharray="7 9" opacity=".7" />
+        </svg>
+        <div className="relative w-full max-w-md tw-rise">
 
-          {/* small screens: compact brand */}
-          <div className="lg:hidden text-center mb-8">
-            <span className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-emerald-300 to-emerald-600 text-emerald-950 flex items-center justify-center font-extrabold text-2xl shadow-lg shadow-emerald-500/30">T</span>
-            <div className="mt-3 text-2xl font-extrabold text-gray-900">{PRODUCT_NAME}</div>
-            <div className="text-xs text-gray-500">Every bill. Every tyre. Every rupee.</div>
+          <img src="/twisha-pos-logo.png" alt={PRODUCT_NAME} className="h-14 w-auto mx-auto mb-6" />
+          <div className="rounded-3xl bg-white shadow-xl shadow-emerald-900/10 ring-1 ring-black/5 overflow-hidden">
+            <div className="h-1.5 bg-gradient-to-r from-amber-300 via-lime-300 to-emerald-400" />
+            <div className="px-7 pt-7 pb-8 sm:px-9">
+
+          <div className="flex items-center gap-4">
+            <span className="w-14 h-14 rounded-2xl bg-gray-900 text-white flex items-center justify-center shrink-0 shadow-md">
+              <CircleDot className="w-7 h-7" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-amber-600">{greeting} 👋</p>
+              <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight leading-tight">Welcome back</h2>
+            </div>
           </div>
-
-          <p className="text-sm font-semibold text-primary-600">{greeting} 👋</p>
-          <h2 className="mt-1 text-3xl font-extrabold text-gray-900 tracking-tight">Sign in to {PRODUCT_NAME}</h2>
-          <p className="text-sm text-gray-500 mt-2">
-            {isStaff ? 'Staff sign-in — add the shop’s registered number too.' : 'Your phone number and 4-digit PIN. That is all.'}
+          <p className="text-sm text-gray-500 mt-4">
+            {isStaff ? 'Staff sign-in — add the shop’s registered number too.' : 'Sign in to run your tyre sales, fitting and warranties.'}
           </p>
 
           <form onSubmit={(e) => { e.preventDefault(); submit() }} className="mt-7 space-y-5">
@@ -342,7 +348,13 @@ export function LoginPage() {
             <Link to="/register" className="text-primary-600 font-semibold hover:underline">Create your {PRODUCT_NAME} account</Link>
           </div>
 
-          <PoweredBy className="text-center mt-6 lg:hidden" />
+            </div>
+          </div>
+
+          <p className="mt-4 flex items-center justify-center gap-1.5 text-xs text-gray-500">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> Your PIN is never stored or shown
+          </p>
+          <div className="mt-6 flex justify-center"><PoweredByCard /></div>
         </div>
       </main>
     </div>

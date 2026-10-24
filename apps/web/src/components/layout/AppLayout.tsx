@@ -128,9 +128,7 @@ export function AppLayout() {
 
         {/* Logo / business name */}
         <div className="h-16 flex items-center gap-2 px-5 border-b border-gray-200">
-          <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center">
-            <CircleDot className="w-4 h-4 text-white" />
-          </div>
+          <img src="/logo.png" alt="" className="w-9 h-9 rounded-full flex-shrink-0" />
           <div className="overflow-hidden">
             <div className="text-sm font-semibold text-gray-900 truncate">{tenant?.name ?? PRODUCT_NAME}</div>
             <div className="text-xs text-gray-500 truncate">{branch?.name}</div>

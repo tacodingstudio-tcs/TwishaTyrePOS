@@ -10,7 +10,7 @@ const URL_ = (import.meta.env['VITE_POWERED_BY_URL'] as string | undefined)?.tri
 export function PoweredByBadge() {
   const inner = (
     <>
-      <span className="w-6 h-6 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 text-white text-[10px] font-bold flex items-center justify-center shrink-0">T</span>
+      <img src="/twisha-mark.png" alt="" className="w-6 h-6 rounded-full shrink-0" />
       <span className="flex flex-col min-w-0">
         <span className="text-[10px] leading-tight text-gray-400">Powered by</span>
         <span className="text-xs font-semibold leading-tight text-gray-700 group-hover:text-primary-700 truncate">{NAME}</span>
@@ -32,4 +32,21 @@ export function PoweredBy({ className = '' }: { className?: string }) {
         : <span className="font-medium text-gray-500">{NAME}</span>}
     </p>
   )
+}
+
+/** Larger pill for the sign-in page: Twisha mark, small-caps "Powered by", then the name. */
+export function PoweredByCard({ className = '' }: { className?: string }) {
+  const inner = (
+    <>
+      <img src="/twisha-mark.png" alt="" className="w-10 h-10 rounded-full shrink-0" />
+      <span className="flex flex-col text-left">
+        <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-gray-400">Powered by</span>
+        <span className="text-sm font-semibold text-gray-800 group-hover:text-primary-700">{NAME}</span>
+      </span>
+    </>
+  )
+  const cls = `group inline-flex items-center gap-3 pl-2 pr-5 py-2 rounded-full border border-gray-200 bg-white shadow-sm hover:border-primary-300 transition-colors ${className}`
+  return URL_
+    ? <a href={URL_} target="_blank" rel="noopener noreferrer" className={cls} title={`Powered by ${NAME}`}>{inner}</a>
+    : <span className={cls}>{inner}</span>
 }
