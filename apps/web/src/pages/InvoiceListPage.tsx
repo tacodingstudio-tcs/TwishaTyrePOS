@@ -18,17 +18,13 @@ function formatINR(n: number) {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n)
 }
 
+// A tyre counter shop works with these; proforma, orders, challans and debit notes stay in the system but off this screen.
 const ALL_DOC_TYPE_TABS = [
   { key: '',                label: 'All',          b2bOnly: false },
   { key: 'sale_invoice',    label: 'Sales',        b2bOnly: false },
   { key: 'purchase_invoice',label: 'Purchases',    b2bOnly: false },
   { key: 'quotation',       label: 'Quotations',   b2bOnly: true  },
-  { key: 'proforma',        label: 'Proforma',     b2bOnly: true  },
-  { key: 'sales_order',     label: 'Orders',       b2bOnly: true  },
-  { key: 'delivery_challan',label: 'Challans',     b2bOnly: true  },
   { key: 'credit_note',     label: 'Credit Notes', b2bOnly: true  },
-  { key: 'debit_note',      label: 'Debit Notes',  b2bOnly: true  },
-  { key: 'sale_return',     label: 'Returns',      b2bOnly: false },
 ]
 
 const TXN_BADGE: Record<string, string> = {

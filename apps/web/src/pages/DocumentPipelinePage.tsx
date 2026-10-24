@@ -20,6 +20,7 @@ const DOMAIN_TABS: Record<string, string[]> = {
   sweet:         ['quotation','sales_order'],
   jewellery:     ['quotation','proforma'],
   automobile:    ['quotation','proforma'],
+  tyre:          ['quotation'],
   agri:          ['quotation','sales_order','delivery_challan'],
   manufacturing: ['quotation','sales_order','delivery_challan'],
   construction:  ['quotation','proforma'],

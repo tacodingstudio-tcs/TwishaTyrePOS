@@ -4,9 +4,9 @@ import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/store/auth.store'
 import { authApi } from '@/lib/api'
 import {
-  LayoutDashboard, FileText, Warehouse, Users, LogOut, Plus, Sparkles, BarChart2, Building2, ShoppingCart,
+  LayoutDashboard, FileText, Warehouse, Users, LogOut, Plus, BarChart2, Building2, ShoppingCart,
   ClipboardCheck, ArrowLeftRight, Package, ChevronDown, TrendingDown, UserCheck, GitBranch, Clock,
-  RefreshCw, Wallet, TrendingUp, MessageCircle, ReceiptText, LineChart, Container,
+  Wallet, TrendingUp, MessageCircle, ReceiptText, LineChart, Container,
   CircleDot, Car, ShieldCheck, BellRing, Wrench,
 } from 'lucide-react'
 import { usePendingApprovals, useBranches } from '@/hooks/useApi'
@@ -50,9 +50,6 @@ const AFTERSALES: NavItem[] = [
 // rarely used: folded under "More"
 const OTHER: NavItem[] = [
   { to: '/pipeline',  label: 'Quotations', icon: GitBranch },
-  { to: '/contracts', label: 'Contracts',  icon: RefreshCw },
-  { to: '/broadcast', label: 'Broadcast',  icon: MessageCircle },
-  { to: '/ai',        label: 'AI Assistant', icon: Sparkles },
 ]
 
 const INVENTORY_ITEMS = [
