@@ -1,9 +1,9 @@
 import { PRODUCT_NAME } from '@/lib/branding'
 
-/** The Twisha POS logo. `light` is for the dark hero: the logo's dark-green lettering needs a white plate. */
+/** The Twisha POS logo (white lettering). `light` = on the dark hero as is; otherwise on its own dark plate. */
 export function BrandLockup({ tone = 'dark', className = '' }: { tone?: 'dark' | 'light'; className?: string }) {
-  const img = <img src="/twisha-pos-logo.png" alt={PRODUCT_NAME} className="h-14 w-auto" />
+  const img = <img src="/twisha-pos-logo-full.png" alt={PRODUCT_NAME} className="h-16 w-auto" />
   return tone === 'light'
-    ? <div className={`inline-flex rounded-2xl bg-white px-5 py-3 shadow-xl shadow-black/40 ring-4 ring-white/15 ${className}`}>{img}</div>
-    : <div className={`inline-flex ${className}`}>{img}</div>
+    ? <div className={`inline-flex ${className}`}>{img}</div>
+    : <div className={`inline-flex rounded-2xl bg-gradient-to-br from-emerald-900 to-emerald-950 px-5 py-3 shadow-lg ${className}`}>{img}</div>
 }
