@@ -222,10 +222,16 @@ export const tyreVehicleRoutes: FastifyPluginAsync = async (app) => {
     if (expired && body.outcome !== 'rejected') {
       throw httpError(422, `Warranty ended on ${ymd(w.warrantyUntil)} — record the claim as "rejected", or void and re-issue if you are honouring it`)
     }
-    return updateRow(req, 'tyre_warranty', id, {
-      status: 'claimed', claimedAt: new Date(), claimOutcome: body.outcome, claimNotes: body.notes,
-      claimAmount: body.claimAmount ?? null,
-    })
+    // One atomic step that only succeeds while the row is still 'active': two taps on "Record claim" at the same moment
+    // (or two counters) used to both pass the checks above and the second silently overwrote the first.
+    const claimed = await q1<any>(req,
+      `UPDATE ${tbl(req.schemaName, 'tyre_warranty')}
+          SET status = 'claimed', "claimedAt" = NOW(), "claimOutcome" = $3, "claimNotes" = $4, "claimAmount" = $5, "updatedAt" = NOW()
+        WHERE id = $1::uuid AND "branchId" = $2::uuid AND status = 'active'
+        RETURNING *`,
+      id, req.branchId, body.outcome, body.notes, body.claimAmount ?? null)
+    if (!claimed) throw httpError(409, 'A claim has already been recorded on this tyre')
+    return claimed
   })
 
   // POST /api/tyre/warranty/:id/void { reason } — returned tyre / wrong entry; frees the serial number

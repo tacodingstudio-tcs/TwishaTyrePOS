@@ -107,9 +107,14 @@ const tenDigits = (s: string) => {
   return d.length === 12 && d.startsWith('91') ? d.slice(2) : d.length === 11 && d.startsWith('0') ? d.slice(1) : d
 }
 
+/** A calendar-month step that stays inside the target month: 31 Aug + 6 months is 28 Feb, not 3 March (a warranty must not run longer than it says). */
 function addMonths(dateStrYmd: string, months: number): string {
   const d = new Date(`${dateStrYmd}T00:00:00Z`)
+  const day = d.getUTCDate()
+  d.setUTCDate(1)
   d.setUTCMonth(d.getUTCMonth() + months)
+  const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate()
+  d.setUTCDate(Math.min(day, lastDay))
   return d.toISOString().slice(0, 10)
 }
 

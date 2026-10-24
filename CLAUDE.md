@@ -76,7 +76,8 @@ to exercise replay behaviour.
 
 * `apps/api/e2e/crawl.ts` opens every screen as owner / manager / viewer and on a phone-size screen and reports
   crashes, stuck loaders, failed requests and console errors. `apps/api/e2e/flow-sale.ts` drives the real New Sale
-  screen (bill, double-tap, empty bill, credit with no customer, expired session, read-only user).
+  screen (bill, double-tap, empty bill, credit with no customer, expired session, read-only user);
+  `e2e/flow-warranty.ts` walks sale-with-serial → Warranty page → claim → void; `e2e/size-picker.ts` checks the size lists.
   Both need the API (:3200), the web app (:5175) and the demo shop: `npx tsx e2e/crawl.ts`.
 * `src/__tests__/tyre-workbook.test.ts` replays the shop's paper book (`Shakti Bill Book.xlsx`, CAR + Two Wheel) and
   checks totals / taxable / GST against the sheet's own formulas. The data file holds real customers, so it lives in
