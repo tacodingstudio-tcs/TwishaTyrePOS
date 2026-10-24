@@ -216,10 +216,7 @@ export function LoginPage() {
         </div>
 
         <header className="relative tw-rise">
-          <div className="inline-flex items-center gap-3">
-            <img src="/logo.png" alt="" className="w-12 h-12 rounded-full shadow-lg shadow-black/30" />
-            <span className="text-lg font-semibold tracking-tight">{PRODUCT_NAME}</span>
-          </div>
+          <img src="/twisha-pos-logo-light.png" alt={PRODUCT_NAME} className="h-16 w-auto" />
         </header>
 
         <div className="relative max-w-xl">
@@ -264,7 +261,7 @@ export function LoginPage() {
       </aside>
 
       {/* ══ Sign in ════════════════════════════════════════════════════════════════ */}
-      <main className="relative flex items-center justify-center px-5 py-10 lg:rounded-l-[2.5rem] lg:-ml-8 z-10 shadow-[-24px_0_60px_rgba(0,0,0,0.25)] overflow-hidden"
+      <main className="relative flex items-center justify-center px-5 py-10 z-10 overflow-hidden"
         style={{ background: 'linear-gradient(135deg, #ffffff 0%, #f0fdf4 55%, #fefce8 100%)' }}>
         <svg className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true" preserveAspectRatio="none" viewBox="0 0 400 600" fill="none">
           <path d="M-20 520 C 120 440, 220 560, 420 470" stroke="#fcd34d" strokeWidth="1.5" strokeDasharray="7 9" opacity=".7" />
@@ -272,7 +269,7 @@ export function LoginPage() {
         </svg>
         <div className="relative w-full max-w-md tw-rise">
 
-          <img src="/twisha-pos-logo.png" alt={PRODUCT_NAME} className="h-14 w-auto mx-auto mb-6" />
+          <img src="/twisha-pos-logo.png" alt={PRODUCT_NAME} className="h-12 w-auto mx-auto mb-6 lg:hidden" />
           <div className="rounded-3xl bg-white shadow-xl shadow-emerald-900/10 ring-1 ring-black/5 overflow-hidden">
             <div className="h-1.5 bg-gradient-to-r from-amber-300 via-lime-300 to-emerald-400" />
             <div className="px-7 pt-7 pb-8 sm:px-9">
