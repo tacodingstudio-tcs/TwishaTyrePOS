@@ -39,11 +39,10 @@ export function PoweredByCard({ className = '' }: { className?: string }) {
   const inner = (
     <>
       <span className="text-gray-500">Powered by</span>{' '}
-      <span className="font-bold text-primary-700 transition-colors duration-200 group-hover:text-primary-800
-        bg-gradient-to-r from-primary-500 to-emerald-400 bg-no-repeat bg-[length:100%_2px] bg-[position:0_100%] pb-0.5">{NAME}</span>
+      <span className="font-bold text-primary-700 transition-colors duration-200 group-hover:text-primary-800">{NAME}</span>
     </>
   )
-  const cls = `group inline-block text-sm text-center transition-transform duration-200 hover:-translate-y-0.5 ${className}`
+  const cls = `group inline-block text-sm text-center no-underline hover:no-underline ${className}`
   return URL_
     ? <a href={URL_} target="_blank" rel="noopener noreferrer" className={cls} title={`Powered by ${NAME}`}>{inner}</a>
     : <span className={cls}>{inner}</span>
