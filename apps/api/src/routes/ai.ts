@@ -5,7 +5,7 @@
 
 import type { FastifyPluginAsync } from 'fastify'
 import { cacheKey, getOrSet } from '../lib/cache.js'
-import { redis } from '../lib/redis.js'
+import { redisFast as redis } from '../lib/redis.js'
 import { z } from 'zod'
 import { scanBillImage } from '../services/ai/ocrScanner.js'
 import { generateDashboardInsight, getReorderSuggestions } from '../services/ai/insights.js'

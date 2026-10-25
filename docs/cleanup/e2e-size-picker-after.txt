@@ -1,0 +1,7 @@
+opened with button: Add Tyre / Item | size lists present: true
+after picking 155 / No profile / 13 → Size:
+155 R13
+after switching profile to 65 → Size:
+155/65 R13
+typed "155 R13 LT" → Saved as
+155 R13

@@ -5,7 +5,7 @@
 // tenant's data is isolated and a whole tenant's cache can be flushed
 // with a single SCAN + DEL on `{schemaName}:*`.
 
-import { redis } from './redis.js'
+import { redisFast as redis } from './redis.js'
 
 /**
  * Build a cache key scoped to a specific tenant branch.

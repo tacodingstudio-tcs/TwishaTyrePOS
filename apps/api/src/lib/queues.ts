@@ -15,3 +15,16 @@ export const whatsappQueue = new Queue('whatsapp-send', {
     removeOnFail:     { count: 100 },
   },
 })
+
+/** Add a job, but never wait on a dead Redis: rejects after `ms` so the caller can report "queue unavailable". */
+export async function addJob(queue: Queue, name: string, data: unknown, ms = 2500): Promise<void> {
+  let timer: NodeJS.Timeout | undefined
+  try {
+    await Promise.race([
+      queue.add(name, data as never),
+      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('The message queue is not reachable right now')), ms) }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}

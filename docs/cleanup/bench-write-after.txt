@@ -1,0 +1,3 @@
+sequential (1 counter) n=25 ok=25  p50=80ms  p95=105ms  max=116ms  codes={"201":25}
+10 counters at once    n=40 ok=40  p50=354ms  p95=382ms  max=383ms  codes={"201":40}
+throughput under burst: 26.8 bills/s

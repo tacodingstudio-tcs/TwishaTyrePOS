@@ -23,7 +23,7 @@ import {
 import { DOMAIN_REGISTRY } from '@billing/domain-registry'
 import { voidWarrantyForInvoice, voidWarrantyForReturn } from '../lib/tyre-helpers.js'
 import { withIdempotency, IdempotencyConflictError } from '../lib/idempotency.js'
-import { whatsappQueue } from '../lib/queues.js'
+import { whatsappQueue, addJob } from '../lib/queues.js'
 import { sendReceiptEmail } from '../services/email.service.js'
 
 export const invoiceRoutes: FastifyPluginAsync = async (app) => {
@@ -618,16 +618,20 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
       const phone = partyPhone.replace(/\D/g, '')
       const e164  = phone.startsWith('91') ? phone : `91${phone}`
 
-      await whatsappQueue.add('invoice_share', {
-        type:         'invoice_share',
-        invoiceId:    id,
-        tenantId:     req.schemaName,
-        toPhone:      e164,
-        partyName,
-        invoiceNo:    (invoice as any).number,
-        amount:       Number((invoice as any).grandTotal),
-        businessName,
-      })
+      try {
+        await addJob(whatsappQueue, 'invoice_share', {
+          type:         'invoice_share',
+          invoiceId:    id,
+          tenantId:     req.schemaName,
+          toPhone:      e164,
+          partyName,
+          invoiceNo:    (invoice as any).number,
+          amount:       Number((invoice as any).grandTotal),
+          businessName,
+        })
+      } catch {
+        return reply.code(503).send({ error: 'WhatsApp sending is unavailable right now. Please try again in a few minutes.' })
+      }
 
       return reply.send({ ok: true, channel: 'whatsapp', to: e164 })
     }
