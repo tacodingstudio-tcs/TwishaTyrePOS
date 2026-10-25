@@ -6,7 +6,8 @@ import { useMemo, useState } from 'react'
 import { localIso, localMonth } from '@/lib/dates'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { UserPlus, Wallet, CalendarCheck, Users } from 'lucide-react'
+import { UserPlus, Wallet, CalendarCheck, Users, ChevronDown } from 'lucide-react'
+import { useEffect, useRef } from 'react'
 import { tyreApi, apiError } from '@/lib/api'
 import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -155,15 +156,15 @@ function Payroll() {
                     <td className="p-3 text-right text-green-700">{r.paid ? inr(r.paid) : '—'}</td>
                     <td className={`p-3 text-right font-semibold ${r.due > 0 ? 'text-red-600' : 'text-gray-400'}`}>{inr(r.due)}</td>
                     <td className="p-3">
-                      <div className="flex gap-1 justify-end flex-wrap">
-                        <button type="button" className="btn-primary text-xs px-2 py-1" disabled={r.due <= 0} onClick={() => setDlg({ row: r, kind: 'pay' })}>Pay</button>
-                        <button type="button" className="btn-ghost border border-gray-200 text-xs px-2 py-1" onClick={() => setDlg({ row: r, kind: 'advance' })}>Advance</button>
-                        <button type="button" className="btn-ghost border border-gray-200 text-xs px-2 py-1" onClick={() => setOt(r)}>Overtime</button>
-                        <button type="button" className="btn-ghost border border-gray-200 text-xs px-2 py-1" onClick={() => setDlg({ row: r, kind: 'bonus' })}>Bonus</button>
-                        <button type="button" className="btn-ghost border border-gray-200 text-xs px-2 py-1" onClick={() => setDlg({ row: r, kind: 'deduction' })}>Deduct</button>
-                        {r.advanceOutstanding > 0 && (
-                          <button type="button" className="btn-ghost border border-gray-200 text-xs px-2 py-1" onClick={() => setDlg({ row: r, kind: 'recovery' })}>Recover advance</button>
-                        )}
+                      <div className="flex gap-2 justify-end items-center">
+                        <button type="button" className="btn-primary text-xs px-3 py-1.5" disabled={r.due <= 0} onClick={() => setDlg({ row: r, kind: 'pay' })}>Pay</button>
+                        <RowMenu label="More" items={[
+                          { label: 'Give advance', onClick: () => setDlg({ row: r, kind: 'advance' }) },
+                          ...(r.advanceOutstanding > 0 ? [{ label: `Recover advance (${inr(r.advanceOutstanding)})`, onClick: () => setDlg({ row: r, kind: 'recovery' as const }) }] : []),
+                          { label: 'Add overtime', onClick: () => setOt(r) },
+                          { label: 'Add bonus', onClick: () => setDlg({ row: r, kind: 'bonus' }) },
+                          { label: 'Deduction', onClick: () => setDlg({ row: r, kind: 'deduction' }) },
+                        ]} />
                       </div>
                     </td>
                   </tr>
@@ -354,5 +355,44 @@ function OvertimeDialog({ month, row, onClose, onChanged }: { month: string; row
         <div className="flex justify-end"><button type="button" className="btn-ghost" onClick={onClose}>Done</button></div>
       </div>
     </div>
+  )
+}
+
+
+/** A small drop-down for a row's less-used actions. The list is positioned on screen (fixed), so a scrolling table never clips it. */
+function RowMenu({ label, items }: { label: string; items: Array<{ label: string; onClick: () => void }> }) {
+  const [at, setAt] = useState<{ top: number; right: number } | null>(null)
+  const btn = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (!at) return
+    const close = () => setAt(null)
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
+    window.addEventListener('scroll', close, true); window.addEventListener('resize', close); window.addEventListener('keydown', key)
+    return () => { window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close); window.removeEventListener('keydown', key) }
+  }, [at])
+  const toggle = () => {
+    if (at) return setAt(null)
+    const r = btn.current!.getBoundingClientRect()
+    const below = r.bottom + 6
+    setAt({ top: below + items.length * 38 + 8 > innerHeight ? Math.max(8, r.top - items.length * 38 - 14) : below, right: Math.max(8, innerWidth - r.right) })
+  }
+  return (
+    <>
+      <button ref={btn} type="button" aria-haspopup="menu" aria-expanded={!!at} onClick={toggle}
+        className="btn-ghost border border-gray-200 text-xs px-2.5 py-1.5 inline-flex items-center gap-1 whitespace-nowrap">{label}<ChevronDown className="w-3.5 h-3.5" /></button>
+      {at && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setAt(null)} />
+          <ul role="menu" className="fixed z-50 min-w-44 bg-white border border-gray-200 rounded-lg shadow-lg py-1" style={{ top: at.top, right: at.right }}>
+            {items.map((it) => (
+              <li key={it.label} role="none">
+                <button type="button" role="menuitem" className="w-full text-left text-sm px-3 py-2 hover:bg-gray-50 text-gray-700"
+                  onClick={() => { setAt(null); it.onClick() }}>{it.label}</button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </>
   )
 }
