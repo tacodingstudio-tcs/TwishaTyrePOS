@@ -612,32 +612,6 @@ export const brandApi = {
     api.patch(`/brands/${id}`, data).then((r) => r.data),
 }
 
-export const contractApi = {
-  list: (params?: Record<string, unknown>) =>
-    api.get('/contracts', { params }).then((r) => r.data),
-
-  get: (id: string) =>
-    api.get(`/contracts/${id}`).then((r) => r.data),
-
-  create: (data: unknown) =>
-    api.post('/contracts', data).then((r) => r.data),
-
-  update: (id: string, data: unknown) =>
-    api.patch(`/contracts/${id}`, data).then((r) => r.data),
-
-  pause: (id: string) =>
-    api.post(`/contracts/${id}/pause`).then((r) => r.data),
-
-  resume: (id: string) =>
-    api.post(`/contracts/${id}/resume`).then((r) => r.data),
-
-  cancel: (id: string) =>
-    api.delete(`/contracts/${id}`).then((r) => r.data),
-
-  generateInvoice: (id: string) =>
-    api.post(`/contracts/${id}/generate-invoice`).then((r) => r.data),
-}
-
 export const advanceApi = {
   list: (params?: Record<string, unknown>) =>
     api.get('/invoices/advances', { params }).then((r) => r.data),

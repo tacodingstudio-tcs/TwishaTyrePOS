@@ -24,7 +24,6 @@ import { ReportsPage } from './pages/ReportsPage'
 import { StaffPage } from './pages/StaffPage'
 import DocumentPipelinePage from './pages/DocumentPipelinePage'
 import ApprovalsPage from './pages/ApprovalsPage'
-import ContractsPage from './pages/ContractsPage'
 import AdvancesPage from './pages/AdvancesPage'
 import GRNPage from './pages/inventory/GRNPage'
 import AgingPage from './pages/AgingPage'
@@ -94,7 +93,6 @@ export default function App() {
           <Route path="/staff" element={<StaffPage />} />
           <Route path="/pipeline" element={<DocumentPipelinePage />} />
           <Route path="/approvals" element={<ApprovalsPage />} />
-          <Route path="/contracts" element={<ContractsPage />} />
           <Route path="/advances" element={<AdvancesPage />} />
           <Route path="/inventory/grn" element={<GRNPage />} />
           <Route path="/aging" element={<AgingPage />} />

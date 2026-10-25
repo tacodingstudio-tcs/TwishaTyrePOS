@@ -7,7 +7,7 @@ import toast from 'react-hot-toast'
 import {
   invoiceApi, productApi, partyApi, stockApi, tenantApi, aiApi,
   supplierApi, purchaseOrderApi, grnApi, stockAdjustmentApi, stockTransferApi, stockSummaryApi,
-  expenseApi, branchApi, analyticsApi, reportsApi, staffApi, usersApi, contractApi, advanceApi, approvalApi, discountRulesApi, } from '@/lib/api'
+  expenseApi, branchApi, analyticsApi, reportsApi, staffApi, usersApi, advanceApi, approvalApi, discountRulesApi, } from '@/lib/api'
 import { useAuthStore } from '@/store/auth.store'
 
 // ── Query keys ──────────────────────────────────────────────────────────────
@@ -982,53 +982,6 @@ export function useActivateUser() {
     mutationFn: (id: string) => usersApi.activate(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); toast.success('User activated') },
     onError: (err: any) => toast.error(err?.response?.data?.error ?? 'Failed to activate user'),
-  })
-}
-
-// ── Contracts ─────────────────────────────────────────────────────────────────
-
-export function useContracts(params?: Record<string, unknown>) {
-  return useQuery({
-    queryKey: ['contracts', params],
-    queryFn:  () => contractApi.list(params),
-  })
-}
-
-export function useContract(id: string) {
-  return useQuery({
-    queryKey: ['contract', id],
-    queryFn:  () => contractApi.get(id),
-    enabled:  !!id,
-  })
-}
-
-export function useCreateContract() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: contractApi.create,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['contracts'] }); toast.success('Contract created') },
-    onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed'),
-  })
-}
-
-export function useUpdateContract() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id, ...data }: { id: string; [k: string]: unknown }) => contractApi.update(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['contracts'] }); toast.success('Contract updated') },
-  })
-}
-
-export function useGenerateContractInvoice() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (id: string) => contractApi.generateInvoice(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['contracts'] })
-      qc.invalidateQueries({ queryKey: ['invoices'] })
-      toast.success('Invoice generated')
-    },
-    onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Failed'),
   })
 }
 
