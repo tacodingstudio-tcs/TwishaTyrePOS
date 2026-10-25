@@ -12,7 +12,7 @@ docker compose -f docker/docker-compose.yml up -d postgres redis   # PG :5435, R
 cp .env.example apps/api/.env && pnpm db:migrate:prod
 pnpm --filter @billing/api dev      # API :3200        pnpm --filter @billing/web dev   # Web :5175
 pnpm seed                           # demo shop: owner 9200000001 / 1111
-pnpm test:api                       # 197 integration tests (3 suites) — needs the API running
+pnpm test:api                       # ~380 integration tests (14 suites) — needs the API running
 pnpm provision:all                  # re-apply tenant DDL to existing tenants after tyre-ddl.ts changes
 (cd apps/api && npx tsc --noEmit)   # typecheck (tests are excluded from the build; ts-jest checks them)
 (cd apps/web && npx tsc --noEmit)
@@ -58,6 +58,15 @@ pnpm provision:all                  # re-apply tenant DDL to existing tenants af
 13. NUL characters in any query/body string are rejected up front (`preValidation` hook) — Postgres would
     otherwise throw a 500.
 14. Automatic WhatsApp sends are opt-in per business (`notify_*` in branch config). Never switch one on by default.
+15. **Redis must never block a request.** Request paths (cache, sign-in counter, ai insight flag) use `redisFast` from
+    `lib/redis.ts` (fails in ~1.5 s, no offline queue); only the BullMQ workers use the patient `redis` client. Queue
+    producers go through `addJob()` (time-boxed) and report "queue unreachable" instead of hanging. Every Redis use must
+    fail open: `e2e/redis-down.sh` stops Redis and checks sign-in, a sale, PDF, Excel, charts still answer.
+16. **Tyre-only code base.** Removed on purpose (see `docs/cleanup/REPORT.md`): Contracts, generic staff attendance/shifts,
+    the Broadcast page, Razorpay payment links/webhook, the AI tools page and its endpoints, the Chromium PDF queue/worker
+    (`@billing/pdf`), the daily AI reminder drafts. Bills/quotations/documents are PDFs built by pdfkit on demand
+    (`/api/tyre/invoices/:id/pdf`) — do not reintroduce a queue for them. `src/__tests__/tyre-cleanup.test.ts` pins the removed routes to 404.
+    The empty tables/columns of the other verticals stay in the tenant schema on purpose (zero runtime cost, no live migration).
 
 ## Testing notes
 
