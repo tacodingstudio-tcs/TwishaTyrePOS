@@ -155,6 +155,10 @@ export interface InvoicePdfData {
   copyLabel?: 'Original' | 'Duplicate' | 'Triplicate'
   /** false = a cash memo with no GST; printed as "Bill", not "Tax Invoice" */
   gstBill?: boolean
+  /** the document's own title ("Quotation", "Proforma Invoice" …); unset = a sale bill (Tax Invoice / Cash Memo) */
+  docLabel?: string
+  /** a quotation / order / challan: no copy label, no payment lines, and it says it is not a tax invoice */
+  isDocument?: boolean
   date: unknown
   dueDate?: unknown
   status: string
@@ -193,7 +197,7 @@ export async function renderInvoicePdf(b: InvoicePdfData, biz: BusinessHeader): 
 
   if (b.layout !== 'standard') drawShaktiBill(doc, b, biz)
   else {
-  let y = letterhead(doc, biz, b.gstBill === false ? 'Cash Memo' : 'Tax Invoice', b.gstBill === false ? `${b.copyLabel ?? 'Original'} for recipient · Not a tax invoice` : `${b.copyLabel ?? 'Original'} for recipient · Tyres, tubes & fitting services`, X, 30, W)
+  let y = letterhead(doc, biz, b.docLabel ?? (b.gstBill === false ? 'Cash Memo' : 'Tax Invoice'), b.isDocument ? 'Not a tax invoice' : b.gstBill === false ? `${b.copyLabel ?? 'Original'} for recipient · Not a tax invoice` : `${b.copyLabel ?? 'Original'} for recipient · Tyres, tubes & fitting services`, X, 30, W)
 
   // Bill-to / meta
   doc.lineWidth(0.5).strokeColor(LINE).rect(X, y, W * 0.58, 86).stroke().rect(X + W * 0.58, y, W * 0.42, 86).stroke()

@@ -246,10 +246,10 @@ export function TyreImportModal({ onClose }: { onClose: () => void }) {
                           <select className="input py-1 text-xs w-28" value={r.vehicleType} onChange={(e) => setCell(i, 'vehicleType', e.target.value)}>
                             {Object.entries(VEHICLE_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                           </select></td>
-                        <td className="p-1"><input type="number" className="input py-1 text-xs w-24 text-right" value={r.salePrice} onChange={(e) => setCell(i, 'salePrice', e.target.value)} /></td>
-                        <td className="p-1"><input type="number" className="input py-1 text-xs w-24 text-right" value={r.purchasePrice} onChange={(e) => setCell(i, 'purchasePrice', e.target.value)} /></td>
-                        <td className="p-1"><input type="number" className="input py-1 text-xs w-16 text-right" value={r.stock} onChange={(e) => setCell(i, 'stock', e.target.value)} /></td>
-                        <td className="p-1"><input type="number" className="input py-1 text-xs w-16 text-right" value={r.reorderLevel} onChange={(e) => setCell(i, 'reorderLevel', e.target.value)} /></td>
+                        <td className="p-1"><input type="number" min="0" className="input py-1 text-xs w-24 text-right" value={r.salePrice} onChange={(e) => setCell(i, 'salePrice', e.target.value)} /></td>
+                        <td className="p-1"><input type="number" min="0" className="input py-1 text-xs w-24 text-right" value={r.purchasePrice} onChange={(e) => setCell(i, 'purchasePrice', e.target.value)} /></td>
+                        <td className="p-1"><input type="number" min="0" className="input py-1 text-xs w-16 text-right" value={r.stock} onChange={(e) => setCell(i, 'stock', e.target.value)} /></td>
+                        <td className="p-1"><input type="number" min="0" className="input py-1 text-xs w-16 text-right" value={r.reorderLevel} onChange={(e) => setCell(i, 'reorderLevel', e.target.value)} /></td>
                         <td className="p-1.5 min-w-[9rem]">
                           {res && (res.action === 'error'
                             ? <span className="text-red-600">{res.error}</span>

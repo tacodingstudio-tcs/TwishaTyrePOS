@@ -13,6 +13,11 @@ import { PoweredByCard } from '@/components/PoweredBy'
 import { PRODUCT_NAME } from '@/lib/branding'
 
 const CSS = `
+@media (max-height: 800px) { .tw-fit { zoom: .92 } }
+@media (max-height: 740px) { .tw-fit { zoom: .84 } }
+@media (max-height: 680px) { .tw-fit { zoom: .76 } }
+@media (max-height: 610px) { .tw-fit { zoom: .66 } }
+@media (max-height: 540px) { .tw-fit { zoom: .58 } }
 @keyframes tw-spin  { to { transform: rotate(360deg) } }
 @keyframes tw-unspin { to { transform: rotate(-360deg) } }
 @keyframes tw-float { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-9px) } }
@@ -213,7 +218,7 @@ export function LoginPage() {
       <style>{CSS}</style>
 
       {/* ══ Hero ═══════════════════════════════════════════════════════════════════ */}
-      <aside className="hidden lg:flex relative overflow-hidden flex-col justify-between p-12 text-white"
+      <aside className="hidden lg:flex relative overflow-hidden flex-col justify-between p-12 max-[800px]:p-8 text-white"
         style={{ background: 'radial-gradient(1100px 700px at 15% 0%, #14532d 0%, #052e16 38%, #050f09 75%)' }}>
         {/* dot grid + glow */}
         <div className="absolute inset-0 opacity-[0.14]" style={{ backgroundImage: 'radial-gradient(#86efac 1px, transparent 1px)', backgroundSize: '26px 26px' }} aria-hidden="true" />
@@ -224,11 +229,11 @@ export function LoginPage() {
           <TyreArt className="w-full h-full tw-spin drop-shadow-[0_30px_60px_rgba(0,0,0,0.6)]" />
         </div>
 
-        <header className="relative tw-rise">
+        <header className="relative tw-rise tw-fit origin-top-left">
           <BrandLockup tone="light" />
         </header>
 
-        <div className="relative max-w-xl">
+        <div className="relative max-w-xl tw-fit origin-top-left">
           <p className="tw-rise text-emerald-300/90 text-sm font-semibold tracking-[0.2em] uppercase" style={{ animationDelay: '.05s' }}>Point of sale · Tyre shops</p>
           <h1 className="tw-rise tw-title mt-4 text-5xl xl:text-6xl [@media(max-height:760px)]:text-4xl xl:[@media(max-height:760px)]:text-5xl font-extrabold leading-[1.05] tracking-tight" style={{ animationDelay: '.12s' }}>
             Every bill.<br />Every tyre.<br />Every rupee.
@@ -270,13 +275,13 @@ export function LoginPage() {
       </aside>
 
       {/* ══ Sign in ════════════════════════════════════════════════════════════════ */}
-      <main className="relative flex items-center justify-center px-5 py-10 z-10 overflow-hidden"
+      <main className="relative flex items-center justify-center px-5 py-10 max-[740px]:py-4 z-10 overflow-hidden"
         style={{ background: 'linear-gradient(135deg, #ffffff 0%, #f0fdf4 55%, #fefce8 100%)' }}>
         <svg className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true" preserveAspectRatio="none" viewBox="0 0 400 600" fill="none">
           <path d="M-20 520 C 120 440, 220 560, 420 470" stroke="#fcd34d" strokeWidth="1.5" strokeDasharray="7 9" opacity=".7" />
           <path d="M-20 90 C 140 150, 260 40, 420 110" stroke="#86efac" strokeWidth="1.5" strokeDasharray="7 9" opacity=".7" />
         </svg>
-        <div className="relative w-full max-w-md tw-rise">
+        <div className="relative w-full max-w-md tw-rise tw-fit">
 
           <div className="flex justify-center mb-6 lg:hidden"><BrandLockup className="scale-90" /></div>
           <div className="rounded-3xl bg-white shadow-xl shadow-emerald-900/10 ring-1 ring-black/5 overflow-hidden">

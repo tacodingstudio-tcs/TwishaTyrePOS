@@ -307,7 +307,7 @@ export function ProductListPage() {
 
         {/* Category filter tabs */}
         {categories && categories.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
+          <div className="flex flex-wrap gap-2 pb-2 mb-4">
             <button
               type="button"
               onClick={() => setActiveCat(null)}

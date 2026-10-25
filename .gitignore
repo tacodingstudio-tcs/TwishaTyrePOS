@@ -60,3 +60,8 @@ apps/api/scripts/routes.txt
 # Real customer data from the client workbook (used by the replay test; never commit)
 apps/api/e2e/data/
 apps/api/e2e-out/
+
+# Offline bundle: the real shop settings (holds the first-run PIN) and the build output / download cache
+deploy/offline/shop.local.json
+_offline-out/
+_offline-cache/

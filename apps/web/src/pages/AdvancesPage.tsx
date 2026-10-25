@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { useAdvances, useRecordAdvance, useAllocateAdvance } from '@/hooks/useApi'
 import { PartyIdSelect } from '@/components/ui/PartyCombobox'
+import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
+import { tyreApi } from '@/lib/api'
 import { format } from 'date-fns'
 import { Plus, X, CreditCard, CheckCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -173,7 +176,10 @@ export default function AdvancesPage() {
   const [showRecord, setShowRecord]   = useState(false)
   const [allocating, setAllocating]   = useState<any>(null)
   const { data, isLoading } = useAdvances()
-  const advances = Array.isArray(data) ? data : []
+  // salary advances given to the team live in Team & Salary; show who still owes one so they are not "missing" from here
+  const { data: staffData } = useQuery({ queryKey: ['team-staff-advances'], queryFn: () => tyreApi.teamStaff(), retry: false })
+  const staffAdv: any[] = (Array.isArray(staffData) ? staffData : staffData?.data ?? []).filter((p: any) => Number(p.advanceOutstanding) > 0)
+  const advances = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : []
 
   const totalUnallocated = advances.reduce((s: number, a: any) => s + Number(a.unallocatedAmt), 0)
 
@@ -182,13 +188,30 @@ export default function AdvancesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Advance Payments</h1>
-          <p className="text-sm text-gray-500 mt-1">On-account receipts not yet linked to an invoice</p>
+          <p className="text-sm text-gray-500 mt-1">On-account receipts from customers not yet linked to an invoice. Advances given to staff are in Team &amp; Salary.</p>
         </div>
         <button type="button" onClick={() => setShowRecord(true)}
           className="btn-primary flex items-center gap-2">
           <Plus className="w-4 h-4" /> Record Advance
         </button>
       </div>
+
+      {staffAdv.length > 0 && (
+        <div className="bg-white border rounded-lg p-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-semibold text-gray-900">Staff salary advances (still to recover)</p>
+            <Link to="/tyre/team" className="text-sm text-blue-600 hover:underline">Open Team &amp; Salary</Link>
+          </div>
+          <ul className="divide-y divide-gray-100 text-sm">
+            {staffAdv.map((p: any) => (
+              <li key={p.id} className="flex justify-between py-1.5">
+                <span className="text-gray-700">{p.name}</span>
+                <span className="font-semibold text-orange-600">{formatINR(Number(p.advanceOutstanding))}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Summary card */}
       <div className="grid grid-cols-3 gap-4">

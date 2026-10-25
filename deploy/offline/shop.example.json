@@ -1,0 +1,15 @@
+{
+  "shopName": "Shakti Enterprise",
+  "ownerName": "Yogesh Mori",
+  "ownerPhone": "9227575750",
+  "pin": "0000",
+  "city": "Veraval",
+  "stateCode": "24",
+  "gstin": "24AFTFS9416C1ZP",
+  "addressLine1": "Near Hero Showroom, Veraval-Kodinar Bypass",
+  "businessPhone": "9227575753",
+  "businessEmail": "shaktityre.2026@gmail.com",
+  "carBillStart": 93,
+  "twoWheelBillStart": 4,
+  "ports": { "api": 4470, "pg": 54329, "redis": 63790 }
+}

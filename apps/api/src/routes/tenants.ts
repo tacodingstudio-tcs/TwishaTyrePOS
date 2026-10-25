@@ -112,6 +112,11 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
       throw err
     }
 
+    // One-shop installs (the offline laptop version): once the shop exists, nobody can register another.
+    if (process.env['SINGLE_TENANT'] === 'true' && (await db.tenant.count()) > 0) {
+      return reply.status(403).send({ error: 'This installation is set up for one business only' })
+    }
+
     // ── 2. Check for duplicate phone before doing any DB writes ─────────────
     const existing = await db.tenant.findUnique({
       where:  { ownerPhone: input.phone },

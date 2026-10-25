@@ -2,7 +2,7 @@
 // Each check returns an error message, or '' when the value is fine. An empty value is fine unless the field is required.
 import { isValidGstin } from './gstin'
 
-export type FieldKind = 'mobile' | 'gstin' | 'pan' | 'pincode' | 'ifsc' | 'hsn' | 'email' | 'pin' | 'vehicle'
+export type FieldKind = 'mobile' | 'gstin' | 'pan' | 'pincode' | 'ifsc' | 'hsn' | 'email' | 'pin' | 'vehicle' | 'dot' | 'account' | 'serial'
 
 /** "+91 98765-43210", "098765 43210" → "9876543210" (digits only, country/trunk prefix removed). */
 export function normalizeMobile(raw: string): string {
@@ -21,6 +21,9 @@ const RULES: Record<FieldKind, { label: string; test: (v: string) => boolean; hi
   hsn:     { label: 'HSN / SAC', hint: 'must be 4 to 8 digits', test: (v) => /^\d{4,8}$/.test(v) },
   email:   { label: 'Email', hint: 'must look like name@example.com', test: (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v) },
   pin:     { label: 'PIN', hint: 'must be exactly 4 digits', test: (v) => /^\d{4}$/.test(v) },
+  dot:     { label: 'DOT', hint: 'is week + year, 4 digits like 2325', test: (v) => /^\d{4}$/.test(v) },
+  account: { label: 'Account number', hint: 'must be 9 to 18 digits', test: (v) => /^\d{9,18}$/.test(v) },
+  serial:  { label: 'Serial number', hint: 'can use letters, digits and - / . only (up to 40)', test: (v) => /^[A-Za-z0-9\-\/. ]{1,40}$/.test(v) },
   vehicle: { label: 'Vehicle number', hint: 'looks wrong — use letters and digits only, like GJ05AB1234', test: (v) => /^[A-Z0-9]{4,12}$/.test(v.toUpperCase().replace(/[\s-]/g, '')) },
 }
 
@@ -41,7 +44,7 @@ export function firstError(...checks: Array<[FieldKind, string | null | undefine
 /** What to keep while the person types: digits only for numbers, capitals for codes, a sensible length. */
 export function sanitize(kind: FieldKind, raw: string): string {
   switch (kind) {
-    case 'mobile':  return raw.replace(/[^\d+\s-]/g, '').slice(0, 14)
+    case 'mobile':  return normalizeMobile(raw).slice(0, 10)          // digits only; a pasted +91 / 0 prefix is dropped; never more than 10
     case 'pincode': return raw.replace(/\D/g, '').slice(0, 6)
     case 'pin':     return raw.replace(/\D/g, '').slice(0, 4)
     case 'hsn':     return raw.replace(/\D/g, '').slice(0, 8)
@@ -50,8 +53,11 @@ export function sanitize(kind: FieldKind, raw: string): string {
     case 'ifsc':    return raw.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11)
     case 'vehicle': return raw.toUpperCase().replace(/[^A-Z0-9 -]/g, '').slice(0, 14)
     case 'email':   return raw.trim().toLowerCase().slice(0, 150)
+    case 'dot':     return raw.replace(/\D/g, '').slice(0, 4)
+    case 'account': return raw.replace(/\D/g, '').slice(0, 18)
+    case 'serial':  return raw.toUpperCase().replace(/[^A-Z0-9\-\/. ]/g, '').slice(0, 40)
   }
 }
 
-const MODE: Partial<Record<FieldKind, 'numeric' | 'tel' | 'email' | 'text'>> = { mobile: 'tel', pincode: 'numeric', pin: 'numeric', hsn: 'numeric', email: 'email' }
+const MODE: Partial<Record<FieldKind, 'numeric' | 'tel' | 'email' | 'text'>> = { mobile: 'tel', pincode: 'numeric', pin: 'numeric', hsn: 'numeric', email: 'email', dot: 'numeric', account: 'numeric' }
 export const inputModeFor = (k: FieldKind) => MODE[k] ?? 'text'

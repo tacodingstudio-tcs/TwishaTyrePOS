@@ -287,11 +287,22 @@ process.on('SIGINT',  () => shutdown('SIGINT'))
   await publicDb.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_ik_branch_endpoint ON idempotency_keys(branch_id, endpoint, idempotency_key)`)
 }
 
+// ── Offline / single-box install: the API also serves the built web app ─────────────────────────────────────────
+// SERVE_WEB_DIR=<apps/web/dist>. Same origin as /api, so nothing else (nginx, Vercel) is needed.
+if (process.env['SERVE_WEB_DIR']) {
+  const { default: fastifyStatic } = await import('@fastify/static')
+  await app.register(fastifyStatic, { root: process.env['SERVE_WEB_DIR'], wildcard: false, index: ['index.html'] })
+  app.setNotFoundHandler((req, reply) => {
+    if (req.method === 'GET' && !req.url.startsWith('/api/')) return reply.sendFile('index.html')   // client-side routes (/invoices/…) reload fine
+    return reply.status(404).send({ error: 'Not found' })
+  })
+}
+
 // ── Start server ──────────────────────────────────────────────────────────────
 const port = parseInt(process.env['PORT'] ?? '3000', 10)
 
 try {
-  await app.listen({ port, host: '0.0.0.0' })
+  await app.listen({ port, host: process.env['HOST'] ?? '0.0.0.0' })
   app.log.info(`Server running on http://localhost:${port}`)
   // Small hosting plans have no separate worker service — run the BullMQ workers (PDF, WhatsApp, reminders) in this process.
   if (process.env['RUN_WORKERS_INLINE'] === 'true') await import('./workers/index.js')

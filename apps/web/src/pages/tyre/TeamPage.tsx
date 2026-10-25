@@ -10,7 +10,7 @@ import { UserPlus, Wallet, CalendarCheck, Users } from 'lucide-react'
 import { tyreApi, apiError } from '@/lib/api'
 import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/PageHeader'
-import { inr } from '@/components/tyre/format'
+import { inr, fmtDate } from '@/components/tyre/format'
 
 type Tab = 'today' | 'payroll' | 'people'
 const STATUS: Array<[string, string, string]> = [
@@ -59,6 +59,11 @@ function Attendance() {
     for (const d of days?.data ?? []) m[d.staffId] = { status: d.status, overtimeHours: d.overtimeHours }
     return m
   }, [days])
+  const ot = useMutation({
+    mutationFn: (v: { staffId: string; hours: number }) => tyreApi.teamOvertime({ ...v, date }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['team-days'] }),
+    onError: (e) => toast.error(apiError(e)),
+  })
   const save = useMutation({
     mutationFn: (v: { staffId: string; status: string | null; overtimeHours?: number }) => tyreApi.teamMark({ ...v, date }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['team-days'] }),
@@ -94,9 +99,9 @@ function Attendance() {
                   ))}
                 </div>
                 <label className="text-xs text-gray-500 flex items-center gap-1">OT h
-                  <input type="number" min="0" max="16" step="0.5" className="input w-16 py-1 text-xs" disabled={!m}
+                  <input type="number" min="0" max="16" step="0.5" className="input w-16 py-1 text-xs"
                     defaultValue={m?.overtimeHours ?? 0} key={`${p.id}-${date}-${m?.overtimeHours ?? 0}`}
-                    onBlur={(e) => { if (m && Number(e.target.value) !== m.overtimeHours) save.mutate({ staffId: p.id, status: m.status, overtimeHours: Number(e.target.value) || 0 }) }} />
+                    onBlur={(e) => { const h = Math.min(16, Math.max(0, Number(e.target.value) || 0)); if (h !== (m?.overtimeHours ?? 0)) ot.mutate({ staffId: p.id, hours: h }) }} />
                 </label>
               </li>
             )
@@ -112,6 +117,7 @@ function Payroll() {
   const qc = useQueryClient()
   const [month, setMonth] = useState(thisMonth())
   const [dlg, setDlg] = useState<{ row: any; kind: 'pay' | 'advance' | 'bonus' | 'deduction' | 'recovery' } | null>(null)
+  const [ot, setOt] = useState<any | null>(null)
   const { data, isLoading } = useQuery({ queryKey: ['team-payroll', month], queryFn: () => tyreApi.teamPayroll(month) })
   const rows: any[] = data?.data ?? []
   const refresh = () => { qc.invalidateQueries({ queryKey: ['team-payroll'] }); qc.invalidateQueries({ queryKey: ['team-staff'] }) }
@@ -141,7 +147,7 @@ function Payroll() {
                     <td className="p-3 text-right text-xs text-gray-600">{r.payableDays}/{r.salaryType === 'daily' ? '—' : r.workingDays}
                       <div className="text-gray-400">{r.absent ? `${r.absent} abs ` : ''}{r.half ? `${r.half} half` : ''}</div></td>
                     <td className="p-3 text-right">{inr(r.earned)}</td>
-                    <td className="p-3 text-right">{r.overtimePay ? inr(r.overtimePay) : '—'}</td>
+                    <td className="p-3 text-right">{r.overtimeHours ? <>{inr(r.overtimePay)}<div className="text-xs text-gray-400">{r.overtimeHours} h</div></> : '—'}</td>
                     <td className="p-3 text-right">{r.bonus ? inr(r.bonus) : '—'}</td>
                     <td className="p-3 text-right">{r.deductions ? inr(r.deductions) : '—'}</td>
                     <td className="p-3 text-right">{r.recovery ? inr(r.recovery) : '—'}</td>
@@ -152,6 +158,7 @@ function Payroll() {
                       <div className="flex gap-1 justify-end flex-wrap">
                         <button type="button" className="btn-primary text-xs px-2 py-1" disabled={r.due <= 0} onClick={() => setDlg({ row: r, kind: 'pay' })}>Pay</button>
                         <button type="button" className="btn-ghost border border-gray-200 text-xs px-2 py-1" onClick={() => setDlg({ row: r, kind: 'advance' })}>Advance</button>
+                        <button type="button" className="btn-ghost border border-gray-200 text-xs px-2 py-1" onClick={() => setOt(r)}>Overtime</button>
                         <button type="button" className="btn-ghost border border-gray-200 text-xs px-2 py-1" onClick={() => setDlg({ row: r, kind: 'bonus' })}>Bonus</button>
                         <button type="button" className="btn-ghost border border-gray-200 text-xs px-2 py-1" onClick={() => setDlg({ row: r, kind: 'deduction' })}>Deduct</button>
                         {r.advanceOutstanding > 0 && (
@@ -173,6 +180,7 @@ function Payroll() {
         )}
       </section>
       {dlg && <EntryDialog month={month} row={dlg.row} kind={dlg.kind} onClose={() => setDlg(null)} onDone={() => { setDlg(null); refresh() }} />}
+      {ot && <OvertimeDialog month={month} row={ot} onClose={() => setOt(null)} onChanged={refresh} />}
     </>
   )
 }
@@ -292,6 +300,59 @@ function People() {
           </button>
         </div>
       </section>
+    </div>
+  )
+}
+
+
+/** Overtime for one person in a month: add hours on a date, see and remove what is already there. Pay = hours × the hourly rate. */
+function OvertimeDialog({ month, row, onClose, onChanged }: { month: string; row: any; onClose: () => void; onChanged: () => void }) {
+  const qc = useQueryClient()
+  const today = todayIso()
+  const lastOfMonth = (() => { const [y, m] = month.split('-').map(Number) as [number, number]; return `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}` })()
+  const maxDate = lastOfMonth < today ? lastOfMonth : today
+  const [date, setDate] = useState(today.startsWith(month) ? today : lastOfMonth)
+  const [hours, setHours] = useState('')
+  const { data } = useQuery({ queryKey: ['team-days-month', month], queryFn: () => tyreApi.teamDays({ month }) })
+  const mine: Array<{ date: string; overtimeHours: number }> = (data?.data ?? []).filter((d: any) => d.staffId === row.staffId && d.overtimeHours > 0)
+  const rate = Number(row.hourlyRate ?? 0)
+  const go = useMutation({
+    mutationFn: (v: { date: string; hours: number }) => tyreApi.teamOvertime({ staffId: row.staffId, ...v }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['team-days-month'] }); qc.invalidateQueries({ queryKey: ['team-days'] }); setHours(''); onChanged() },
+    onError: (e) => toast.error(apiError(e)),
+  })
+  const h = Number(hours)
+  const bad = !(h > 0) || h > 16 || date > today || !date.startsWith(month)
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl w-full max-w-md p-6 space-y-4 max-h-[95vh] overflow-y-auto">
+        <div>
+          <h3 className="text-base font-semibold text-gray-900">Overtime</h3>
+          <p className="text-xs text-gray-500">{row.name} · {month} · {inr(rate)} per hour ({row.salaryType === 'daily' ? 'day rate ÷ 8' : 'salary ÷ working days ÷ 8'})</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className="label" htmlFor="ot-date">Date</label>
+            <input id="ot-date" type="date" className="input" min={`${month}-01`} max={maxDate} value={date} onChange={(e) => setDate(e.target.value)} /></div>
+          <div><label className="label" htmlFor="ot-h">Hours</label>
+            <input id="ot-h" type="number" min="0.5" max="16" step="0.5" className="input" autoFocus placeholder="e.g. 2.5" value={hours} onChange={(e) => setHours(e.target.value)} /></div>
+        </div>
+        {h > 0 && !bad && <p className="text-sm text-gray-700">{h} h × {inr(rate)} = <strong>{inr(h * rate)}</strong> added to this month’s salary.</p>}
+        <button type="button" className="btn-primary w-full justify-center" disabled={bad || go.isPending} onClick={() => go.mutate({ date, hours: h })}>{go.isPending ? 'Saving…' : 'Add overtime'}</button>
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Overtime this month — {row.overtimeHours || 0} h · {inr(row.overtimePay || 0)}</div>
+          {mine.length === 0 ? <p className="text-sm text-gray-500">None yet.</p> : (
+            <ul className="divide-y divide-gray-100 border border-gray-100 rounded-lg">
+              {mine.map((d) => (
+                <li key={d.date} className="flex items-center justify-between px-3 py-2 text-sm">
+                  <span>{fmtDate(d.date)} · {d.overtimeHours} h <span className="text-gray-400">({inr(d.overtimeHours * rate)})</span></span>
+                  <button type="button" className="text-xs text-red-500 hover:text-red-700" disabled={go.isPending} onClick={() => go.mutate({ date: d.date, hours: 0 })}>Remove</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div className="flex justify-end"><button type="button" className="btn-ghost" onClick={onClose}>Done</button></div>
+      </div>
     </div>
   )
 }

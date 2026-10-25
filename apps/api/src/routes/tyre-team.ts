@@ -123,7 +123,7 @@ async function payroll(req: any, month: string, onlyStaffId?: string): Promise<P
     return {
       staffId: p.id, name: p.name, designation: p.designation, salaryType: p.salaryType, baseSalary: p.baseSalary,
       workingDays: wd, present, half, absent, leave, unmarked, payableDays: r2(Math.max(0, payable)),
-      earned, overtimeHours: otHours, overtimePay, bonus, deductions, recovery, net, paid, due: r2(net - paid),
+      earned, overtimeHours: otHours, overtimePay, hourlyRate: r2(hourly), bonus, deductions, recovery, net, paid, due: r2(net - paid),
       advanceOutstanding: r2(adv.find((a) => a.staffId === p.id)?.outstanding ?? 0),
     }
   })
@@ -204,6 +204,21 @@ export const tyreTeamRoutes: FastifyPluginAsync = async (app) => {
        RETURNING id, "staffId", status`, req.branchId, d.staffId, d.date, d.status, d.overtimeHours, d.note ?? null)
   }
   app.put('/team/days', { preHandler: guard }, async (req: any) => ({ day: await putDay(req, DayBody.parse(req.body)) }))
+
+  // POST /api/tyre/team/overtime { staffId, date, hours } — overtime worked on a day (0 clears it). It never changes the day's
+  // attendance mark; a day with no mark becomes "present" (the person worked, so they were there).
+  app.post('/team/overtime', { preHandler: guard }, async (req: any) => {
+    const b = z.object({ staffId: z.string().uuid(), date: dateStr, hours: z.number().min(0).max(16), note: z.string().trim().max(120).optional() }).parse(req.body)
+    const st = await q1<any>(req, `SELECT id FROM ${tbl(req.schemaName, 'tyre_staff')} WHERE id = $1::uuid AND "branchId" = $2::uuid`, b.staffId, req.branchId)
+    if (!st) throw httpError(404, 'Team member not found')
+    if (b.date > todayStr()) throw httpError(422, 'Cannot add overtime for a day that has not happened yet')
+    const row = await q1<any>(req,
+      `INSERT INTO ${tbl(req.schemaName, 'tyre_staff_days')} ("branchId","staffId",date,status,"overtimeHours",note)
+       VALUES ($1::uuid,$2::uuid,$3::date,'present',$4,$5)
+       ON CONFLICT ("staffId", date) DO UPDATE SET "overtimeHours" = EXCLUDED."overtimeHours"
+       RETURNING id, "staffId", status, "overtimeHours"::float AS "overtimeHours"`, req.branchId, b.staffId, b.date, b.hours, b.note ?? null)
+    return { day: row }
+  })
   app.post('/team/days/bulk', { preHandler: guard }, async (req: any) => {
     const b = z.object({ date: dateStr, marks: z.array(z.object({ staffId: z.string().uuid(), status: z.enum(DAY_STATUS).nullable() })).min(1).max(200) }).parse(req.body)
     for (const m of b.marks) await putDay(req, { ...m, date: b.date, overtimeHours: 0 })

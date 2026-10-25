@@ -84,15 +84,15 @@ export function drawShaktiBill(doc: PDFKit.PDFDocument, b: InvoicePdfData, biz: 
   if (LOGO) doc.image(LOGO, bandX + 6, y + 1, { fit: [60, 60] })      // the title stays centred; the emblem sits in the empty left of the band
   y += 44
   const cx = bandX, cw = X + W - bandX
-  if (biz.address) { text(biz.address, cx, y, { w: cw, align: 'center', bold: true, size: 10 }); y += 14 }
+  if (biz.address) { text(biz.address, cx, y, { w: cw, align: 'center', bold: true, size: fit(biz.address, cw, 10, true) }); y += 14 }
   const contact = [biz.phone && `Co.No. ${biz.phone}`, biz.email && `Email ID: ${biz.email}`].filter(Boolean).join('    ')
-  if (contact) { text(contact, cx, y, { w: cw, align: 'center', bold: true, size: 10 }); y += 14 }
+  if (contact) { text(contact, cx, y, { w: cw, align: 'center', bold: true, size: fit(contact, cw, 10, true) }); y += 14 }
   y += 4
 
   // copy / type labels, exactly as on the sheet
   text('Debit Memo', X + W * 0.059, y, { bold: true, size: 10 })
-  text(gst ? 'Tax Invoice' : 'Cash Memo', X + W * 0.467, y, { bold: true, size: 10 })
-  text(b.copyLabel ?? 'Original', X + W * 0.749, y, { bold: true, size: 10 })
+  text(b.docLabel ?? (gst ? 'Tax Invoice' : 'Cash Memo'), X + W * 0.467, y, { bold: true, size: 10 })
+  if (!b.isDocument) text(b.copyLabel ?? 'Original', X + W * 0.749, y, { bold: true, size: 10 })       // a quotation is not a copy of anything
   y += 22
 
   // bill no / date / PO
@@ -120,7 +120,10 @@ export function drawShaktiBill(doc: PDFKit.PDFDocument, b: InvoicePdfData, biz: 
   const addrLines = Math.max(1, Math.ceil(doc.widthOfString(b.partyAddress ?? '') / (X + W - valX - 8)))
   const rows = Math.max(left.length, right.length + (addrLines - 1), 5)
   const boxH = rows * R + 4
-  left.forEach((s, i) => text(s, X + W * 0.059 + 4, boxTop + 3 + i * R, { w: splitX - X - W * 0.059 - 8, bold: i === 0 || (i === 4 && false), size: 9.5 }))
+  // each line of the shop's own details stays on ONE line: a long address or "Co.No. … Email ID: …" shrinks to fit the box
+  // instead of wrapping onto the line below (which used to print over the next row)
+  const leftW = splitX - X - W * 0.059 - 8
+  left.forEach((s, i) => text(s, X + W * 0.059 + 4, boxTop + 3 + i * R, { w: leftW, bold: i === 0, size: fit(s, leftW, 9.5, i === 0) }))
   let ry = boxTop + 3
   right.forEach(([k, v, bold]) => {
     text(k, splitX + 4, ry, { w: valX - splitX - 4, bold: k === 'GST.NO', size: 9 })
@@ -216,10 +219,10 @@ export function drawShaktiBill(doc: PDFKit.PDFDocument, b: InvoicePdfData, biz: 
     if (b.roundOff) tr.push(['Round off', f2(b.roundOff)])
   } else if (b.discountTotal > 0) tr.push(['Discount', f2(b.discountTotal)])
   tr.push(['Grand Total', f2(b.grandTotal), true])
-  if (b.exchangeValue > 0) tr.push([`Old tyre exchange${b.exchangeQty ? ` (${b.exchangeQty})` : ''}`, `- ${f2(b.exchangeValue)}`])
+  if (b.exchangeValue > 0 && !b.isDocument) tr.push([`Old tyre exchange${b.exchangeQty ? ` (${b.exchangeQty})` : ''}`, `- ${f2(b.exchangeValue)}`])
   const received = Math.max(0, b.paidAmt - b.exchangeValue)
   const balance = Math.max(0, b.grandTotal - b.paidAmt)
-  if (balance > 0.004) { if (received > 0.004) tr.push(['Received', `- ${f2(received)}`]); tr.push(['Balance due', f2(balance), true]) }
+  if (balance > 0.004 && !b.isDocument) { if (received > 0.004) tr.push(['Received', `- ${f2(received)}`]); tr.push(['Balance due', f2(balance), true]) }
 
   const boxH2 = tr.length * R + 6
   if (y + 26 + boxH2 > pageBottom()) { doc.addPage(); y = M }

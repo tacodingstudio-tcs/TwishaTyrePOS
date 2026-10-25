@@ -67,7 +67,16 @@ export async function loadInvoiceDoc(ctx: Ctx, invoiceId: string): Promise<{ dat
   const dd = (inv.domainData ?? {}) as Record<string, any>
   const { config } = await loadBusiness(ctx)
 
+  // what kind of paper this is: a sale bill keeps Tax Invoice / Cash Memo; the rest carry their own title
+  const DOC_TITLE: Record<string, string> = {
+    quotation: 'Quotation', proforma: 'Proforma Invoice', sales_order: 'Sales Order', delivery_challan: 'Delivery Challan',
+    credit_note: 'Credit Note', debit_note: 'Debit Note', sale_return: 'Sale Return', purchase_invoice: 'Purchase Bill', purchase_return: 'Purchase Return',
+  }
+  const docLabel = DOC_TITLE[String(inv.txnType)]
+  const isDocument = ['quotation', 'proforma', 'sales_order', 'delivery_challan'].includes(String(inv.txnType))
+
   const data: InvoicePdfData = {
+    ...(docLabel ? { docLabel } : {}), ...(isDocument ? { isDocument } : {}),
     number: inv.number, layout: config['bill_layout'] === 'standard' ? 'standard' : 'shakti',
     billKind: dd['bill_series'] === 'two_wheel' || ['two_wheeler', 'three_wheeler'].includes(String(dd['vehicle_type'] ?? '')) ? 'two_wheel' : 'car',
     customTerms: !!config['invoice_terms'],

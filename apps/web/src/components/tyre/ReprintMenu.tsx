@@ -10,7 +10,7 @@ const COPIES = [
   { id: 'triplicate', label: 'Triplicate', hint: 'extra copy' },
 ] as const
 
-export function ReprintMenu({ invoiceId, number, compact = false }: { invoiceId: string; number: string; compact?: boolean }) {
+export function ReprintMenu({ invoiceId, number, compact = false, label = 'Reprint' }: { invoiceId: string; number: string; compact?: boolean; label?: string }) {
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -24,10 +24,10 @@ export function ReprintMenu({ invoiceId, number, compact = false }: { invoiceId:
   const path = (copy: string) => `/invoices/${invoiceId}/pdf?copy=${copy}`
   return (
     <div ref={box} className="relative inline-block">
-      <button type="button" aria-haspopup="menu" aria-expanded={open} title={`Reprint bill ${number}`}
+      <button type="button" aria-haspopup="menu" aria-expanded={open} title={`${label} bill ${number}`}
         onClick={() => setOpen((v) => !v)}
         className={compact ? 'inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-gray-600 hover:bg-gray-100 border border-gray-200' : 'btn-ghost'}>
-        <Printer className="w-4 h-4" /> Reprint <ChevronDown className="w-3 h-3" />
+        <Printer className="w-4 h-4" /> {label} <ChevronDown className="w-3 h-3" />
       </button>
       {open && (
         <div role="menu" className="absolute right-0 z-30 mt-1 w-56 rounded-lg border border-gray-200 bg-white shadow-lg py-1 text-left">

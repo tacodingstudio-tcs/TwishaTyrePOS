@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { tbl, q, q1, todayStr, addDays, r2, branchConfig, requireManager } from '../lib/tyre-helpers.js'
 import { dateStr } from '../lib/validators.js'
 import { ensureWarrantySchema } from '../lib/tyre-warranty.js'
+import { buildWorkbook, SHEETS, type SheetKey } from '../lib/tyre-export.js'
 
 
 const SALE_ITEM_BASE = (s: string) => `
@@ -170,6 +171,28 @@ export const tyreReportRoutes: FastifyPluginAsync = async (app) => {
               ORDER BY w."claimedAt" LIMIT 200`, req.branchId),
     ])
     return { from, to, totals, byOutcome, byBrand, byMonth, rows, pendingNow: pending }
+  })
+
+  // GET /api/tyre/reports/ca-pack?from=&to=&only=sales,gstr1,…  — the accountant's Excel workbook (owner / manager only: it has
+  // every customer, amount and GSTIN). No `only` = the full pack; `only` with one name = just that sheet.
+  app.get('/reports/ca-pack', async (req, reply) => {
+    requireManager(req)
+    const qy = z.object({ from: dateStr.optional(), to: dateStr.optional(), only: z.string().max(200).optional() }).parse(req.query)
+    const today = todayStr()
+    const y = Number(today.slice(0, 4)), m = Number(today.slice(5, 7))
+    const from = qy.from ?? `${m >= 4 ? y : y - 1}-04-01`                 // this financial year
+    const to = qy.to ?? today
+    if (from > to) return reply.status(422).send({ error: 'The "from" date is after the "to" date' })
+    if (new Date(to).getTime() - new Date(from).getTime() > 3 * 366 * 86_400_000) return reply.status(422).send({ error: 'Pick a period of up to 3 years' })
+    const only = qy.only ? qy.only.split(',').map((x) => x.trim()).filter(Boolean) : undefined
+    const bad = (only ?? []).find((x) => !(SHEETS as readonly string[]).includes(x))
+    if (bad) return reply.status(422).send({ error: `Unknown sheet "${bad}"`, allowed: SHEETS })
+    const { buffer, filename } = await buildWorkbook(req, from, to, only as SheetKey[] | undefined)
+    return reply
+      .header('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      .header('content-disposition', `attachment; filename="${filename.replace(/[^ -~]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(filename)}`)
+      .header('cache-control', 'no-store')
+      .send(buffer)
   })
 
   // GET /api/tyre/reports/register?from=&to=&series=&format=csv|json

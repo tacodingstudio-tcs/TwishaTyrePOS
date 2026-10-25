@@ -98,6 +98,8 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
   app.post('/', async (req, reply) => {
     if (req.role !== 'owner')
       return reply.status(403).send({ error: 'Only the owner can create users' })
+    if (process.env['SINGLE_USER'] === 'true')
+      return reply.status(403).send({ error: 'This installation has a single login — extra users cannot be added' })
 
     const body = z.object({
       name:      z.string().min(2).max(100).trim(),

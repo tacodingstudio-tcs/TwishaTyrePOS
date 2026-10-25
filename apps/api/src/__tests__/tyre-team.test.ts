@@ -131,4 +131,47 @@ describe('Team & salary', () => {
     const all = (await owner.api.get('/api/tyre/team/staff', { params: { all: 'true' } })).data.data.map((p: any) => p.id)
     expect(all).toContain(dinesh.id)
   })
+
+  describe('overtime (the Overtime button on the payroll)', () => {
+    let suresh: any
+    const ot = (s: Session, body: Record<string, unknown>) => s.api.post('/api/tyre/team/overtime', body)
+    const dayRow = async (staffId: string, date: string) =>
+      ((await owner.api.get('/api/tyre/team/days', { params: { date } })).data.data as any[]).find((d) => d.staffId === staffId)
+    beforeAll(async () => {
+      suresh = (await owner.api.post('/api/tyre/team/staff', { name: 'Suresh OT', phone: '9811100077', baseSalary: 15600, joinDate: '2026-01-01' })).data
+    })
+    test('hours on a date are paid at salary ÷ working days ÷ 8, and the payroll shows the hourly rate', async () => {
+      expect((await ot(owner, { staffId: suresh.id, date: '2026-06-10', hours: 2.5 })).status).toBe(200)       // 2.5 h × (600 / 8) = 187.50
+      expect(await row(owner, suresh.id)).toMatchObject({ overtimeHours: 2.5, overtimePay: 187.5, hourlyRate: 75, net: 15787.5 })
+      expect((await ot(owner, { staffId: suresh.id, date: '2026-06-11', hours: 1 })).status).toBe(200)
+      expect(await row(owner, suresh.id)).toMatchObject({ overtimeHours: 3.5, overtimePay: 262.5 })
+    })
+    test('a day with no mark becomes "present"; an existing mark (even absent) is kept; hours can be corrected and removed', async () => {
+      expect((await dayRow(suresh.id, '2026-06-10'))?.status).toBe('present')
+      await mark(owner, suresh.id, '2026-06-12', 'absent')
+      await ot(owner, { staffId: suresh.id, date: '2026-06-12', hours: 2 })
+      expect(await dayRow(suresh.id, '2026-06-12')).toMatchObject({ status: 'absent', overtimeHours: 2 })
+      await ot(owner, { staffId: suresh.id, date: '2026-06-10', hours: 4 })                                   // corrected from 2.5 to 4
+      expect((await row(owner, suresh.id)).overtimeHours).toBe(7)
+      await ot(owner, { staffId: suresh.id, date: '2026-06-10', hours: 0 })                                   // removed
+      expect((await row(owner, suresh.id)).overtimeHours).toBe(3)
+    })
+    test('bad input is refused: more than 16 hours, negative, a future day, an unknown person, a bad date', async () => {
+      for (const body of [{ hours: 17 }, { hours: -1 }, { hours: 'two' }, { hours: 2, date: '2099-01-01' }, { hours: 2, date: '2026-13-40' }, { hours: 2, staffId: '00000000-0000-4000-8000-000000000000' }]) {
+        const r = await ot(owner, { staffId: suresh.id, date: '2026-06-15', ...body })
+        expect([JSON.stringify(body), r.status >= 400 && r.status < 500]).toEqual([JSON.stringify(body), true])
+      }
+      expect((await ot(owner, { staffId: suresh.id, date: '2026-06-15', hours: 16 })).status).toBe(200)         // the limit itself is fine
+    })
+    test('only an owner or manager can add overtime; another business cannot touch this person', async () => {
+      expect((await ot(manager, { staffId: suresh.id, date: '2026-06-16', hours: 1 })).status).toBe(200)
+      for (const s of [cashier, viewer]) expect((await ot(s, { staffId: suresh.id, date: '2026-06-16', hours: 1 })).status).toBe(403)
+      expect((await ot(other, { staffId: suresh.id, date: '2026-06-16', hours: 1 })).status).toBe(404)
+    })
+    test('a daily-wage person: hourly rate is the day rate ÷ 8', async () => {
+      const daily = (await owner.api.post('/api/tyre/team/staff', { name: 'Mahesh Daily', salaryType: 'daily', baseSalary: 500, weeklyOff: -1 })).data
+      await ot(owner, { staffId: daily.id, date: '2026-06-20', hours: 4 })                                     // 4 h × (500 / 8)
+      expect(await row(owner, daily.id)).toMatchObject({ hourlyRate: 62.5, overtimeHours: 4, overtimePay: 250 })
+    })
+  })
 })

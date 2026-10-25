@@ -321,7 +321,7 @@ function AddEntityModal({ domainType, defaultType, onClose }: AddEntityModalProp
             <div>
               <label className="label">Credit Limit (optional)</label>
               <input
-                type="number"
+                type="number" min="0" step="1"
                 value={form.creditLimit}
                 onChange={(e) => setF('creditLimit', e.target.value)}
                 className="input"

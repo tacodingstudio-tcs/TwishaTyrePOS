@@ -28,7 +28,7 @@ export function GSTINLookup() {
         <input
           type="text"
           value={input}
-          onChange={(e) => setInput(e.target.value.toUpperCase())}
+          onChange={(e) => setInput(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
           onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
           placeholder="Enter GSTIN (e.g. 27AADCS0472N1Z1)"
           maxLength={15}

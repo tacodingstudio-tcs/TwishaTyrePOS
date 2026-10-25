@@ -716,6 +716,7 @@ export const tyreApi = {
   teamUpdateStaff: (id: string, data: unknown) => api.patch(`/tyre/team/staff/${id}`, data).then((r) => r.data),
   teamDays:        (params?: Record<string, unknown>) => api.get('/tyre/team/days', { params }).then((r) => r.data),
   teamMark:        (data: unknown) => api.put('/tyre/team/days', data).then((r) => r.data),
+  teamOvertime:    (data: unknown) => api.post('/tyre/team/overtime', data).then((r) => r.data),
   teamPayroll:     (month: string) => api.get('/tyre/team/payroll', { params: { month } }).then((r) => r.data),
   teamLedger:      (data: unknown) => api.post('/tyre/team/ledger', data).then((r) => r.data),
   teamPay:         (data: unknown) => api.post('/tyre/team/payroll/pay', data).then((r) => r.data),

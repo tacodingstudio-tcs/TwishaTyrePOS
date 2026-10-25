@@ -1,5 +1,5 @@
 // WhatsApp messages: what the system has sent / failed to send, and which automatic messages are on.
-import { check } from '@/lib/validate'
+import { check, sanitize } from '@/lib/validate'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -98,7 +98,8 @@ export function MessagesPage() {
               </div>
               <div>
                 <label className="label" htmlFor="own-phone">My WhatsApp number</label>
-                <input id="own-phone" className="input" disabled={!canManage} placeholder="business phone"
+                <input id="own-phone" className="input" disabled={!canManage} placeholder="10-digit mobile" inputMode="tel" maxLength={14}
+                  onInput={(e) => { e.currentTarget.value = sanitize('mobile', e.currentTarget.value) }}
                   defaultValue={settings.notify_owner_phone ?? ''}
                   onBlur={(e) => {
                     const v = e.target.value.trim()

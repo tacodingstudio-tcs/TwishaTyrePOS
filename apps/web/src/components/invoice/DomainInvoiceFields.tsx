@@ -35,7 +35,7 @@ export function DomainInvoiceFields({ domainType, data, onChange }: Props) {
         <div>
           <label className="label">Vehicle number</label>
           <input className="input uppercase" value={str('vehicle_no')} placeholder="GJ05AB1234"
-            onChange={(e) => onChange({ vehicle_no: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') || undefined })} />
+            onChange={(e) => onChange({ vehicle_no: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12) || undefined })} />
         </div>
         <div>
           <label className="label">Vehicle type</label>

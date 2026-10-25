@@ -200,7 +200,7 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
             <div className="grid grid-cols-2 gap-3">
               <div><label className="label">PAN</label><ValidatedInput kind="pan" placeholder="AAAAA9999A" value={form.pan} onChange={(v) => setForm({ ...form, pan: v })} /></div>
               <div><label className="label">Bank name</label><input className="input" value={form.bankName} onChange={set('bankName')} /></div>
-              <div><label className="label">Account no</label><input className="input" value={form.bankAcc} onChange={set('bankAcc')} /></div>
+              <div><label className="label">Account no</label><ValidatedInput kind="account" value={form.bankAcc} onChange={(v) => setForm({ ...form, bankAcc: v })} /></div>
               <div><label className="label">IFSC</label><ValidatedInput kind="ifsc" placeholder="SBIN0001234" value={form.bankIfsc} onChange={(v) => setForm({ ...form, bankIfsc: v })} /></div>
               <div className="col-span-2">
                 <label className="label">Terms &amp; conditions <span className="text-gray-400 font-normal">(one per line; blank = standard wording)</span></label>

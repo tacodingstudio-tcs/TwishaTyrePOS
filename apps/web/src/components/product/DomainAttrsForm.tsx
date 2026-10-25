@@ -75,7 +75,7 @@ function FieldInput({ f, val, onSet }: {
     return (
       <input
         id={`attr-${f.key}`}
-        type="number"
+        type="number" min="0"
         placeholder={f.placeholder}
         title={f.label}
         value={String(val ?? '')}

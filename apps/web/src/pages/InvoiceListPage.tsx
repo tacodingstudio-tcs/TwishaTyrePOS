@@ -5,9 +5,10 @@ import { useInvoices } from '@/hooks/useApi'
 import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, Printer } from 'lucide-react'
 import { format } from 'date-fns'
 import { ReprintMenu } from '@/components/tyre/ReprintMenu'
+import { printPdf } from '@/components/tyre/openPdf'
 
 const B2B_DOMAINS = new Set([
   'wholesale', 'enterprise', 'electronics', 'textile', 'hardware',
@@ -89,7 +90,7 @@ export function InvoiceListPage() {
       <div className="p-8 space-y-4">
 
         {/* Document type tabs */}
-        <div className="flex gap-1 overflow-x-auto pb-1">
+        <div className="flex flex-wrap gap-1 pb-1">
           {ALL_DOC_TYPE_TABS.filter(t => isB2B || !t.b2bOnly).map(tab => (
             <button
               key={tab.key}
@@ -137,13 +138,13 @@ export function InvoiceListPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="text-left px-5 py-3 font-medium text-gray-500">Number</th>
-                {!txnType && <th className="text-left px-5 py-3 font-medium text-gray-500">Type</th>}
-                <th className="text-left px-5 py-3 font-medium text-gray-500">Party</th>
-                <th className="text-left px-5 py-3 font-medium text-gray-500">Date</th>
-                <th className="text-right px-5 py-3 font-medium text-gray-500">Amount</th>
-                <th className="text-left px-5 py-3 font-medium text-gray-500">Status</th>
-                <th className="text-right px-5 py-3 font-medium text-gray-500">Print</th>
+                <th className="text-left px-3 lg:px-5 py-3 font-medium text-gray-500">Number</th>
+                {!txnType && <th className="text-left px-3 lg:px-5 py-3 font-medium text-gray-500 hidden lg:table-cell">Type</th>}
+                <th className="text-left px-3 lg:px-5 py-3 font-medium text-gray-500">Party</th>
+                <th className="text-left px-3 lg:px-5 py-3 font-medium text-gray-500">Date</th>
+                <th className="text-right px-3 lg:px-5 py-3 font-medium text-gray-500">Amount</th>
+                <th className="text-left px-3 lg:px-5 py-3 font-medium text-gray-500">Status</th>
+                <th className="text-right px-3 lg:px-5 py-3 font-medium text-gray-500">Print</th>
               </tr>
             </thead>
             <tbody>
@@ -155,27 +156,31 @@ export function InvoiceListPage() {
               )}
               {data?.data?.map((inv: any) => (
                 <tr key={inv.id} className="table-row">
-                  <td className="px-5 py-3">
+                  <td className="px-3 lg:px-5 py-3 whitespace-nowrap">
                     <Link to={`/invoices/${inv.id}`} className="font-medium text-primary-600 hover:underline">
                       {inv.number}
                     </Link>
                   </td>
                   {!txnType && (
-                    <td className="px-5 py-3">
+                    <td className="px-3 lg:px-5 py-3 hidden lg:table-cell">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${TXN_BADGE[inv.txnType] ?? 'bg-gray-100 text-gray-600'}`}>
                         {inv.txnType?.replace(/_/g, ' ')}
                       </span>
                     </td>
                   )}
-                  <td className="px-5 py-3 text-gray-700">{inv.party?.name ?? inv.domainData?.customer_name ?? 'Walk-in'}</td>
-                  <td className="px-5 py-3 text-gray-500">{format(new Date(inv.date), 'd MMM yyyy')}</td>
-                  <td className="px-5 py-3 text-right font-semibold text-gray-900">
+                  <td className="px-3 lg:px-5 py-3 text-gray-700">{inv.party?.name ?? inv.domainData?.customer_name ?? 'Walk-in'}</td>
+                  <td className="px-3 lg:px-5 py-3 text-gray-500 whitespace-nowrap">{format(new Date(inv.date), 'd MMM yyyy')}</td>
+                  <td className="px-3 lg:px-5 py-3 text-right font-semibold text-gray-900 whitespace-nowrap">
                     {formatINR(Number(inv.grandTotal))}
                   </td>
-                  <td className="px-5 py-3"><StatusBadge status={inv.status} /></td>
-                  <td className="px-5 py-3 text-right">
+                  <td className="px-3 lg:px-5 py-3"><StatusBadge status={inv.status} /></td>
+                  <td className="px-3 lg:px-5 py-3 text-right whitespace-nowrap">
                     {inv.txnType === 'sale_invoice' && inv.status !== 'cancelled' && inv.status !== 'draft'
-                      ? <ReprintMenu invoiceId={inv.id} number={String(inv.number)} compact /> : null}
+                      ? <ReprintMenu invoiceId={inv.id} number={String(inv.number)} compact />
+                      : ['quotation', 'proforma', 'sales_order', 'delivery_challan'].includes(inv.txnType) && inv.status !== 'cancelled'
+                        ? <button type="button" title={`Print ${inv.number}`} onClick={() => void printPdf(`/invoices/${inv.id}/pdf`, `${inv.number}.pdf`)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-gray-600 hover:bg-gray-100 border border-gray-200"><Printer className="w-4 h-4" /> Print</button>
+                        : null}
                   </td>
                 </tr>
               ))}

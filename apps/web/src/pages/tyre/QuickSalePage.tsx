@@ -511,11 +511,11 @@ export function QuickSalePage() {
                         <div className="mt-3 grid grid-cols-1 md:grid-cols-4 gap-3">
                           <div className="md:col-span-2">
                             <label className="label">Serial numbers ({units}) <span className="text-gray-400 font-normal">— space or comma</span></label>
-                            <input className="input font-mono text-xs" value={l.serials} onChange={(e) => setLine(l.key, { serials: e.target.value })} placeholder="one per tyre, in fitting order" />
+                            <input className="input font-mono text-xs" value={l.serials} onChange={(e) => setLine(l.key, { serials: e.target.value.toUpperCase().replace(/[^A-Z0-9\-\/., ;]/g, '') })} placeholder="one per tyre, in fitting order" />
                           </div>
                           <div>
                             <label className="label">DOT (week+year)</label>
-                            <input className="input font-mono text-xs" value={l.dots} onChange={(e) => setLine(l.key, { dots: e.target.value })} placeholder="2325 2325" />
+                            <input className="input font-mono text-xs" value={l.dots} onChange={(e) => setLine(l.key, { dots: e.target.value.replace(/[^0-9 ,;]/g, '') })} placeholder="2325 2325" />
                           </div>
                           <div>
                             <label className="label">GST %</label>
@@ -598,7 +598,7 @@ export function QuickSalePage() {
       </div>
 
       {/* 6 · details — always open, in the right-hand column on a wide screen */}
-      <aside className="xl:sticky xl:top-4 space-y-4 min-w-0">
+      <aside className="xl:sticky xl:top-4 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto space-y-4 min-w-0">
         {/* the bill: total, how it is paid, save — beside the lines on a wide screen */}
         <section className="card p-5 hidden xl:block">
           <div className="text-xs text-gray-500 leading-5">

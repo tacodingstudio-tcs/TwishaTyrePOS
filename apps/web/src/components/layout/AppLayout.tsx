@@ -22,6 +22,7 @@ const OPERATIONS: NavItem[] = [
   { to: '/',                   label: 'Home',            icon: LayoutDashboard, end: true },
   { to: '/tyre/sale',          label: 'New Sale',        icon: ReceiptText },
   { to: '/invoices',           label: 'All Bills',       icon: FileText },
+  { to: '/pipeline',           label: 'Quotations',      icon: GitBranch },
   { to: '/parties',            label: 'Customers',       icon: Users },
   { to: '/tyre/stock',         label: 'Tyre Stock',      icon: CircleDot },
 ]
@@ -45,11 +46,6 @@ const AFTERSALES: NavItem[] = [
   { to: '/tyre/vehicles',      label: 'Vehicles',        icon: Car },
   { to: '/tyre/warranty',      label: 'Warranty',        icon: ShieldCheck },
   { to: '/tyre/messages',      label: 'WhatsApp Messages', icon: MessageCircle },
-]
-
-// rarely used: folded under "More"
-const OTHER: NavItem[] = [
-  { to: '/pipeline',  label: 'Quotations', icon: GitBranch },
 ]
 
 const INVENTORY_ITEMS = [
@@ -99,7 +95,6 @@ export function AppLayout() {
   const inventoryOpen = location.pathname.startsWith('/inventory')
   const [navOpen, setNavOpen] = useState(false)        // the menu is a slide-in drawer below the large-screen width
   useEffect(() => { setNavOpen(false) }, [location.pathname, location.search])
-  const [moreOpen, setMoreOpen] = useState(() => OTHER.some((i) => location.pathname.startsWith(i.to)))
 
   const isManager = canManage()
   const { data: branchList } = useBranches()
@@ -127,10 +122,10 @@ export function AppLayout() {
       <aside className={`fixed inset-y-0 left-0 z-40 w-64 max-w-[85vw] transform transition-transform duration-200 lg:static lg:z-auto lg:w-60 lg:max-w-none lg:translate-x-0 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col ${navOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
 
         {/* Logo / business name */}
-        <div className="flex flex-col items-center text-center px-4 py-4 border-b border-gray-200">
-          <img src="/logo.png" alt={tenant?.name ?? PRODUCT_NAME} className="w-28 h-28" />
-          <div className="mt-2 w-full overflow-hidden">
-            <div className="text-sm font-semibold text-gray-900 truncate">{tenant?.name ?? PRODUCT_NAME}</div>
+        <div className="flex items-center gap-3 px-4 h-[72px] border-b border-gray-200">
+          <img src="/logo.png" alt="" className="w-11 h-11 flex-shrink-0" />
+          <div className="min-w-0">
+            <div className="text-[15px] font-bold leading-tight text-gray-900 line-clamp-2">{tenant?.name ?? PRODUCT_NAME}</div>
             {branch?.name && branch.name !== tenant?.name && <div className="text-xs text-gray-500 truncate">{branch.name}</div>}
           </div>
         </div>
@@ -197,13 +192,6 @@ export function AppLayout() {
           {show(REPORTS).length > 0 && <Section title="Reports" items={show(REPORTS)} />}
           {show(AFTERSALES).length > 0 && <Section title="After-sales" items={show(AFTERSALES)} />}
 
-          {/* Rarely used screens stay folded so the menu is short and calm */}
-          <button type="button" onClick={() => setMoreOpen((v) => !v)}
-            className="w-full flex items-center gap-3 px-3 py-2 mt-2 rounded-lg text-xs font-semibold uppercase tracking-wider text-gray-400 hover:bg-gray-100">
-            <span className="flex-1 text-left">More</span>
-            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${moreOpen ? 'rotate-180' : ''}`} />
-          </button>
-          {moreOpen && <Section items={show(OTHER)} />}
           <div className="pt-2 mt-2 border-t border-gray-100">
             <Section items={[{ to: '/branches', label: 'My Business & Staff', icon: Building2 }]} />
           </div>

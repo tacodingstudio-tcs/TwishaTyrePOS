@@ -476,7 +476,7 @@ function BankReconciliationTab() {
             </div>
             <div>
               <label className="text-xs text-gray-500 mb-1 block">Account Number</label>
-              <input value={newAcct.accountNumber} onChange={(e) => setNewAcct(p => ({...p, accountNumber: e.target.value}))}
+              <input value={newAcct.accountNumber} maxLength={20} onChange={(e) => setNewAcct(p => ({...p, accountNumber: e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase()}))}
                 placeholder="XXXX1234" className="input text-sm w-full" />
             </div>
             <div>

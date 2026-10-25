@@ -10,7 +10,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { SaleExtras } from '@/components/tyre/SaleExtras'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { invoiceApi, tyreApi, apiError } from '@/lib/api'
-import { openPdf } from '@/components/tyre/openPdf'
+import { openPdf, printPdf } from '@/components/tyre/openPdf'
 import { ReprintMenu } from '@/components/tyre/ReprintMenu'
 import {
   Download, MessageCircle, XCircle, IndianRupee, Mail, Send,
@@ -20,6 +20,7 @@ import {
 import { ThermalReceipt } from '@/components/invoice/ThermalReceipt'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
+import { check, sanitize } from '@/lib/validate'
 
 const PIPELINE_NEXT: Record<string, string> = {
   quotation:        'sales_order',
@@ -89,6 +90,9 @@ export function InvoiceDetailPage() {
 
   const balanceDue = Number(invoice.grandTotal) - Number(invoice.paidAmt)
   const isSale     = invoice.txnType === 'sale_invoice'
+  // quotations, proformas, orders, challans, credit / sale-return papers print through the same bill printer as a sale
+  const isPrintDoc = ['quotation', 'proforma', 'sales_order', 'delivery_challan', 'credit_note', 'sale_return', 'debit_note'].includes(invoice.txnType)
+  const docName    = ({ quotation: 'quotation', proforma: 'proforma', sales_order: 'order', delivery_challan: 'challan', credit_note: 'credit note', sale_return: 'return', debit_note: 'debit note' } as Record<string, string>)[invoice.txnType] ?? 'document'
   const isPurchase = invoice.txnType === 'purchase_invoice'
   const isActive   = invoice.status !== 'cancelled' && invoice.status !== 'converted'
 
@@ -159,7 +163,7 @@ export function InvoiceDetailPage() {
           <div className="flex items-center gap-2 flex-wrap">
             {isSale ? (
               <>
-                {invoice.status !== 'cancelled' && invoice.status !== 'draft' && <ReprintMenu invoiceId={id!} number={String(invoice.number)} />}
+                {invoice.status !== 'cancelled' && invoice.status !== 'draft' && <ReprintMenu invoiceId={id!} number={String(invoice.number)} label="Print" />}
                 <button type="button" className="btn-ghost" onClick={() => openPdf(`/invoices/${id}/pdf`, `${invoice.number}.pdf`)}>
                   <Download className="w-4 h-4" /> PDF
                 </button>
@@ -170,10 +174,19 @@ export function InvoiceDetailPage() {
                   </button>
                 )}
               </>
+            ) : isPrintDoc && invoice.status !== 'cancelled' ? (
+              <>
+                <button type="button" className="btn-primary" onClick={() => void printPdf(`/invoices/${id}/pdf`, `${invoice.number}.pdf`)}>
+                  <Printer className="w-4 h-4" /> Print {docName}
+                </button>
+                <button type="button" className="btn-ghost" onClick={() => openPdf(`/invoices/${id}/pdf`, `${invoice.number}.pdf`)}>
+                  <Download className="w-4 h-4" /> PDF
+                </button>
+              </>
             ) : (
-              <a href={invoiceApi.pdfUrl(id!)} target="_blank" rel="noreferrer" className="btn-ghost">
+              <button type="button" className="btn-ghost" onClick={() => openPdf(`/invoices/${id}/pdf`, `${invoice.number}.pdf`)}>
                 <Download className="w-4 h-4" /> PDF
-              </a>
+              </button>
             )}
             {isSale && (
               <button type="button" onClick={() => window.print()} className="btn-ghost">
@@ -374,6 +387,33 @@ export function InvoiceDetailPage() {
               </button>
             )}
           </div>
+
+          {/* Print a quotation / proforma / order: one copy, straight to the printer */}
+          {isPrintDoc && invoice.status !== 'cancelled' && (
+            <div className="card p-5">
+              <button type="button" onClick={() => void printPdf(`/invoices/${id}/pdf`, `${invoice.number}.pdf`)} className="btn-primary w-full justify-center py-3 text-base">
+                <Printer className="w-5 h-5" /> Print {docName}
+              </button>
+              <p className="text-xs text-gray-400 text-center mt-2">With the shop name, logo and details, like a bill.</p>
+            </div>
+          )}
+
+          {/* Print: the first thing to do with a bill that was just made — the Original goes straight to the printer */}
+          {invoice.status !== 'cancelled' && invoice.status !== 'draft' && (
+            <div className="card p-5">
+              <button type="button" onClick={() => void printPdf(`/invoices/${id}/pdf?copy=original`, `${invoice.number}.pdf`)}
+                className="btn-primary w-full justify-center py-3 text-base">
+                <Printer className="w-5 h-5" /> Print bill
+              </button>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                {(['duplicate', 'triplicate'] as const).map((c) => (
+                  <button key={c} type="button" onClick={() => void printPdf(`/invoices/${id}/pdf?copy=${c}`, `${invoice.number}-${c}.pdf`)}
+                    className="btn-ghost border border-gray-200 justify-center text-xs capitalize">Print {c}</button>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400 text-center mt-2">Original is for the customer.</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -395,12 +435,14 @@ export function InvoiceDetailPage() {
               ))}
             </div>
             <input type={shareChannel === 'whatsapp' ? 'tel' : 'email'} value={shareTo}
-              onChange={e => setShareTo(e.target.value)}
-              placeholder={shareChannel === 'whatsapp' ? '91XXXXXXXXXX' : 'customer@email.com'}
-              className="input mb-4" />
+              onChange={e => setShareTo(sanitize(shareChannel === 'whatsapp' ? 'mobile' : 'email', e.target.value))}
+              placeholder={shareChannel === 'whatsapp' ? '10-digit mobile' : 'customer@email.com'}
+              className={`input mb-1 ${shareTo && check(shareChannel === 'whatsapp' ? 'mobile' : 'email', shareTo) ? 'border-red-400' : ''}`} />
+            {shareTo && check(shareChannel === 'whatsapp' ? 'mobile' : 'email', shareTo) && <p className="mb-3 text-xs text-red-600">{check(shareChannel === 'whatsapp' ? 'mobile' : 'email', shareTo)}</p>}
+            <div className="mb-3" />
             <div className="flex gap-2">
               <button type="button" onClick={() => setShareModal(false)} className="btn-ghost flex-1 justify-center">Cancel</button>
-              <button type="button" onClick={handleSendReceipt} disabled={sendReceipt.isPending} className="btn-primary flex-1 justify-center">
+              <button type="button" onClick={handleSendReceipt} disabled={sendReceipt.isPending || !shareTo || !!check(shareChannel === 'whatsapp' ? 'mobile' : 'email', shareTo)} className="btn-primary flex-1 justify-center">
                 <Send className="w-4 h-4" /> {sendReceipt.isPending ? 'Sending…' : 'Send'}
               </button>
             </div>
@@ -455,11 +497,11 @@ export function InvoiceDetailPage() {
             </h3>
             <div>
               <label className="label">Vehicle Number</label>
-              <input type="text" placeholder="e.g. GJ05AB1234" value={ewayVehicle} onChange={e => setEwayVehicle(e.target.value)} className="input" />
+              <input type="text" placeholder="e.g. GJ05AB1234" value={ewayVehicle} onChange={e => setEwayVehicle(sanitize('vehicle', e.target.value))} className="input font-mono uppercase" />
             </div>
             <div>
               <label className="label">Distance (km)</label>
-              <input type="number" placeholder="Approx. distance" value={ewayDistance} onChange={e => setEwayDistance(e.target.value)} className="input" />
+              <input type="number" min="1" placeholder="Approx. distance" value={ewayDistance} onChange={e => setEwayDistance(e.target.value)} className="input" />
             </div>
             <p className="text-xs text-gray-400">Sandbox mode — connects to NIC portal when GSTIN credentials are configured in branch settings.</p>
             <div className="flex gap-2">
