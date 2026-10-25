@@ -27,7 +27,6 @@ import type { PrismaClient } from '@billing/db'
 import { calculateInvoice, type GSTRate } from '@billing/gst-engine'
 import { DOMAIN_REGISTRY } from '@billing/domain-registry'
 import { nextInvoiceNumber, nextSeriesNumber, type NumberSeries } from '../lib/invoice-number.js'
-import { pdfQueue } from '../lib/queues.js'
 import { z } from 'zod'
 
 // ── Input validation schemas ──────────────────────────────────────────────────
@@ -407,15 +406,6 @@ export async function createInvoice(
       }
     }
   }
-
-  // ── Step 7: Queue PDF generation (outside transaction — failure is ok) ────
-  await pdfQueue
-    .add('generate-pdf', {
-      invoiceId:  invoice.id,
-      branchId:   ctx.branchId,
-      schemaName: ctx.schemaName,
-    })
-    .catch((err) => console.warn('[PDF Queue] Failed to queue:', err.message))
 
   // ── Step 7: Low-stock notifications after sale ────────────────────────────
   // Check if any sold product crossed its reorder point. Non-blocking.

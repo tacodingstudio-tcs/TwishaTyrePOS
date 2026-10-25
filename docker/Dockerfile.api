@@ -1,6 +1,6 @@
 # Dockerfile.api — builds the tyre-platform API (and, optionally, its background workers).
 #
-# The workspace packages (@billing/db, domain-registry, gst-engine, shared, pdf) ship as raw
+# The workspace packages (@billing/db, domain-registry, gst-engine, shared) ship as raw
 # TypeScript with no build step; the API runs them through tsx, exactly like local dev.
 #
 # Debian slim, not Alpine: Prisma's query engine needs OpenSSL libraries Alpine no longer ships.
@@ -15,8 +15,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl \
     && rm -rf /var/lib/apt/lists/*
 
-# PDF rendering uses puppeteer; skip its ~170 MB Chromium download (invoice PDFs are not
-# generated on small hosting plans). Remove this line if you add a worker with a browser.
+# puppeteer is only used by the browser test scripts (a dev dependency); never download its ~170 MB Chromium here.
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 COPY . .

@@ -83,7 +83,7 @@ async function main() {
     fs.writeFileSync(path.join(APP, 'package.json'), JSON.stringify({ name: '@billing/api', version: apiPkg.version, private: true, type: 'module', dependencies: { ...deps, prisma: prismaVersion } }, null, 2))
     sh('npm', ['install', '--omit=dev', '--no-audit', '--no-fund', '--loglevel=error'], { cwd: APP, env: { ...process.env, PUPPETEER_SKIP_DOWNLOAD: 'true' } })
     // the workspace packages are plain TypeScript folders: copy them in as real directories (no links)
-    for (const p of ['db', 'domain-registry', 'gst-engine', 'pdf', 'shared']) {
+    for (const p of ['db', 'domain-registry', 'gst-engine', 'shared']) {
       const to = path.join(APP, 'node_modules', '@billing', p)
       fs.mkdirSync(to, { recursive: true })
       for (const f of ['src', 'package.json', ...(p === 'db' ? ['prisma'] : [])]) cp(path.join(REPO, 'packages', p, f), path.join(to, f))

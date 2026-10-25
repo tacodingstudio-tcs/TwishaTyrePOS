@@ -282,29 +282,6 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
     }
   })
 
-  // ── GET /api/invoices/:id/pdf ─────────────────────────────────────────────
-  // Get the PDF URL for an invoice (generated async by worker)
-  app.get('/:id/pdf', async (req, reply) => {
-    const { id } = z.object({ id: z.string().uuid() }).parse(req.params)
-
-    // Check if PDF already exists
-    const pdfPath = `/tmp/billing-files/invoices/${id}.pdf`
-    const { existsSync } = await import('fs')
-
-    if (existsSync(pdfPath)) {
-      return reply.send({ pdfPath: `/invoices/${id}.pdf` })
-    }
-
-    // PDF not ready yet — re-queue generation
-    const { pdfQueue } = await import('../lib/queues.js')
-    await pdfQueue.add('generate-pdf', { invoiceId: id, branchId: req.branchId })
-
-    return reply.status(202).send({
-      message: 'PDF is being generated — try again in a few seconds',
-      invoiceId: id,
-    })
-  })
-
   // ── POST /api/invoices/:id/credit-note ───────────────────────────────────
   // Creates a credit note against an existing sale_invoice.
   // Caller may override items/qty (partial return) or accept all items at full qty.

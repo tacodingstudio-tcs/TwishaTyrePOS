@@ -41,9 +41,6 @@ importers:
       '@billing/gst-engine':
         specifier: workspace:*
         version: link:../../packages/gst-engine
-      '@billing/pdf':
-        specifier: workspace:*
-        version: link:../../packages/pdf
       '@billing/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -101,12 +98,6 @@ importers:
       pdfkit:
         specifier: 0.15.0
         version: 0.15.0
-      puppeteer:
-        specifier: ^22.0.0
-        version: 22.15.0(typescript@5.9.3)
-      razorpay:
-        specifier: ^2.9.0
-        version: 2.9.6
       zod:
         specifier: ^3.23.0
         version: 3.25.76
@@ -138,6 +129,9 @@ importers:
       pino-pretty:
         specifier: ^11.0.0
         version: 11.3.0
+      puppeteer:
+        specifier: ^22.0.0
+        version: 22.15.0(typescript@5.9.3)
       ts-jest:
         specifier: ^29.0.0
         version: 29.4.11(@babel/core@7.29.7)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.29.7))(jest-util@29.7.0)(jest@29.7.0(@types/node@22.19.21))(typescript@5.9.3)
@@ -282,25 +276,6 @@ importers:
       ts-jest:
         specifier: ^29.0.0
         version: 29.4.11(@babel/core@7.29.7)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.29.7))(jest-util@29.7.0)(jest@29.7.0(@types/node@22.19.21))(typescript@5.9.3)
-      typescript:
-        specifier: ^5.5.0
-        version: 5.9.3
-
-  packages/pdf:
-    dependencies:
-      '@billing/shared':
-        specifier: workspace:*
-        version: link:../shared
-      puppeteer:
-        specifier: ^22.0.0
-        version: 22.15.0(typescript@5.9.3)
-    devDependencies:
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.21
-      tsx:
-        specifier: ^4.16.0
-        version: 4.22.4
       typescript:
         specifier: ^5.5.0
         version: 5.9.3
@@ -3705,9 +3680,6 @@ packages:
 
   quick-format-unescaped@4.0.4:
     resolution: {integrity: sha512-tYC1Q1hgyRuHgloV/YXs2w15unPVh8qfu/qCTfhTYamaw7fyhumKa2yGpdSo87vY32rIclj+4fWYQXUMs9EHvg==}
-
-  razorpay@2.9.6:
-    resolution: {integrity: sha512-zsHAQzd6e1Cc6BNoCNZQaf65ElL6O6yw0wulxmoG5VQDr363fZC90Mp1V5EktVzG45yPyNomNXWlf4cQ3622gQ==}
 
   react-dom@19.2.7:
     resolution: {integrity: sha512-t0BRVXvbiE/o20Hfw669rLbMCDWtYZLvmJigy2f0MxsXF+71pxhR3xOkspmsO8h3ZlNzyibAmtCa3l4lYKk6gQ==}
@@ -8341,13 +8313,6 @@ snapshots:
   queue-microtask@1.2.3: {}
 
   quick-format-unescaped@4.0.4: {}
-
-  razorpay@2.9.6:
-    dependencies:
-      axios: 1.18.0
-    transitivePeerDependencies:
-      - debug
-      - supports-color
 
   react-dom@19.2.7(react@19.2.7):
     dependencies:

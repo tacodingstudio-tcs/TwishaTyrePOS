@@ -2,7 +2,7 @@
 // Processes WhatsApp send jobs from the 'whatsapp-send' BullMQ queue.
 //
 // Two job types:
-//   invoice_share   → sends PDF as WhatsApp document + invoice summary
+//   invoice_share   → sends the invoice summary as a WhatsApp text message
 //   payment_reminder → sends AI-drafted reminder text for overdue invoices
 //
 // WhatsApp Business API (WABA) requires:
@@ -91,48 +91,14 @@ async function sendWhatsAppText(toPhone: string, message: string): Promise<void>
   }
 }
 
-async function sendWhatsAppDocument(
-  toPhone:  string,
-  pdfPath:  string,
-  filename: string,
-  caption:  string
-): Promise<void> {
-  if (IS_DEV || !WABA_TOKEN || !WABA_PHONE_ID) {
-    console.log(`[WhatsApp DEV] Document to: ${toPhone}, file: ${filename}`)
-    console.log(`[WhatsApp DEV] Caption: ${caption}`)
-    return
-  }
-
-  // In production: first upload the PDF to WhatsApp media API,
-  // then send as document message.
-  // For now we send a text message with a download link.
-  // TODO: implement media upload when going to production.
-  await sendWhatsAppText(toPhone, `${caption}\n\nPDF: [Download link — add your file server URL here]`)
-}
-
 // ── Job handlers ──────────────────────────────────────────────────────────────
 
 async function handleInvoiceShare(job: InvoiceShareJob): Promise<void> {
-  // Get PDF path from Redis (set by PDF worker after generation)
-  const pdfMeta = await redis.get(`pdf:${job.invoiceId}`)
-
-  const caption = `*${job.businessName}*\n` +
+  await sendWhatsAppText(job.toPhone,
+    `*${job.businessName}*\n` +
     `Invoice No: ${job.invoiceNo}\n` +
     `Amount: ₹${job.amount.toFixed(0)}\n\n` +
-    `Dear ${job.partyName}, please find your invoice attached. 🙏`
-
-  if (pdfMeta) {
-    const { a4Path } = JSON.parse(pdfMeta) as { a4Path: string }
-    await sendWhatsAppDocument(
-      job.toPhone,
-      a4Path,
-      `${job.invoiceNo}.pdf`,
-      caption
-    )
-  } else {
-    // PDF not ready yet — send text summary instead
-    await sendWhatsAppText(job.toPhone, caption)
-  }
+    `Dear ${job.partyName}, thank you for your business. 🙏`)
 }
 
 async function handlePaymentReminder(job: PaymentReminderJob): Promise<void> {
