@@ -567,9 +567,6 @@ export const usersApi = {
 }
 
 export const broadcastApi = {
-  getContacts: (params?: { type?: string; minSpend?: number; minLoyalty?: number; search?: string }) =>
-    api.get('/broadcasts/contacts', { params }).then((r) => r.data),
-
   getCelebrations: (days = 7) =>
     api.get('/broadcasts/celebrations', { params: { days } }).then((r) => r.data),
 }

@@ -26,7 +26,6 @@ import ApprovalsPage from './pages/ApprovalsPage'
 import AdvancesPage from './pages/AdvancesPage'
 import GRNPage from './pages/inventory/GRNPage'
 import AgingPage from './pages/AgingPage'
-import { BroadcastPage } from './pages/BroadcastPage'
 
 // Tyre shop
 import { TyreDashboardPage }     from './pages/tyre/TyreDashboardPage'
@@ -94,7 +93,6 @@ export default function App() {
           <Route path="/advances" element={<AdvancesPage />} />
           <Route path="/inventory/grn" element={<GRNPage />} />
           <Route path="/aging" element={<AgingPage />} />
-          <Route path="/broadcast" element={<BroadcastPage />} />
 
           {/* Legacy /products redirect */}
           <Route path="/products" element={<Navigate to="/inventory/products" replace />} />
