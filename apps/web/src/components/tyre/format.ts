@@ -69,6 +69,7 @@ type Tone = { label: string; cls: string }
 export const WARRANTY_STATUS: Record<string, Tone> = {
   active:  { label: 'In warranty',  cls: 'bg-green-100 text-green-700' },
   claimed: { label: 'Claim made',   cls: 'bg-amber-100 text-amber-700' },
+  pending: { label: 'Waiting for company', cls: 'bg-blue-100 text-blue-700' },
   void:    { label: 'Void',         cls: 'bg-gray-100 text-gray-500' },
 }
 

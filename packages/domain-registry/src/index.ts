@@ -71,7 +71,8 @@ export const SALE_KINDS = ['retail', 'wholesale', 'service_only'] as const
 export const PAYMENT_TERMS = ['immediate', '7_days', '15_days', '30_days', '45_days', '60_days'] as const
 
 export const WARRANTY_STATUSES = ['active', 'claimed', 'void'] as const
-export const CLAIM_OUTCOMES = ['replaced', 'prorata', 'repaired', 'rejected'] as const
+/** 'pending' = sent to the tyre company, waiting for their decision; the other four are final */
+export const CLAIM_OUTCOMES = ['pending', 'replaced', 'prorata', 'repaired', 'rejected'] as const
 
 // ── Tyre shop ─────────────────────────────────────────────────────────────────
 // Product = a stocked item (tyre, tube, wheel …) or a billable service (fitting, alignment …).

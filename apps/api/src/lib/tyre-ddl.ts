@@ -8,6 +8,18 @@
 //   • idempotent — safe to re-run on already-provisioned tenants
 //   • accessed with raw SQL ($queryRawUnsafe) — intentionally NOT in schema.prisma
 
+/** Claim follow-up, replacement tracking and a change history on the warranty register (additive; also applied on first use, see lib/tyre-warranty.ts). */
+export const WARRANTY_CLAIM_DDL: string[] = [
+  `ALTER TABLE "tyre_warranty"
+     ADD COLUMN IF NOT EXISTS "claimRef"       TEXT,
+     ADD COLUMN IF NOT EXISTS "claimSettledAt" TIMESTAMPTZ,
+     ADD COLUMN IF NOT EXISTS "claimHistory"   JSONB NOT NULL DEFAULT '[]'::jsonb,
+     ADD COLUMN IF NOT EXISTS "replacementId"  UUID,
+     ADD COLUMN IF NOT EXISTS "replacesId"     UUID`,
+  `ALTER TABLE "tyre_warranty" DROP CONSTRAINT IF EXISTS "tyre_warranty_claimOutcome_check"`,
+  `ALTER TABLE "tyre_warranty" ADD CONSTRAINT "tyre_warranty_claimOutcome_check" CHECK ("claimOutcome" IN ('pending','replaced','prorata','repaired','rejected'))`,
+]
+
 export const TYRE_DDL: string[] = [
   // ── Customer vehicles ───────────────────────────────────────────────────────
   // One row per registration number. Powers "last fitted / next due" reminders and the
@@ -70,6 +82,7 @@ export const TYRE_DDL: string[] = [
   "createdAt"      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   "updatedAt"      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 )`,
+  ...WARRANTY_CLAIM_DDL,
   // A serial number can only be live once per product: re-keying the same tyre is refused,
   // while a voided row (returned / bill cancelled) frees the serial again.
   `CREATE UNIQUE INDEX IF NOT EXISTS "uq_twarr_serial" ON "tyre_warranty" ("branchId", "productId", UPPER("serialNo")) WHERE "serialNo" IS NOT NULL AND "status" <> 'void'`,

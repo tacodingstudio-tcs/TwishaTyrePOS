@@ -706,6 +706,9 @@ export const tyreApi = {
   listWarranty:  (params?: Record<string, unknown>) => api.get('/tyre/warranty', { params }).then((r) => r.data),
   claimWarranty: (id: string, data: unknown) => api.post(`/tyre/warranty/${id}/claim`, data).then((r) => r.data),
   voidWarranty:  (id: string, reason: string) => api.post(`/tyre/warranty/${id}/void`, { reason }).then((r) => r.data),
+  updateClaim:   (id: string, data: unknown) => api.patch(`/tyre/warranty/${id}/claim`, data).then((r) => r.data),
+  editWarranty:  (id: string, data: unknown) => api.patch(`/tyre/warranty/${id}`, data).then((r) => r.data),
+  claimsReport:  (params?: Record<string, unknown>) => api.get('/tyre/reports/claims', { params }).then((r) => r.data),
 
   // Team & salary
   teamStaff:       (params?: Record<string, unknown>) => api.get('/tyre/team/staff', { params }).then((r) => r.data),

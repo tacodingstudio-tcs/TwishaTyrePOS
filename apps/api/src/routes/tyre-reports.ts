@@ -4,8 +4,9 @@
 
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
-import { tbl, q, q1, todayStr, addDays, r2, branchConfig } from '../lib/tyre-helpers.js'
+import { tbl, q, q1, todayStr, addDays, r2, branchConfig, requireManager } from '../lib/tyre-helpers.js'
 import { dateStr } from '../lib/validators.js'
+import { ensureWarrantySchema } from '../lib/tyre-warranty.js'
 
 
 const SALE_ITEM_BASE = (s: string) => `
@@ -56,7 +57,8 @@ export const tyreReportRoutes: FastifyPluginAsync = async (app) => {
       q1<any>(req,
         `SELECT COUNT(*) FILTER (WHERE status = 'active')::int AS active,
                 COUNT(*) FILTER (WHERE status = 'active' AND "warrantyUntil" BETWEEN $2::date AND $3::date)::int AS expiring,
-                COUNT(*) FILTER (WHERE status = 'claimed')::int AS claimed
+                COUNT(*) FILTER (WHERE status = 'claimed')::int AS claimed,
+                COUNT(*) FILTER (WHERE status = 'claimed' AND "claimOutcome" = 'pending')::int AS pending
          FROM ${tbl(s, 'tyre_warranty')} WHERE "branchId" = $1::uuid`, b, today, addDays(today, warnDays)),
       q1<any>(req,
         `SELECT COUNT(*)::int AS n FROM ${tbl(s, 'tyre_vehicles')}
@@ -83,7 +85,7 @@ export const tyreReportRoutes: FastifyPluginAsync = async (app) => {
       month: { bills: month?.bills ?? 0, amount: month?.amount ?? 0, taxable: month?.taxable ?? 0, tyres: unitRow?.month ?? 0 },
       receivable: { outstanding: receivable?.outstanding ?? 0, overdue: receivable?.overdue ?? 0, overdueBills: receivable?.overdueBills ?? 0 },
       stock: { units: stock?.units ?? 0, value: r2(stock?.value ?? 0), lowItems: stock?.lowItems ?? 0, outItems: stock?.outItems ?? 0, items: stock?.items ?? 0 },
-      warranty: { active: warranty?.active ?? 0, expiring: warranty?.expiring ?? 0, claimed: warranty?.claimed ?? 0, alertDays: warnDays },
+      warranty: { active: warranty?.active ?? 0, expiring: warranty?.expiring ?? 0, claimed: warranty?.claimed ?? 0, pendingClaims: warranty?.pending ?? 0, alertDays: warnDays },
       remindersDue: due?.n ?? 0,
       recent, topSizes,
     }
@@ -128,6 +130,46 @@ export const tyreReportRoutes: FastifyPluginAsync = async (app) => {
                 marginPct: total.revenue > 0 ? Math.round(((total.revenue - total.cost) / total.revenue) * 1000) / 10 : 0 },
       note: 'Cost uses each item\'s current purchase price from the catalogue — an estimate, not FIFO/average cost.',
     }
+  })
+
+  // GET /api/tyre/reports/claims?from=&to= — warranty claims in a period: how many, what outcome, what they cost, by brand
+  // and month, and every claim still waiting for the tyre company (all time). Owner / manager only (it shows amounts).
+  app.get('/reports/claims', async (req) => {
+    requireManager(req)
+    await ensureWarrantySchema(req)
+    const qy = z.object({ from: dateStr.optional(), to: dateStr.optional() }).parse(req.query)
+    const today = todayStr()
+    const from = qy.from ?? `${today.slice(0, 4)}-04-01`
+    const to = qy.to ?? today
+    const s = req.schemaName
+    const IN_RANGE = `w."branchId" = $1::uuid AND w.status = 'claimed' AND (w."claimedAt" AT TIME ZONE 'Asia/Kolkata')::date BETWEEN $2::date AND $3::date`
+    const W = tbl(s, 'tyre_warranty')
+    const [totals, byOutcome, byBrand, byMonth, rows, pending] = await Promise.all([
+      q1<any>(req, `SELECT COUNT(*)::int AS claims, COALESCE(SUM(w."claimAmount"), 0)::float AS amount,
+                           COUNT(*) FILTER (WHERE w."claimOutcome" = 'pending')::int AS pending,
+                           COUNT(*) FILTER (WHERE w."replacementId" IS NOT NULL)::int AS "replacementsGiven",
+                           ROUND(AVG(EXTRACT(EPOCH FROM (w."claimSettledAt" - w."claimedAt")) / 86400) FILTER (WHERE w."claimSettledAt" IS NOT NULL)::numeric, 1)::float AS "avgDaysToDecide"
+                    FROM ${W} w WHERE ${IN_RANGE}`, req.branchId, from, to),
+      q(req, `SELECT w."claimOutcome" AS outcome, COUNT(*)::int AS claims, COALESCE(SUM(w."claimAmount"), 0)::float AS amount
+              FROM ${W} w WHERE ${IN_RANGE} GROUP BY 1 ORDER BY claims DESC`, req.branchId, from, to),
+      q(req, `SELECT COALESCE(NULLIF(w.brand, ''), 'Unknown') AS brand, COUNT(*)::int AS claims, COALESCE(SUM(w."claimAmount"), 0)::float AS amount,
+                     COUNT(*) FILTER (WHERE w."claimOutcome" = 'rejected')::int AS rejected
+              FROM ${W} w WHERE ${IN_RANGE} GROUP BY 1 ORDER BY claims DESC, brand`, req.branchId, from, to),
+      q(req, `SELECT to_char(w."claimedAt" AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM') AS month, COUNT(*)::int AS claims, COALESCE(SUM(w."claimAmount"), 0)::float AS amount
+              FROM ${W} w WHERE ${IN_RANGE} GROUP BY 1 ORDER BY 1`, req.branchId, from, to),
+      q(req, `SELECT w.id, w."serialNo", w."itemName", w.brand, w.size, w."customerName", w."customerPhone", w."invoiceNo",
+                     w."claimOutcome" AS outcome, w."claimAmount"::float AS amount, w."claimRef", w."claimNotes",
+                     to_char(w."claimedAt" AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD') AS "claimedOn",
+                     to_char(w."claimSettledAt" AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD') AS "decidedOn",
+                     w."replacementId" IS NOT NULL AS "replacementGiven"
+              FROM ${W} w WHERE ${IN_RANGE} ORDER BY w."claimedAt" DESC LIMIT 500`, req.branchId, from, to),
+      q(req, `SELECT w.id, w."serialNo", w."itemName", w.brand, w."customerName", w."claimRef",
+                     to_char(w."claimedAt" AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD') AS "claimedOn",
+                     (CURRENT_DATE - (w."claimedAt" AT TIME ZONE 'Asia/Kolkata')::date)::int AS "waitingDays"
+              FROM ${W} w WHERE w."branchId" = $1::uuid AND w.status = 'claimed' AND w."claimOutcome" = 'pending'
+              ORDER BY w."claimedAt" LIMIT 200`, req.branchId),
+    ])
+    return { from, to, totals, byOutcome, byBrand, byMonth, rows, pendingNow: pending }
   })
 
   // GET /api/tyre/reports/register?from=&to=&series=&format=csv|json

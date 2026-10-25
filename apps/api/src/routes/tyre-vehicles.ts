@@ -10,6 +10,8 @@ import {
   tbl, q, q1, insertRow, updateRow, httpError, requireWrite, requireManager, todayStr, addDays, branchConfig, ymd,
 } from '../lib/tyre-helpers.js'
 import { notifyServiceDue } from '../lib/tyre-notify.js'
+import { recordClaim, updateClaim, editWarrantyDetails, ensureWarrantySchema } from '../lib/tyre-warranty.js'
+import { mobile } from '../lib/validators.js'
 
 const idParam = z.object({ id: z.string().uuid() })
 const normReg = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '')
@@ -162,13 +164,14 @@ export const tyreVehicleRoutes: FastifyPluginAsync = async (app) => {
 
   // GET /api/tyre/warranty?serial=&vehicleNo=&phone=&invoiceNo=&status=&expiringDays=
   app.get('/warranty', async (req) => {
+    await ensureWarrantySchema(req)
     const qy = z.object({
       serial:       z.string().max(40).optional(),
       vehicleNo:    z.string().max(20).optional(),
       phone:        z.string().max(15).optional(),
       invoiceNo:    z.string().max(40).optional(),
       search:       z.string().max(60).optional(),
-      status:       z.enum(['active', 'claimed', 'void', 'any']).default('any'),
+      status:       z.enum(['active', 'claimed', 'pending', 'void', 'any']).default('any'),
       expiringDays: z.coerce.number().int().min(1).max(365).optional(),
       page:         z.coerce.number().int().min(1).default(1),
       limit:        z.coerce.number().int().min(1).max(100).default(25),
@@ -187,7 +190,8 @@ export const tyreVehicleRoutes: FastifyPluginAsync = async (app) => {
       where += ` AND (w."serialNo" ILIKE $${n} OR w."vehicleNo" ILIKE $${n} OR w."customerPhone" ILIKE $${n}
                   OR w."customerName" ILIKE $${n} OR w."invoiceNo" ILIKE $${n} OR w."itemName" ILIKE $${n} OR w."dotCode" ILIKE $${n})`
     }
-    if (qy.status !== 'any') { params.push(qy.status); where += ` AND w.status = $${params.length}` }
+    if (qy.status === 'pending') where += ` AND w.status = 'claimed' AND w."claimOutcome" = 'pending'`
+    else if (qy.status !== 'any') { params.push(qy.status); where += ` AND w.status = $${params.length}` }
     else where += ` AND w.status <> 'void'`
     if (qy.expiringDays) {
       params.push(todayStr(), addDays(todayStr(), qy.expiringDays))
@@ -195,7 +199,9 @@ export const tyreVehicleRoutes: FastifyPluginAsync = async (app) => {
     }
     const today = todayStr()
     const [rows, total] = await Promise.all([
-      q(req, `SELECT w.*, (w."warrantyUntil" IS NOT NULL AND w."warrantyUntil" < '${today}'::date) AS "expired"
+      q(req, `SELECT w.*, (w."warrantyUntil" IS NOT NULL AND w."warrantyUntil" < '${today}'::date) AS "expired",
+                     (SELECT x."serialNo" FROM ${tbl(req.schemaName, 'tyre_warranty')} x WHERE x.id = w."replacementId") AS "replacementSerial",
+                     (SELECT x."serialNo" FROM ${tbl(req.schemaName, 'tyre_warranty')} x WHERE x.id = w."replacesId") AS "replacesSerial"
               FROM ${tbl(req.schemaName, 'tyre_warranty')} w ${where}
               ORDER BY w."soldOn" DESC, w."createdAt" DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
         ...params, qy.limit, (qy.page - 1) * qy.limit),
@@ -204,34 +210,52 @@ export const tyreVehicleRoutes: FastifyPluginAsync = async (app) => {
     return { data: rows, total: total[0]?.count ?? 0, page: qy.page, limit: qy.limit }
   })
 
-  // POST /api/tyre/warranty/:id/claim { outcome, notes, claimAmount }
+  const ReplacementBody = z.object({
+    productId: z.string().uuid(),
+    serialNo:  z.string().trim().max(40).nullable().optional(),
+    dotCode:   z.string().trim().regex(/^\d{4}$/, 'DOT is week + year, e.g. 2325').nullable().optional(),
+  })
+  const claimFields = {
+    notes:       z.string().trim().min(3, 'Say what happened (at least a few words)').max(500),
+    claimAmount: z.number().nonnegative().max(1e7).nullable().optional(),
+    claimRef:    z.string().trim().max(60).nullable().optional(),
+  }
+
+  // POST /api/tyre/warranty/:id/claim { outcome, notes, claimAmount?, claimRef?, replacement? }
+  // outcome "pending" = sent to the tyre company, decision awaited (finish it with PATCH below).
+  // "replacement" hands a tyre over from stock: it leaves the ledger and gets its own warranty row, in one step.
   app.post('/warranty/:id/claim', async (req) => {
     requireWrite(req)
     const { id } = idParam.parse(req.params)
+    const body = z.object({ outcome: z.enum(CLAIM_OUTCOMES), ...claimFields, replacement: ReplacementBody.optional() }).parse(req.body)
+    return recordClaim(req, id, body)
+  })
+
+  // PATCH /api/tyre/warranty/:id/claim — correct a saved claim or finish a pending one (owner / manager)
+  app.patch('/warranty/:id/claim', async (req) => {
+    requireManager(req)
+    const { id } = idParam.parse(req.params)
     const body = z.object({
-      outcome:     z.enum(CLAIM_OUTCOMES),
-      notes:       z.string().trim().min(3).max(500),
-      claimAmount: z.number().nonnegative().max(1e7).optional(),
-    }).parse(req.body)
-    const w = await q1<any>(req,
-      `SELECT * FROM ${tbl(req.schemaName, 'tyre_warranty')} WHERE id = $1::uuid AND "branchId" = $2::uuid`, id, req.branchId)
-    if (!w) throw httpError(404, 'Warranty record not found')
-    if (w.status === 'void')    throw httpError(422, 'This record was voided (bill cancelled or tyre returned)')
-    if (w.status === 'claimed') throw httpError(409, 'A claim has already been recorded on this tyre')
-    const expired = w.warrantyUntil && ymd(w.warrantyUntil) < todayStr()
-    if (expired && body.outcome !== 'rejected') {
-      throw httpError(422, `Warranty ended on ${ymd(w.warrantyUntil)} — record the claim as "rejected", or void and re-issue if you are honouring it`)
-    }
-    // One atomic step that only succeeds while the row is still 'active': two taps on "Record claim" at the same moment
-    // (or two counters) used to both pass the checks above and the second silently overwrote the first.
-    const claimed = await q1<any>(req,
-      `UPDATE ${tbl(req.schemaName, 'tyre_warranty')}
-          SET status = 'claimed', "claimedAt" = NOW(), "claimOutcome" = $3, "claimNotes" = $4, "claimAmount" = $5, "updatedAt" = NOW()
-        WHERE id = $1::uuid AND "branchId" = $2::uuid AND status = 'active'
-        RETURNING *`,
-      id, req.branchId, body.outcome, body.notes, body.claimAmount ?? null)
-    if (!claimed) throw httpError(409, 'A claim has already been recorded on this tyre')
-    return claimed
+      outcome: z.enum(CLAIM_OUTCOMES).optional(),
+      notes: claimFields.notes.optional(), claimAmount: claimFields.claimAmount, claimRef: claimFields.claimRef,
+      replacement: ReplacementBody.optional(),
+    }).refine((b) => Object.keys(b).length > 0, 'Nothing to change').parse(req.body)
+    return updateClaim(req, id, body)
+  })
+
+  // PATCH /api/tyre/warranty/:id — fix the customer, vehicle, serial or DOT on a record (owner / manager)
+  app.patch('/warranty/:id', async (req) => {
+    requireManager(req)
+    const { id } = idParam.parse(req.params)
+    const body = z.object({
+      customerName:  z.string().trim().min(1).max(120).nullable().optional(),
+      customerPhone: z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? null : v), mobile.nullable()).optional(),
+      vehicleNo:     z.string().trim().max(20).nullable().optional().transform((v) => (v ? normReg(v) || null : v)),
+      serialNo:      z.string().trim().min(1).max(40).nullable().optional(),
+      dotCode:       z.string().trim().regex(/^\d{4}$/, 'DOT is week + year, e.g. 2325').nullable().optional(),
+      position:      z.string().trim().max(10).nullable().optional(),
+    }).refine((b) => Object.keys(b).length > 0, 'Nothing to change').parse(req.body)
+    return editWarrantyDetails(req, id, body)
   })
 
   // POST /api/tyre/warranty/:id/void { reason } — returned tyre / wrong entry; frees the serial number

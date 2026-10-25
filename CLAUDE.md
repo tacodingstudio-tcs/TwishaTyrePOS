@@ -77,7 +77,7 @@ to exercise replay behaviour.
 * `apps/api/e2e/crawl.ts` opens every screen as owner / manager / viewer and on a phone-size screen and reports
   crashes, stuck loaders, failed requests and console errors. `apps/api/e2e/flow-sale.ts` drives the real New Sale
   screen (bill, double-tap, empty bill, credit with no customer, expired session, read-only user);
-  `e2e/flow-warranty.ts` walks sale-with-serial → Warranty page → claim → void; `e2e/size-picker.ts` checks the size lists.
+  `e2e/flow-warranty.ts` walks sale-with-serial → claim sent to the company → company reply with a replacement → edit → claims report → void; `e2e/size-picker.ts` checks the size lists.
   Both need the API (:3200), the web app (:5175) and the demo shop: `npx tsx e2e/crawl.ts`.
 * `src/__tests__/tyre-workbook.test.ts` replays the shop's paper book (`Shakti Bill Book.xlsx`, CAR + Two Wheel) and
   checks totals / taxable / GST against the sheet's own formulas. The data file holds real customers, so it lives in
@@ -90,6 +90,12 @@ to exercise replay behaviour.
 * Bill search (`listInvoices`) is two index-driven look-ups (bill number / customer name / mobile, "starts with") using the
   `lower(...) text_pattern_ops` indexes in `tyre-ddl.ts`; the count stops at 10,000 (`meta.capped`). After deploying, run
   `pnpm provision:all` once so existing shops get those indexes (search works without them, just slower).
+* Warranty claims (`lib/tyre-warranty.ts`): outcome `pending` = sent to the tyre company (finish it with
+  `PATCH /warranty/:id/claim`, owner/manager); `replaced` + `replacement{productId,serialNo}` takes one tyre out of stock and
+  creates a linked warranty row (same end date) in the same transaction; claims are atomic (no double claim);
+  `PATCH /warranty/:id` fixes customer/vehicle/serial/DOT; every change lands in `claimHistory`; report at
+  `GET /api/tyre/reports/claims`. The claim columns are added by `provision:all` and also on first use
+  (`ensureWarrantySchema`), so a deploy cannot break a shop that was not re-provisioned.
 * Sign-in lock (5 wrong PINs, 15 min) lives in `lib/login-throttle.ts`. Owner or manager lifts it with
   `POST /api/users/:id/unlock` (Staff screen shows "Locked · N min" + Unlock; a manager may unlock the owner; a PIN
   reset also lifts it). Nobody left inside: `REDIS_URL=… npx tsx scripts/unlock-account.ts <ownerPhone> [userPhone]`.
@@ -98,7 +104,7 @@ to exercise replay behaviour.
 
 E-way bill generation for wholesale dispatch (the transportPlatform has a GSP adapter to port); credit notes
 that void warranty rows (a goods return, `POST /api/invoices/:id/return`, now does; a credit note is money-only and does not); per-DOT stock
-lots and FIFO by manufacture date; supplier tyre-claim tracking; barcode/QR on tyre sidewall; GPS-free
+lots and FIFO by manufacture date; barcode/QR on tyre sidewall; GPS-free
 vehicle service history import; retreading job cards. Package scope is intentionally still `@billing/*` to
 keep patches portable.
 

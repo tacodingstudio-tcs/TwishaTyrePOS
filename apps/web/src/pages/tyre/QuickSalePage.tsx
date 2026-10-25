@@ -501,8 +501,13 @@ export function QuickSalePage() {
                       </details>
                     )}
                     {['tyre', 'tube', 'alloy_wheel', 'battery'].includes(l.kind) && (
-                      <details className="rounded-lg border border-gray-100 bg-gray-50 p-3">
-                        <summary className="text-xs font-medium text-gray-700 cursor-pointer">Serial numbers, DOT, GST % — optional</summary>
+                      <details className="rounded-lg border border-gray-100 bg-gray-50 p-3" open={l.kind === 'tyre' ? true : undefined}>
+                        <summary className="text-xs font-medium text-gray-700 cursor-pointer">Serial numbers, DOT, GST % — the serial is what a warranty claim is matched to</summary>
+                        {l.kind === 'tyre' && splitList(l.serials).length < units && (
+                          <p className="mt-2 text-xs text-amber-700 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                            {splitList(l.serials).length === 0 ? 'No serial number yet' : `${splitList(l.serials).length} of ${units} serial numbers entered`} — without it a later warranty claim cannot be matched to the exact tyre.
+                          </p>
+                        )}
                         <div className="mt-3 grid grid-cols-1 md:grid-cols-4 gap-3">
                           <div className="md:col-span-2">
                             <label className="label">Serial numbers ({units}) <span className="text-gray-400 font-normal">— space or comma</span></label>

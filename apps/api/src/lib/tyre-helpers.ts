@@ -77,7 +77,9 @@ const COL_CAST: Record<string, string> = {
   joinDate: 'date', date: 'date',
   lastServiceDate: 'date', nextServiceDate: 'date', soldOn: 'date', warrantyUntil: 'date',
   // timestamptz
-  claimedAt: 'timestamptz',
+  claimedAt: 'timestamptz', claimSettledAt: 'timestamptz',
+  replacementId: 'uuid', replacesId: 'uuid',
+  claimHistory: 'jsonb',
 }
 
 const COL_RE = /^[A-Za-z]+$/
