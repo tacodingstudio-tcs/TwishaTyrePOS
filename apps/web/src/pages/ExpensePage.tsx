@@ -192,7 +192,7 @@ export function ExpensePage() {
         )}
 
         {expenses.length > 0 && (
-          <div className="card overflow-hidden">
+          <div className="card overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-xs text-gray-500 border-b border-gray-100">
                 <tr>

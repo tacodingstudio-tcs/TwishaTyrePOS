@@ -192,7 +192,7 @@ function ReceiveTransferModal({ transfer, onClose }: { transfer: any; onClose: (
           <input id="recv-date" type="date" value={receivedDate} onChange={(e) => setReceivedDate(e.target.value)} className="input max-w-xs" />
         </div>
 
-        <div className="border border-gray-200 rounded-lg overflow-hidden mb-4">
+        <div className="border border-gray-200 rounded-lg overflow-x-auto mb-4">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
@@ -271,7 +271,7 @@ export function StockTransfersPage() {
           </select>
         </div>
 
-        <div className="card overflow-hidden">
+        <div className="card overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">

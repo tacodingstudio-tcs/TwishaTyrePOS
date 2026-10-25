@@ -190,7 +190,7 @@ export default function ContractsPage() {
       ) : contracts.length === 0 ? (
         <div className="text-center py-16 text-gray-400">No contracts found.</div>
       ) : (
-        <div className="bg-white rounded-lg border overflow-hidden">
+        <div className="bg-white rounded-lg border overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b">
               <tr>

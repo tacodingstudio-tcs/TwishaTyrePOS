@@ -71,7 +71,7 @@ function ReceiveGRNModal({ po, onClose }: { po: any; onClose: () => void }) {
           </div>
         </div>
 
-        <div className="border border-gray-200 rounded-lg overflow-hidden mb-4">
+        <div className="border border-gray-200 rounded-lg overflow-x-auto mb-4">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">

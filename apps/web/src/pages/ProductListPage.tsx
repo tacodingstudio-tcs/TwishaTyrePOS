@@ -351,7 +351,7 @@ export function ProductListPage() {
             ))}
           </div>
         ) : (
-          <div className="border border-gray-100 rounded-xl overflow-hidden">
+          <div className="border border-gray-100 rounded-xl overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
@@ -988,7 +988,7 @@ function BulkImportModal({ onClose, domainType = '' }: { onClose: () => void; do
             </div>
 
             {/* Per-row table */}
-            <div className="border border-gray-100 rounded-lg overflow-hidden text-sm">
+            <div className="border border-gray-100 rounded-lg overflow-x-auto text-sm">
               <table className="w-full">
                 <thead className="bg-gray-50 text-xs text-gray-500">
                   <tr>
