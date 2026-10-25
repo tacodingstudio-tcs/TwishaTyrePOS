@@ -10,7 +10,7 @@ Everything runs on the laptop itself: no internet, no server, no monthly cost. O
 
 ## A. Before you go (on your own computer)
 
-1. Copy **`Shakti-Enterprise-Setup.exe`** to a pen drive (about 200 MB; it contains the database, the app and the logo).
+1. Copy **`Shakti-Enterprise-Setup.exe`** to a pen drive (about 95 MB; it contains the database, the app and the logo).
 2. Also copy this guide, and (optional) the shop's tyre list as an Excel file for importing.
 
 ## B. On Yogesh's laptop — one step at a time

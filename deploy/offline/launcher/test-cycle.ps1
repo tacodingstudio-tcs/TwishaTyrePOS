@@ -15,7 +15,9 @@ function Api($method, $path, $body, $token) {
   }
   $out = & curl.exe @args; $script:lastRaw = ($out | Out-String); try { $out | ConvertFrom-Json } catch { $null }
 }
-function Login { (Api 'POST' '/api/auth/login' '{"tenantPhone":"9227575750","phone":"9227575750","pin":"7575"}').accessToken }
+function Login {   # on a brand-new install the app is "healthy" a moment before the shop exists: allow up to 40 s
+  for ($i = 0; $i -lt 40; $i++) { $t = (Api 'POST' '/api/auth/login' '{"tenantPhone":"9227575750","phone":"9227575750","pin":"7575"}').accessToken; if ($t) { return $t }; Start-Sleep -Seconds 1 }
+}
 function WaitHealthy($sec) { $sw = [Diagnostics.Stopwatch]::StartNew(); while ($sw.Elapsed.TotalSeconds -lt $sec) { if ((& curl.exe -s -m 2 -o NUL -w '%{http_code}' "$A/health") -eq '200') { return [math]::Round($sw.Elapsed.TotalSeconds, 1) }; Start-Sleep -Milliseconds 400 }; return -1 }
 function Bills($t) { (Api 'GET' '/api/invoices?limit=1&txnType=sale_invoice' $null $t).meta.total }
 function KillAll { Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -like "$Root\*" -or ($_.CommandLine -like "*$Root*" -and $_.Name -match 'node|postgres|redis|pg_ctl') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } }
