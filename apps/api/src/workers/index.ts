@@ -3,7 +3,6 @@
 // Importing each worker file starts its BullMQ Worker instance immediately.
 
 import './whatsapp.worker.js'
-import './reminder.worker.js'
 import './tyre-alerts.worker.js'
 
-console.log('[Workers] All workers started (whatsapp, reminder, tyre-alerts)')
+console.log('[Workers] All workers started (whatsapp, tyre-alerts)')

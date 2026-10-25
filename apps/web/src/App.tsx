@@ -10,7 +10,6 @@ import { InvoiceDetailPage } from './pages/InvoiceDetailPage'
 import { ProductListPage } from './pages/ProductListPage'
 import { PartyListPage } from './pages/PartyListPage'
 import { PartyStatementPage } from './pages/PartyStatementPage'
-import { AIPage } from './pages/AIPage'
 import { InventoryLayout } from './pages/inventory/InventoryLayout'
 import { StockLevelsPage } from './pages/inventory/StockLevelsPage'
 import { SuppliersPage } from './pages/inventory/SuppliersPage'
@@ -71,7 +70,6 @@ export default function App() {
           <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
           <Route path="/parties" element={<PartyListPage />} />
           <Route path="/parties/:id" element={<PartyStatementPage />} />
-          <Route path="/ai" element={<AIPage />} />
 
           {/* ── Stores (tyres, spares, lubricants) with shared sub-nav ── */}
           <Route path="/inventory" element={<InventoryLayout />}>

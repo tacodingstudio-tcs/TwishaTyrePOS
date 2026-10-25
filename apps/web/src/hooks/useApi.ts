@@ -332,16 +332,6 @@ export function useReorderSuggestions() {
   })
 }
 
-export function useCreditRisk(partyId: string | undefined) {
-  return useQuery({
-    queryKey: ['ai-credit-risk', partyId],
-    queryFn:  () => aiApi.creditRisk(partyId!),
-    enabled:  !!partyId,
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-  })
-}
-
 export function useSuggestHSN() {
   return useMutation({
     mutationFn: (productId: string) => productApi.suggestHSN(productId),

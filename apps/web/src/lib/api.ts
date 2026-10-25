@@ -412,59 +412,14 @@ export const branchApi = {
 }
 
 export const aiApi = {
-  extractInvoice: (text: string) =>
-    api.post('/ai/extract-invoice', { text }).then((r) => r.data),
-
-  scanBill: (imageBase64: string, mediaType = 'image/jpeg') =>
-    api.post('/ai/scan-bill', { imageBase64, mediaType }).then((r) => r.data),
-
-  generateReminders: () =>
-    api.post('/ai/reminders/generate').then((r) => r.data),
-
-  pendingReminders: () =>
-    api.get('/ai/reminders/pending').then((r) => r.data),
-
-  approveReminder: (id: string) =>
-    api.post(`/ai/reminders/${id}/approve`).then((r) => r.data),
-
-  rejectReminder: (id: string) =>
-    api.post(`/ai/reminders/${id}/reject`).then((r) => r.data),
-
   insight: () =>
     api.get('/ai/insight').then((r) => r.data),
 
   reorder: () =>
     api.get('/ai/reorder').then((r) => r.data),
 
-  checkInvoice: (data: { partyId: string | null; grandTotal: number; items: any[] }) =>
-    api.post('/ai/check-invoice', data).then((r) => r.data),
-
-  creditRisk: (partyId: string) =>
-    api.get(`/ai/credit-risk/${partyId}`).then((r) => r.data),
-
   extractSupplierBill: (imageBase64: string, mediaType = 'image/jpeg') =>
     api.post('/ai/extract-supplier-bill', { imageBase64, mediaType }).then((r) => r.data),
-
-  categorizeExpense: (description: string, amount: number) =>
-    api.post('/ai/categorize-expense', { description, amount }).then((r) => r.data),
-
-  cashflowForecast: (horizon: 7 | 30 = 7) =>
-    api.get('/ai/cashflow-forecast', { params: { horizon } }).then((r) => r.data),
-
-  partyDuplicates: () =>
-    api.get('/ai/party-duplicates').then((r) => r.data),
-
-  priceAnomaly: (items: Array<{ productId: string; rate: number }>) =>
-    api.post('/ai/price-anomaly', { items }).then((r) => r.data),
-
-  gstSummaryAI: (month: string) =>
-    api.get('/ai/gst-summary', { params: { month } }).then((r) => r.data),
-
-  demandForecast: () =>
-    api.get('/ai/demand-forecast').then((r) => r.data),
-
-  chat: (question: string, history: Array<{ role: 'user' | 'assistant'; content: string }>) =>
-    api.post('/ai/chat', { question, history }).then((r) => r.data),
 }
 
 export const analyticsApi = {
