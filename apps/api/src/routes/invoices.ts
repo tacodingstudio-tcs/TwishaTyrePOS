@@ -23,7 +23,6 @@ import {
 import { DOMAIN_REGISTRY } from '@billing/domain-registry'
 import { voidWarrantyForInvoice, voidWarrantyForReturn } from '../lib/tyre-helpers.js'
 import { withIdempotency, IdempotencyConflictError } from '../lib/idempotency.js'
-import { createPaymentLink } from '../services/razorpayPayment.service.js'
 import { whatsappQueue } from '../lib/queues.js'
 import { sendReceiptEmail } from '../services/email.service.js'
 
@@ -281,23 +280,6 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
       }
       throw err
     }
-  })
-
-  // ── POST /api/invoices/:id/payment-link ───────────────────────────────────
-  // Generates a Razorpay payment link for the outstanding balance and
-  // returns the shareable URL — the cashier sends this via WhatsApp
-  // (or copies it manually) for the customer to pay via UPI/card.
-  // Actual payment confirmation arrives separately via the webhook at
-  // /api/webhooks/razorpay, which calls recordPayment() automatically.
-  app.post('/:id/payment-link', async (req) => {
-    const { id } = z.object({ id: z.string().uuid() }).parse(req.params)
-    return createPaymentLink(id, {
-      db:         req.db,
-      branchId:   req.branchId,
-      schemaName: req.schemaName,
-      userId:     req.userId,
-      role:       req.role,
-    })
   })
 
   // ── GET /api/invoices/:id/pdf ─────────────────────────────────────────────
