@@ -688,24 +688,27 @@ export function useDeleteExpense() {
 
 // ── Analytics hooks ───────────────────────────────────────────────────────────
 
-export function useAnalyticsDashboard(params?: { period?: string; compareWith?: string }) {
+export function useAnalyticsDashboard(params?: { period?: string; from?: string; to?: string; compareWith?: string }, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: QK.analyticsDashboard(params),
     queryFn:  () => analyticsApi.dashboard(params),
+    enabled:  opts?.enabled ?? true,
   })
 }
 
-export function useAnalyticsMargin(params?: { period?: string }) {
+export function useAnalyticsMargin(params?: { period?: string; from?: string; to?: string }, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: QK.analyticsMargin(params),
     queryFn:  () => analyticsApi.marginReport(params),
+    enabled:  opts?.enabled ?? true,
   })
 }
 
-export function useAnalyticsTopCustomers(params?: { period?: string; limit?: number }) {
+export function useAnalyticsTopCustomers(params?: { period?: string; from?: string; to?: string; limit?: number }, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: QK.analyticsTopCustomers(params),
     queryFn:  () => analyticsApi.topCustomers(params),
+    enabled:  opts?.enabled ?? true,
   })
 }
 

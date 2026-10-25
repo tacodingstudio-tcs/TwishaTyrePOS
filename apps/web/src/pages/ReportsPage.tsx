@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { useAuthStore } from '@/store/auth.store'
 import { CaExportButton } from '@/components/tyre/CaExportModal'
+import { PeriodPicker, periodParams, periodReady, type PeriodState } from '@/components/ui/PeriodPicker'
 import { PageHeader } from '@/components/layout/PageHeader'
 import {
   useAnalyticsGstSummary, useAnalyticsMargin,
@@ -1067,8 +1068,8 @@ const SERVICE_DOMAINS = new Set([
 function MarginTab() {
   const domainType = useAuthStore((s) => s.branch?.domainType as string | undefined)
   const isServiceDomain = SERVICE_DOMAINS.has(domainType ?? '')
-  const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d')
-  const { data, isLoading } = useAnalyticsMargin({ period })
+  const [per, setPer] = useState<PeriodState>({ period: '30d' })
+  const { data, isLoading } = useAnalyticsMargin(periodParams(per), { enabled: periodReady(per) })
 
   const summary    = data?.summary    ?? { totalRevenue: 0, totalCOGS: 0, grossProfit: 0, marginPct: 0 }
   const byProduct  = data?.by_product  ?? []
@@ -1077,16 +1078,7 @@ function MarginTab() {
 
   return (
     <div className="space-y-5">
-      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
-        {(['7d', '30d', '90d'] as const).map((p) => (
-          <button key={p} type="button" onClick={() => setPeriod(p)}
-            className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-              period === p ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
-            }`}>
-            {p === '7d' ? 'Last 7 days' : p === '30d' ? 'Last 30 days' : 'Last 90 days'}
-          </button>
-        ))}
-      </div>
+      <PeriodPicker value={per} onChange={setPer} className="justify-start" />
 
       {isLoading ? (
         <div className="text-center py-12 text-gray-400">Loading…</div>

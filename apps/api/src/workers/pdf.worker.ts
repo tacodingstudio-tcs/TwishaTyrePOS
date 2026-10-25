@@ -151,6 +151,8 @@ const worker = new Worker<PdfJob>(
   },
   {
     connection:  redis,
+    drainDelay:      Number(process.env['WORKER_DRAIN_DELAY_SEC'] ?? 30),      // seconds to wait on an empty queue (library default 5) — fewer Redis commands
+    stalledInterval: Number(process.env['WORKER_STALLED_INTERVAL_MS'] ?? 300_000),
     concurrency: 3,
     limiter: { max: 10, duration: 5000 },
   }

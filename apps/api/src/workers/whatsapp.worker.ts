@@ -244,6 +244,8 @@ const worker = new Worker<WhatsAppJob>(
   },
   {
     connection:  redis,
+    drainDelay:      Number(process.env['WORKER_DRAIN_DELAY_SEC'] ?? 30),      // seconds to wait on an empty queue (library default 5) — fewer Redis commands
+    stalledInterval: Number(process.env['WORKER_STALLED_INTERVAL_MS'] ?? 300_000),
     concurrency: 5,   // WABA rate limit: ~80 messages/second, 5 is safe
     limiter: {
       max:      20,

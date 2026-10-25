@@ -9,6 +9,7 @@ import {
 } from '@/hooks/useApi'
 import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { PeriodPicker, periodParams, periodRange, periodLabel, periodReady, type PeriodState } from '@/components/ui/PeriodPicker'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { RevenueBarChart } from '@/components/charts/RevenueBarChart'
 import { GSTINLookup } from '@/components/gstin/GSTINLookup'
@@ -23,18 +24,9 @@ function formatINR(n: number) {
   return '₹' + Math.abs(n).toLocaleString('en-IN', { maximumFractionDigits: 0 })
 }
 
-const PERIOD_LABELS: Record<string, string> = { '7d': 'Last 7 days', '30d': 'Last 30 days', '90d': 'Last 90 days' }
-
-// Compute date range matching the analytics endpoint's period logic
-function periodRange(period: string) {
-  const now  = new Date()
-  const days = period === '90d' ? 90 : period === '30d' ? 30 : 7
-  const from = new Date(now); from.setDate(from.getDate() - days)
-  return { from: localIso(from), to: localIso(now) }
-}
-
 export function DashboardPage() {
-  const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d')
+  const [per, setPer] = useState<PeriodState>({ period: '30d' })
+  const ready = periodReady(per)
   const domainType = useAuthStore((s) => s.branch?.domainType as string | undefined)
 
   // Domains that carry physical inventory — show low-stock + reorder widgets
@@ -72,10 +64,11 @@ export function DashboardPage() {
   const { data: monthly } = useMonthlyComparison()
 
   const { data: analytics, isLoading: analyticsLoading } = useAnalyticsDashboard({
-    period, compareWith: 'prev_period',
-  })
-  const { data: topCustomers } = useAnalyticsTopCustomers({ period, limit: 5 })
-  const range = periodRange(period)
+    ...periodParams(per), compareWith: 'prev_period',
+  }, { enabled: ready })
+  const { data: topCustomers } = useAnalyticsTopCustomers({ ...periodParams(per), limit: 5 }, { enabled: ready })
+  const range = periodRange(per)
+  const periodText = periodLabel(per)
   const { data: expSummary }   = useExpenseSummary({ from: range.from, to: range.to })
 
   const kpiMap: Record<string, any> = {}
@@ -92,20 +85,7 @@ export function DashboardPage() {
         title="Dashboard"
         subtitle={format(new Date(), 'EEEE, d MMMM yyyy')}
         action={
-          <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-            {(['7d', '30d', '90d'] as const).map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => setPeriod(p)}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                  period === p ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {p === '7d' ? '7D' : p === '30d' ? '30D' : '90D'}
-              </button>
-            ))}
-          </div>
+          <PeriodPicker value={per} onChange={setPer} />
         }
       />
 
@@ -174,7 +154,7 @@ export function DashboardPage() {
         {/* ── P&L KPI cards ───────────────────────────────────────────────── */}
         <div className="grid grid-cols-4 gap-4">
           <KpiCard
-            label={`Revenue (${PERIOD_LABELS[period]})`}
+            label={`Revenue (${periodText})`}
             value={formatINR(revenue)}
             delta={kpiMap['revenue']?.delta}
             trend={kpiMap['revenue']?.trend}
@@ -183,7 +163,7 @@ export function DashboardPage() {
             icon={TrendingUp}
           />
           <KpiCard
-            label={`Expenses (${PERIOD_LABELS[period]})`}
+            label={`Expenses (${periodText})`}
             value={formatINR(expenses)}
             highlight="amber"
             loading={analyticsLoading}
@@ -321,7 +301,7 @@ export function DashboardPage() {
                 <div className="card p-5">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-sm font-semibold text-gray-900">Top products / services</h2>
-                    <span className="text-xs text-gray-400">{PERIOD_LABELS[period]}</span>
+                    <span className="text-xs text-gray-400">{periodText}</span>
                   </div>
                   <div className="space-y-3">
                     {items.map((item: any, i: number) => (

@@ -2,7 +2,9 @@
 //
 // Domain-aware analytics endpoints.
 //
-//  GET /api/analytics/dashboard?period=7d|30d|90d&compareWith=prev_period|prev_year
+//  GET /api/analytics/dashboard?period=7d|30d|90d|month|year|custom&from=&to=&compareWith=prev_period|prev_year
+//      (every endpoint below takes the same period / from / to: month = this calendar month, year = this financial year from 1 April,
+//       custom = from..to, up to 3 years)
 //  GET /api/analytics/revenue-trend?period=7d|30d|90d&groupBy=day|week|month
 //  GET /api/analytics/gst-summary?month=YYYY-MM
 //  GET /api/analytics/payment-methods?period=7d|30d|90d
@@ -13,6 +15,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { cacheKey, getOrSet } from '../lib/cache.js'
+import { todayStr } from '../lib/tyre-helpers.js'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -56,6 +59,30 @@ const iso        = (d: Date)   => {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
+}
+
+const PERIODS = ['7d', '30d', '90d', 'month', 'year', 'custom'] as const
+const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Dates look like 2026-04-01').refine((v) => !isNaN(new Date(`${v}T00:00:00Z`).getTime()) && new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v, 'Not a real date').optional()
+const periodFields = (def: typeof PERIODS[number]) => ({ period: z.enum(PERIODS).default(def), from: ymd, to: ymd })
+const localDate = (v: string) => { const [y, m, d] = v.split('-').map(Number) as [number, number, number]; return new Date(y, m - 1, d) }
+
+/** The dates a request asks for. 7d/30d/90d = that many days back from today; month = this month so far; year = this financial
+ *  year so far (from 1 April); custom = from..to. Today is the shop's (IST) today. */
+function resolveRange(q: { period: string; from?: string | undefined; to?: string | undefined }): { from: Date; to: Date; days: number } {
+  const to = localDate(todayStr())
+  const bad = (msg: string): never => { throw Object.assign(new Error(msg), { statusCode: 422 }) }
+  let from: Date
+  if (q.period === 'custom') {
+    if (!q.from || !q.to) bad('Pick both a from and a to date')
+    from = localDate(q.from!); const end = localDate(q.to!)
+    if (from > end) bad('The "from" date is after the "to" date')
+    if (end.getTime() - from.getTime() > 3 * 366 * 86_400_000) bad('Pick a period of up to 3 years')
+    if (end < to) to.setTime(end.getTime())
+    if (from > to) bad('That period is in the future')
+  } else if (q.period === 'month') from = new Date(to.getFullYear(), to.getMonth(), 1)
+  else if (q.period === 'year') from = new Date(to.getMonth() >= 3 ? to.getFullYear() : to.getFullYear() - 1, 3, 1)
+  else { from = new Date(to); from.setDate(from.getDate() - periodDays(q.period)) }
+  return { from, to, days: Math.max(1, Math.round((to.getTime() - from.getTime()) / 86_400_000)) }
 }
 
 function dateRange(days: number, anchor = new Date()): { from: Date; to: Date } {
@@ -210,17 +237,15 @@ export const analyticsRoutes: FastifyPluginAsync = async (app) => {
   // ── GET /api/analytics/dashboard ─────────────────────────────────────────────
   app.get('/dashboard', async (req, reply) => {
     const q = z.object({
-      period:      z.enum(['7d', '30d', '90d']).default('7d'),
+      ...periodFields('7d'),
       compareWith: z.enum(['prev_period', 'prev_year']).optional(),
     }).parse(req.query)
 
-    const key = cacheKey(req.schemaName, req.branchId, 'dash', q.period, q.compareWith ?? 'none')
+    const key = cacheKey(req.schemaName, req.branchId, 'dash', q.period, q.from ?? '', q.to ?? '', q.compareWith ?? 'none')
     const result = await getOrSet(key, 300, async () => {
     const db        = req.db
     const branchId  = req.branchId
-    const days      = periodDays(q.period)
-    const now       = new Date()
-    const { from }  = dateRange(days, now)
+    const { from, to: now, days } = resolveRange(q)
 
     const fromStr = iso(from)
     const toStr   = iso(now)
@@ -499,14 +524,12 @@ export const analyticsRoutes: FastifyPluginAsync = async (app) => {
   // ── GET /api/analytics/payment-methods?period=7d|30d|90d ─────────────────
   app.get('/payment-methods', async (req, reply) => {
     const q = z.object({
-      period: z.enum(['7d', '30d', '90d']).default('30d'),
+      ...periodFields('30d'),
     }).parse(req.query)
 
-    const key = cacheKey(req.schemaName, req.branchId, 'pay', q.period)
+    const key = cacheKey(req.schemaName, req.branchId, 'pay', q.period, q.from ?? '', q.to ?? '')
     const result = await getOrSet(key, 300, async () => {
-    const days     = periodDays(q.period)
-    const now      = new Date()
-    const { from } = dateRange(days, now)
+    const { from, to: now, days } = resolveRange(q)
     const fromStr  = iso(from)
     const toStr    = iso(now)
     const branchId = req.branchId
@@ -555,15 +578,13 @@ export const analyticsRoutes: FastifyPluginAsync = async (app) => {
   // ── GET /api/analytics/revenue-trend ──────────────────────────────────────
   app.get('/revenue-trend', async (req, reply) => {
     const q = z.object({
-      period:  z.enum(['7d', '30d', '90d']).default('30d'),
+      ...periodFields('30d'),
       groupBy: z.enum(['day', 'week', 'month']).default('day'),
     }).parse(req.query)
 
-    const key = cacheKey(req.schemaName, req.branchId, 'trend', q.period, q.groupBy)
+    const key = cacheKey(req.schemaName, req.branchId, 'trend', q.period, q.from ?? '', q.to ?? '', q.groupBy)
     const result = await getOrSet(key, 300, async () => {
-    const days     = periodDays(q.period)
-    const now      = new Date()
-    const { from } = dateRange(days, now)
+    const { from, to: now, days } = resolveRange(q)
     const fromStr  = iso(from)
     const toStr    = iso(now)
     const branchId = req.branchId
@@ -599,14 +620,12 @@ export const analyticsRoutes: FastifyPluginAsync = async (app) => {
   // ── GET /api/analytics/margin-report?period=7d|30d|90d ───────────────────
   app.get('/margin-report', async (req, reply) => {
     const q = z.object({
-      period: z.enum(['7d', '30d', '90d']).default('30d'),
+      ...periodFields('30d'),
     }).parse(req.query)
 
-    const key = cacheKey(req.schemaName, req.branchId, 'margin', q.period)
+    const key = cacheKey(req.schemaName, req.branchId, 'margin', q.period, q.from ?? '', q.to ?? '')
     const result = await getOrSet(key, 600, async () => {
-    const days     = periodDays(q.period)
-    const now      = new Date()
-    const { from } = dateRange(days, now)
+    const { from, to: now, days } = resolveRange(q)
     const fromStr  = iso(from)
     const toStr    = iso(now)
     const branchId = req.branchId
@@ -650,15 +669,13 @@ export const analyticsRoutes: FastifyPluginAsync = async (app) => {
   // ── GET /api/analytics/top-customers?period=7d|30d|90d&limit=10 ──────────
   app.get('/top-customers', async (req, reply) => {
     const q = z.object({
-      period: z.enum(['7d', '30d', '90d']).default('30d'),
+      ...periodFields('30d'),
       limit:  z.coerce.number().int().min(1).max(50).default(10),
     }).parse(req.query)
 
-    const key = cacheKey(req.schemaName, req.branchId, 'topcust', q.period, String(q.limit))
+    const key = cacheKey(req.schemaName, req.branchId, 'topcust', q.period, q.from ?? '', q.to ?? '', String(q.limit))
     const result = await getOrSet(key, 600, async () => {
-    const days     = periodDays(q.period)
-    const now      = new Date()
-    const { from } = dateRange(days, now)
+    const { from, to: now, days } = resolveRange(q)
     const fromStr  = iso(from)
     const toStr    = iso(now)
     const branchId = req.branchId
