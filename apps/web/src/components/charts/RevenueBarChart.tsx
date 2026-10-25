@@ -13,6 +13,9 @@ interface DaySummary {
 interface Props {
   data:      DaySummary[]
   isLoading: boolean
+  /** how each bar is labelled on the axis; default = weekday (a 7-day view) */
+  tick?:     (iso: string) => string
+  emptyText?: string
 }
 
 function formatINR(n: number) {
@@ -37,7 +40,7 @@ function CustomTooltip({ active, payload, label }: any) {
   )
 }
 
-export function RevenueBarChart({ data, isLoading }: Props) {
+export function RevenueBarChart({ data, isLoading, tick, emptyText = 'No sales in the last 7 days' }: Props) {
   if (isLoading) {
     return (
       <div className="h-48 flex items-center justify-center text-sm text-gray-400">
@@ -50,7 +53,7 @@ export function RevenueBarChart({ data, isLoading }: Props) {
   if (!hasData) {
     return (
       <div className="h-48 flex items-center justify-center text-sm text-gray-400">
-        No sales in the last 7 days
+        {emptyText}
       </div>
     )
   }
@@ -61,7 +64,9 @@ export function RevenueBarChart({ data, isLoading }: Props) {
         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
         <XAxis
           dataKey="day"
-          tickFormatter={(v) => format(parseISO(v), 'EEE')}
+          tickFormatter={(v) => (tick ? tick(v) : format(parseISO(v), 'EEE'))}
+          interval="preserveStartEnd"
+          minTickGap={12}
           tick={{ fontSize: 11, fill: '#9ca3af' }}
           axisLine={false}
           tickLine={false}

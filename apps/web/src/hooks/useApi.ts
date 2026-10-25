@@ -696,6 +696,14 @@ export function useAnalyticsDashboard(params?: { period?: string; from?: string;
   })
 }
 
+export function useAnalyticsTrend(params?: { period?: string; from?: string; to?: string; groupBy?: string }, opts?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ['analytics', 'trend', params],
+    queryFn:  () => analyticsApi.revenueTrend(params),
+    enabled:  opts?.enabled ?? true,
+  })
+}
+
 export function useAnalyticsMargin(params?: { period?: string; from?: string; to?: string }, opts?: { enabled?: boolean }) {
   return useQuery({
     queryKey: QK.analyticsMargin(params),

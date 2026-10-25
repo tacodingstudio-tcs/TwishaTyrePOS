@@ -471,7 +471,7 @@ export const analyticsApi = {
   dashboard: (params?: { period?: string; compareWith?: string }) =>
     api.get('/analytics/dashboard', { params }).then((r) => r.data),
 
-  revenueTrend: (params?: { period?: string; groupBy?: string }) =>
+  revenueTrend: (params?: { period?: string; from?: string; to?: string; groupBy?: string }) =>
     api.get('/analytics/revenue-trend', { params }).then((r) => r.data),
 
   marginReport: (params?: { period?: string }) =>

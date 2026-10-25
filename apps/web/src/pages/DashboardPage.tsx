@@ -3,9 +3,9 @@ import { useState } from 'react'
 import { localIso } from '@/lib/dates'
 import {
   useDailySummary, useLowStock, useUdhaarSummary, useInvoices,
-  useWeeklySummary, useAIInsight, useReorderSuggestions,
+  useAIInsight, useReorderSuggestions,
   useAnalyticsDashboard, useAnalyticsTopCustomers, useExpenseSummary,
-  useMonthlyComparison,
+  useMonthlyComparison, useAnalyticsTrend,
 } from '@/hooks/useApi'
 import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -57,7 +57,20 @@ export function DashboardPage() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { data: udhaar }       = useUdhaarSummary()
   const { data: recentInvoices } = useInvoices({ limit: 5 })
-  const { data: weeklyData, isLoading: weeklyLoading } = useWeeklySummary()
+  // the revenue chart follows the chosen period: a bar per day for up to ~6 weeks, per week up to ~7 months, else per month
+  const spanDays = Math.round((new Date(`${periodRange(per).to}T00:00:00`).getTime() - new Date(`${periodRange(per).from}T00:00:00`).getTime()) / 86_400_000)
+  const groupBy = spanDays <= 45 ? 'day' : spanDays <= 200 ? 'week' : 'month'
+  const { data: trend, isLoading: weeklyLoading } = useAnalyticsTrend({ ...periodParams(per), groupBy }, { enabled: ready })
+  const chartData = (() => {
+    const rows: Array<{ day: string; totalSales: number; invoiceCount: number }> = (trend?.rows ?? []).map((r: any) => ({ day: String(r.period).slice(0, 10), totalSales: Number(r.revenue), invoiceCount: Number(r.invoices) }))
+    if (groupBy !== 'day') return rows
+    const have = new Map(rows.map((r) => [r.day, r]))
+    const out = []                                                  // days with no sales still get a (zero) bar, so the time axis is even
+    for (const d = new Date(`${periodRange(per).from}T00:00:00`); localIso(d) <= periodRange(per).to; d.setDate(d.getDate() + 1)) {
+      const k = localIso(d); out.push(have.get(k) ?? { day: k, totalSales: 0, invoiceCount: 0 })
+    }
+    return out
+  })()
   const { data: aiInsight }    = useAIInsight()
   const { data: reorderData }  = useReorderSuggestions()
 
@@ -281,8 +294,10 @@ export function DashboardPage() {
         {/* ── Revenue chart ────────────────────────────────────────────────── */}
         <div className="grid grid-cols-3 gap-6">
           <div className="col-span-2 card p-5">
-            <h2 className="text-sm font-semibold text-gray-900 mb-4">Revenue — last 7 days</h2>
-            <RevenueBarChart data={weeklyData ?? []} isLoading={weeklyLoading} />
+            <h2 className="text-sm font-semibold text-gray-900 mb-4">Revenue — {periodText.toLowerCase()} <span className="font-normal text-gray-400">(per {groupBy})</span></h2>
+            <RevenueBarChart data={chartData} isLoading={weeklyLoading}
+              tick={groupBy === 'month' ? (v) => format(new Date(`${v}T00:00:00`), 'MMM yy') : groupBy === 'week' ? (v) => format(new Date(`${v}T00:00:00`), 'd MMM') : spanDays <= 8 ? undefined : (v) => format(new Date(`${v}T00:00:00`), 'd MMM')}
+              emptyText="No sales in this period" />
           </div>
           <GSTINLookup />
         </div>
