@@ -7,7 +7,8 @@ import { useParties, useCreateParty } from '@/hooks/useApi'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { useAuthStore } from '@/store/auth.store'
 import { getEntityConfig } from '@/lib/entityConfig'
-import { Plus, Search, Users, User } from 'lucide-react'
+import { PartyImportModal } from '@/components/tyre/PartyImportModal'
+import { Plus, Search, Users, User, Upload } from 'lucide-react'
 
 function formatINR(n: number) {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n)
@@ -33,6 +34,8 @@ export function PartyListPage() {
   const [search,       setSearch]       = useState('')
   const [type,         setType]         = useState(isService ? 'customer' : '')
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showImport, setShowImport] = useState(false)
+  const canManage = useAuthStore((st) => st.canManage)
 
   const { data, isLoading } = useParties({ search: search || undefined, type: type || undefined, limit: 100 })
 
@@ -53,9 +56,16 @@ export function PartyListPage() {
         title={isService ? cfg.plural : 'Parties'}
         subtitle={isService ? `Manage your ${cfg.singularLower} records` : 'Customers and suppliers'}
         action={
-          <button onClick={() => setShowAddModal(true)} className="btn-primary">
-            <Plus className="w-4 h-4" /> Add {isService ? cfg.singular : 'Party'}
-          </button>
+          <div className="flex items-center gap-2">
+            {canManage() && (
+              <button type="button" onClick={() => setShowImport(true)} className="btn-ghost border border-gray-200">
+                <Upload className="w-4 h-4" /> Import
+              </button>
+            )}
+            <button onClick={() => setShowAddModal(true)} className="btn-primary">
+              <Plus className="w-4 h-4" /> Add {isService ? cfg.singular : 'Party'}
+            </button>
+          </div>
         }
       />
 
@@ -156,6 +166,7 @@ export function PartyListPage() {
         </div>
       </div>
 
+      {showImport && <PartyImportModal onClose={() => setShowImport(false)} />}
       {showAddModal && (
         <AddEntityModal
           domainType={domainType}
