@@ -1,6 +1,6 @@
 // Dashboard / analytics periods: 7D, 30D, 90D, this month, this financial year, and a custom from–to.
 
-import { newShopTenant, type Session } from './helpers'
+import { newShopTenant, today as ymdToday, type Session } from './helpers'
 
 describe('Analytics period selection', () => {
   let owner: Session
@@ -44,5 +44,21 @@ describe('Analytics period selection', () => {
       const r = await dash(params as Record<string, string>)
       expect([JSON.stringify(params), r.status >= 400 && r.status < 500]).toEqual([JSON.stringify(params), true])
     }
+  })
+
+  test('a cancelled bill is not counted anywhere: revenue, the daily chart, the payment split', async () => {
+    const prod = (await owner.api.post('/api/products', { itemType: 'product', name: 'Range Tyre', gstRate: 18, unit: 'pcs', trackStock: false, salePrice: 1000, sellingPrice: 1000 })).data
+    const sell = async (paid: boolean) => (await owner.api.post('/api/tyre/sales', { customer: { name: 'Range Customer', phone: '9825090001' }, items: [{ productId: prod.id, qty: 1 }], payments: paid ? [{ method: 'cash', amount: 1180 }] : [] },
+      { headers: { 'Idempotency-Key': crypto.randomUUID() } }))
+    const a = await sell(true); expect(a.status).toBe(201)
+    const b = await sell(false); expect(b.status).toBe(201)
+    const wk = (after: boolean): Record<string, string> => after ? { period: 'custom', from: ymdToday(-7), to: ymdToday() } : { period: '7d' }      // another cache key, so the second read is fresh
+    const revenue = async (after = false) => Number(((await dash(wk(after))).data.kpis as any[]).find((k) => k.key === 'revenue')?.value ?? 0)
+    const trendTotal = async (after = false) => ((await owner.api.get('/api/analytics/revenue-trend', { params: wk(after) })).data.rows as any[]).reduce((t, r) => t + r.revenue, 0)
+    const before = [await revenue(), await trendTotal()]
+    expect((await owner.api.post(`/api/invoices/${b.data.invoice.id}/cancel`, {})).status).toBeLessThan(300)
+    const after = [await revenue(true), await trendTotal(true)]
+    expect(before[0]! - after[0]!).toBeCloseTo(1180, 0)
+    expect(before[1]! - after[1]!).toBeCloseTo(1180, 0)
   })
 })

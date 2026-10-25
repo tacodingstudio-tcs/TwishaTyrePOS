@@ -120,6 +120,7 @@ async function revenueStats(
     FROM invoices
     WHERE "branchId" = ${branchId}::uuid
       AND "txnType"  = 'sale_invoice'
+      AND status <> 'cancelled'
       AND "date"    >= ${from}::date
       AND "date"    <= ${to}::date
   `
@@ -141,6 +142,7 @@ async function dailyRevenueSeries(
     FROM invoices
     WHERE "branchId" = ${branchId}::uuid
       AND "txnType"  = 'sale_invoice'
+      AND status <> 'cancelled'
       AND "date"    >= ${from}::date
       AND "date"    <= ${to}::date
     GROUP BY DATE("date")
@@ -186,6 +188,7 @@ async function topProductsSeries(
     JOIN invoices  i ON i.id = ii."invoiceId"
     WHERE i."branchId" = ${branchId}::uuid
       AND i."txnType"  = 'sale_invoice'
+      AND i.status <> 'cancelled'
       AND i."date"    >= ${from}::date
       AND i."date"    <= ${to}::date
     GROUP BY p.name
@@ -216,6 +219,7 @@ async function grossMarginData(
     JOIN invoices  i ON i.id = ii."invoiceId"
     WHERE i."branchId" = ${branchId}::uuid
       AND i."txnType"  = 'sale_invoice'
+      AND i.status <> 'cancelled'
       AND i."date"    >= ${from}::date
       AND i."date"    <= ${to}::date
       AND p."purchasePrice" IS NOT NULL
@@ -444,6 +448,7 @@ export const analyticsRoutes: FastifyPluginAsync = async (app) => {
         FROM invoices
         WHERE "branchId" = ${branchId}::uuid
           AND "txnType"  = 'sale_invoice'
+          AND status <> 'cancelled'
           AND COALESCE("domainData"->>'gst_bill','true') <> 'false'
           AND "date"    >= ${from}::date
           AND "date"    <= ${to}::date
@@ -469,6 +474,7 @@ export const analyticsRoutes: FastifyPluginAsync = async (app) => {
         JOIN invoices i ON i.id = ii."invoiceId"
         WHERE i."branchId" = ${branchId}::uuid
           AND i."txnType"  = 'sale_invoice'
+          AND i.status <> 'cancelled'
           AND COALESCE(i."domainData"->>'gst_bill','true') <> 'false'
           AND i."date"    >= ${from}::date
           AND i."date"    <= ${to}::date
@@ -487,6 +493,7 @@ export const analyticsRoutes: FastifyPluginAsync = async (app) => {
         FROM invoices i
         LEFT JOIN parties p ON p.id = i."partyId"
         WHERE i."branchId" = ${branchId}::uuid AND i."txnType" = 'sale_invoice'
+        AND i.status <> 'cancelled'
           AND COALESCE(i."domainData"->>'gst_bill','true') <> 'false'
           AND i."date" >= ${from}::date AND i."date" <= ${to}::date AND i.status != 'draft'
         GROUP BY (CASE WHEN p.gstin IS NOT NULL AND p.gstin != '' THEN 'B2B' ELSE 'B2C' END)
@@ -501,6 +508,7 @@ export const analyticsRoutes: FastifyPluginAsync = async (app) => {
         FROM invoice_items ii
         JOIN invoices i ON i.id = ii."invoiceId"
         WHERE i."branchId" = ${branchId}::uuid AND i."txnType" = 'sale_invoice'
+        AND i.status <> 'cancelled'
           AND COALESCE(i."domainData"->>'gst_bill','true') <> 'false'
           AND i."date" >= ${from}::date AND i."date" <= ${to}::date AND i.status != 'draft'
         GROUP BY ii."gstRate"
@@ -606,6 +614,7 @@ export const analyticsRoutes: FastifyPluginAsync = async (app) => {
       FROM invoices
       WHERE "branchId" = ${branchId}::uuid
         AND "txnType"  = 'sale_invoice'
+        AND status <> 'cancelled'
         AND "date"    >= ${fromStr}::date
         AND "date"    <= ${toStr}::date
       GROUP BY DATE_TRUNC(${truncFn}, "date")
@@ -651,6 +660,7 @@ export const analyticsRoutes: FastifyPluginAsync = async (app) => {
       LEFT JOIN categories cat ON cat.id = p."categoryId"
       JOIN invoices i ON i.id = ii."invoiceId"
       WHERE i."branchId" = ${branchId}::uuid AND i."txnType" = 'sale_invoice'
+      AND i.status <> 'cancelled'
         AND i."date" >= ${fromStr}::date AND i."date" <= ${toStr}::date
         AND p."purchasePrice" IS NOT NULL AND p."purchasePrice" > 0
       GROUP BY cat.name ORDER BY revenue DESC
@@ -692,6 +702,7 @@ export const analyticsRoutes: FastifyPluginAsync = async (app) => {
       FROM parties p
       LEFT JOIN invoices i ON i."partyId" = p.id
         AND i."txnType" = 'sale_invoice'
+        AND i.status <> 'cancelled'
         AND i."date" >= ${fromStr}::date AND i."date" <= ${toStr}::date
       WHERE p."branchId" = ${branchId}::uuid AND p.type = 'customer'
       GROUP BY p.id, p.name, p.phone, p.balance

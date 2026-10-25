@@ -13,6 +13,7 @@ import { PeriodPicker, periodParams, periodRange, periodLabel, periodReady, type
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { RevenueBarChart } from '@/components/charts/RevenueBarChart'
 import { GSTINLookup } from '@/components/gstin/GSTINLookup'
+import { DailyReport } from '@/components/charts/DailyReport'
 import { Link } from 'react-router-dom'
 import {
   TrendingUp, TrendingDown, AlertTriangle, Users, Receipt, ArrowRight,
@@ -61,6 +62,7 @@ export function DashboardPage() {
   const spanDays = Math.round((new Date(`${periodRange(per).to}T00:00:00`).getTime() - new Date(`${periodRange(per).from}T00:00:00`).getTime()) / 86_400_000)
   const groupBy = spanDays <= 45 ? 'day' : spanDays <= 200 ? 'week' : 'month'
   const { data: trend, isLoading: weeklyLoading } = useAnalyticsTrend({ ...periodParams(per), groupBy }, { enabled: ready })
+  const { data: daily, isLoading: dailyLoading } = useAnalyticsTrend({ ...periodParams(per), groupBy: 'day' }, { enabled: ready })
   const chartData = (() => {
     const rows: Array<{ day: string; totalSales: number; invoiceCount: number }> = (trend?.rows ?? []).map((r: any) => ({ day: String(r.period).slice(0, 10), totalSales: Number(r.revenue), invoiceCount: Number(r.invoices) }))
     if (groupBy !== 'day') return rows
@@ -301,6 +303,9 @@ export function DashboardPage() {
           </div>
           <GSTINLookup />
         </div>
+
+        {/* ── Daily report (follows the period) ─────────────────────────────── */}
+        <DailyReport rows={daily?.rows ?? []} label={periodText} from={range.from} to={range.to} expenses={expSummary?.totalAmount} isLoading={dailyLoading} />
 
         {/* ── Top products + Top customers ─────────────────────────────────── */}
         {analytics && (
