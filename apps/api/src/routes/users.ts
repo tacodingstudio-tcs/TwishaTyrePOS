@@ -20,10 +20,10 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { mobile, optionalEmail } from '../lib/validators.js'
-import { hashPin } from '../lib/password.js'
+import { hashPin, verifyPin } from '../lib/password.js'
 import { revokeAllUserTokens } from '../lib/refreshToken.service.js'
 import { db as publicDb } from '@billing/db'
-import { throttleKey, lockedMinutes, clearLoginAttempts } from '../lib/login-throttle.js'
+import { throttleKey, lockedMinutes, clearLoginAttempts, checkLoginThrottle, recordFailedAttempt } from '../lib/login-throttle.js'
 
 const ROLES = ['owner', 'manager', 'cashier', 'viewer'] as const
 
@@ -41,6 +41,32 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
     })
     if (!user) return reply.status(404).send({ error: 'User not found' })
     return user
+  })
+
+  // ── POST /me/change-pin — change your own PIN ────────────────────────────────────────────────────────────
+  // Any signed-in user; needs the current PIN. A wrong current PIN counts like a wrong sign-in (the same 5-tries lock), so this
+  // box cannot be used to guess the PIN. (422, not 401: a 401 would make the screen think the session has ended.)
+  app.post('/me/change-pin', async (req, reply) => {
+    const body = z.object({
+      currentPin: z.string().regex(/^\d{4}$/, 'The current PIN is 4 digits'),
+      newPin:     z.string().regex(/^\d{4}$/, 'The new PIN must be 4 digits'),
+    }).parse(req.body)
+    if (body.currentPin === body.newPin) return reply.status(422).send({ error: 'The new PIN is the same as the current one' })
+
+    const me = await req.db.user.findUnique({ where: { id: req.userId }, select: { id: true, pin: true, phone: true } })
+    if (!me) return reply.status(404).send({ error: 'User not found' })
+    const t = await publicDb.tenant.findUnique({ where: { id: req.tenantId }, select: { ownerPhone: true } })
+    const key = throttleKey(t?.ownerPhone ?? '', me.phone)
+    const gate = await checkLoginThrottle(key)
+    if (!gate.allowed) return reply.status(429).send({ error: `Too many wrong PINs. Try again in ${Math.max(1, Math.ceil((gate.retryAfterSec ?? 900) / 60))} minutes.` })
+    if (!(await verifyPin(body.currentPin, me.pin ?? ""))) {
+      await recordFailedAttempt(key)
+      return reply.status(422).send({ error: 'The current PIN is not correct' })
+    }
+    await clearLoginAttempts(key)
+    await req.db.user.update({ where: { id: me.id }, data: { pin: await hashPin(body.newPin) } })
+    await revokeAllUserTokens(req.tenantId, me.id)       // other devices / old sessions must sign in with the new PIN
+    return reply.send({ success: true, message: 'PIN changed. Use the new PIN the next time you sign in.' })
   })
 
   // ── GET / — list users ────────────────────────────────────────────────────

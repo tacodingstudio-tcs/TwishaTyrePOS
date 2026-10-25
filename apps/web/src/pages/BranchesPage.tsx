@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { HIDEABLE_MENU, hiddenMenu } from '@/lib/menu'
 import {
   useBranches, useUpdateBranch,
-  useUsers, useCreateUser, useResetUserPin, useUnlockUser, useDeactivateUser, useActivateUser,
+  useUsers, useCreateUser, useResetUserPin, useChangeMyPin, useUnlockUser, useDeactivateUser, useActivateUser,
 } from '@/hooks/useApi'
 import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -404,6 +404,44 @@ function ResetPinModal({ user, onClose }: { user: any; onClose: () => void }) {
   )
 }
 
+// ── Change my own PIN ─────────────────────────────────────────────────────────
+
+function ChangeMyPinModal({ onClose }: { onClose: () => void }) {
+  const change = useChangeMyPin()
+  const [cur, setCur] = useState('')
+  const [next, setNext] = useState('')
+  const [again, setAgain] = useState('')
+  const digits = (set: (v: string) => void) => (e: React.ChangeEvent<HTMLInputElement>) => set(e.target.value.replace(/\D/g, '').slice(0, 4))
+  const mismatch = again.length === 4 && again !== next
+  const ready = cur.length === 4 && next.length === 4 && again === next && cur !== next
+
+  async function submit() {
+    if (!ready) return
+    try { await change.mutateAsync({ currentPin: cur, newPin: next }); onClose() } catch { /* the toast says why */ }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl p-6 w-full max-w-sm">
+        <h3 className="text-base font-semibold text-gray-900 mb-1">Change my PIN</h3>
+        <p className="text-sm text-gray-500 mb-4">Your PIN is the 4 digits you sign in with.</p>
+        <label className="label" htmlFor="cur-pin">Current PIN</label>
+        <input id="cur-pin" type="password" inputMode="numeric" autoComplete="current-password" className="input mb-3" placeholder="••••" value={cur} autoFocus onChange={digits(setCur)} />
+        <label className="label" htmlFor="new-pin2">New PIN</label>
+        <input id="new-pin2" type="password" inputMode="numeric" autoComplete="new-password" className="input mb-3" placeholder="••••" value={next} onChange={digits(setNext)} />
+        <label className="label" htmlFor="again-pin">New PIN again</label>
+        <input id="again-pin" type="password" inputMode="numeric" autoComplete="new-password" className={`input mb-1 ${mismatch ? 'border-red-400' : ''}`} placeholder="••••" value={again}
+          onChange={digits(setAgain)} onKeyDown={(e) => { if (e.key === 'Enter') void submit() }} />
+        <p className="text-xs h-4 mb-3 text-red-600">{mismatch ? 'The two new PINs are not the same' : cur.length === 4 && cur === next ? 'The new PIN must be different' : ''}</p>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
+          <button type="button" onClick={submit} disabled={!ready || change.isPending} className="btn-primary">{change.isPending ? 'Saving…' : 'Change PIN'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Users panel ───────────────────────────────────────────────────────────────
 
 function UsersPanel({ branches, domainType, onBack }: { branches: any[]; domainType?: string; onBack: () => void }) {
@@ -417,6 +455,7 @@ function UsersPanel({ branches, domainType, onBack }: { branches: any[]; domainT
 
   const [showAdd,     setShowAdd]     = useState(false)
   const [resetUser,   setResetUser]   = useState<any | null>(null)
+  const [changePin,   setChangePin]   = useState(false)
 
   const users: any[] = data?.users ?? []
 
@@ -491,6 +530,13 @@ function UsersPanel({ branches, domainType, onBack }: { branches: any[]; domainT
                   </button>
                 )}
 
+                {isSelf && (
+                  <button type="button" onClick={() => setChangePin(true)}
+                    className="flex items-center gap-1 text-xs font-medium text-primary-700 bg-primary-50 border border-primary-200 rounded-lg px-2.5 py-1.5 hover:bg-primary-100 flex-shrink-0">
+                    <KeyRound className="w-3.5 h-3.5" /> Change my PIN
+                  </button>
+                )}
+
                 {/* Actions — owner only, not on self */}
                 {role === 'owner' && !isSelf && (
                   <div className="flex items-center gap-3 flex-shrink-0">
@@ -530,6 +576,7 @@ function UsersPanel({ branches, domainType, onBack }: { branches: any[]; domainT
 
       {showAdd   && <AddUserModal branches={branches} domainType={domainType} onClose={() => setShowAdd(false)} />}
       {resetUser && <ResetPinModal user={resetUser} onClose={() => setResetUser(null)} />}
+      {changePin && <ChangeMyPinModal onClose={() => setChangePin(false)} />}
     </div>
   )
 }

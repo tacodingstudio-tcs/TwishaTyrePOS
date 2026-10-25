@@ -428,12 +428,37 @@ async function unlock(quiet = false) {
   if (!quiet) ok(`Lock cleared (${r.stdout.trim() || 0})`)
 }
 
+// ── erase the test data ──────────────────────────────────────────────────────────────────────────────────────────
+// For handing a shop over clean after trying it out. Needs --yes (ERASE-TEST-DATA.bat makes you type ERASE). Stops the app, takes a safety
+// backup, then erases bills, customers, stock, warranty, expenses, team … in one transaction (see src/lib/reset-test-data.ts).
+async function resetData() {
+  step('Erasing the test data')
+  if (!process.argv.includes('--yes')) fail('This ERASES every bill, customer, stock entry … of this shop.', 'Run ERASE-TEST-DATA.bat, or add --yes to confirm.')
+  const keepItems = process.argv.includes('--keep-items')
+  if (!fs.existsSync(path.join(dir.pgdata, 'PG_VERSION'))) fail('There is no database to erase yet')
+  await stop(false)
+  await startPg()
+  log('  … taking a safety backup first')
+  const saved = await backup(true)
+  if (!saved) fail('Could not take the safety backup, so nothing was erased')
+  const s = secrets()
+  const tsx = path.join(dir.app, 'node_modules', 'tsx', 'dist', 'cli.mjs')
+  const r = run(process.execPath, [tsx, path.join('src', 'lib', 'reset-test-data.ts'), ...(keepItems ? ['--keep-items'] : [])], {
+    cwd: dir.app, env: { NODE_ENV: 'production', TZ: 'Asia/Kolkata', DATABASE_URL: `postgresql://postgres:${s.pgPassword}@127.0.0.1:${PORT.pg}/${DB}` },
+  })
+  for (const line of r.stdout.split(/\r?\n/)) if (line.trim() && line.trim() !== 'DONE') log(`    ${line}`)
+  run(exe('pg_ctl'), ['stop', '-D', dir.pgdata, '-m', 'fast', '-w', '-t', '60'])
+  if (r.status !== 0 || !/DONE/.test(r.stdout)) fail('Nothing was erased', (r.stdout + r.stderr).slice(-600))
+  ok('Test data erased. A safety copy of everything as it was is in the backups folder.')
+  ok('Start Twisha POS from the desktop icon. Sign in with the same mobile number and PIN.')
+}
+
 // ── entry ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 const [, , cmd, arg] = process.argv
 const table = {
   check, db, services, shop, open: async () => openApp(),
   start: async () => { await check(); await db(); await services(); await shop(); if (!process.argv.includes('--no-open')) openApp() },
-  stop: () => stop(!process.argv.includes('--no-backup')), status, backup: () => backup(), restore: () => restore(arg), 'reset-pin': () => resetPin(arg), unlock: () => unlock(),
+  stop: () => stop(!process.argv.includes('--no-backup')), status, backup: () => backup(), restore: () => restore(arg), 'reset-pin': () => resetPin(arg), unlock: () => unlock(), 'reset-data': resetData,
 }
 if (!table[cmd]) { console.log('Commands: check | db | services | shop | open | start | stop | status | backup | restore <file> --yes | reset-pin <1234> | unlock'); process.exit(cmd ? 1 : 0) }
 try { await table[cmd](); process.exit(0) } catch (e) { log(`  ✘ ${e?.stack ?? e}`); process.exit(1) }

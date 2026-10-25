@@ -83,6 +83,7 @@ If the window says **"Could not start"** — read the last lines, click **Try ag
 | Problem | What to do |
 |---|---|
 | "Could not start — port … is used by another program" | Restart the laptop and start again. If it keeps happening, tell me the number shown. |
+| Change the PIN (knows the old one) | Sign in → **My Business & Staff** → on your own row click **Change my PIN** → old PIN, new PIN twice. |
 | Forgot the PIN | Start menu → **Twisha POS** → **Forgot the PIN** → type a new 4-digit PIN. |
 | "Too many wrong PINs — locked for 15 minutes" | Start menu → **Twisha POS** → **Sign-in locked? Unlock**. |
 | Laptop switched off suddenly / power cut | Just start the app again — it repairs itself (first start may take up to a minute). Nothing already saved is lost. |
@@ -109,6 +110,8 @@ The installer folder also contains numbered files. Open **`%LocalAppData%\Progra
 3. `3-START-SERVICES.bat` — starts the database and the app
 4. `4-CREATE-SHOP-AND-LOGIN.bat` — creates the shop and the one login
 5. `5-OPEN-APP.bat` — opens the app
+
+Before handing over: run `ERASE-TEST-DATA.bat` (in the installer's steps folder) to clear test bills, customers and stock. It keeps the login, the shop settings (including the bill-book start numbers) and the service list, and takes a safety backup first. Choose 1 to erase everything, 2 to keep the tyre list with stock back to 0.
 
 Other helpers: `STATUS.bat`, `BACKUP-NOW.bat`, `STOP-TWISHA-POS.bat`, `UNLOCK-LOGIN.bat`, `FORGOT-PIN.bat`, `RESTORE-BACKUP.bat`.
 (In this method the black windows stay open while it works — that is normal.)

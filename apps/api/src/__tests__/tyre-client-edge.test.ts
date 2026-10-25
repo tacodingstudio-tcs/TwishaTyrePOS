@@ -211,6 +211,27 @@ describe('Client edge cases', () => {
     })
   })
 
+  describe('changing your own PIN', () => {
+    test('needs the current PIN; the new PIN signs in, the old one does not', async () => {
+      const shop = await newShopTenant('Own Pin Tyres')
+      const staff = { phone: testPhone() }
+      expect((await shop.api.post('/api/users', { name: 'cashier user', phone: staff.phone, pin: '4321', role: 'cashier' })).status).toBeLessThan(300)
+      const tryPin = (pin: string) => axios.post(`${BASE}/api/auth/login`, { tenantPhone: shop.tenantPhone, phone: staff.phone, pin }, { validateStatus: () => true })
+      const me = await login(staff.phone, '4321', shop.tenantPhone)
+      expect((await me.api.post('/api/users/me/change-pin', { currentPin: '9999', newPin: '2468' })).status).toBe(422)
+      expect((await me.api.post('/api/users/me/change-pin', { currentPin: '4321', newPin: '4321' })).status).toBe(422)
+      expect((await me.api.post('/api/users/me/change-pin', { currentPin: '4321', newPin: '12' })).status).toBeGreaterThanOrEqual(400)
+      expect((await me.api.post('/api/users/me/change-pin', { currentPin: '4321', newPin: '2468' })).status).toBe(200)
+      expect((await tryPin('2468')).status).toBe(200)
+      expect((await tryPin('4321')).status).toBe(401)
+    })
+    test('wrong current PINs count towards the sign-in lock', async () => {
+      const shop = await newShopTenant('Own Pin Lock Tyres')
+      for (let i = 0; i < 5; i++) await shop.api.post('/api/users/me/change-pin', { currentPin: '0000', newPin: '2468' })
+      expect((await shop.api.post('/api/users/me/change-pin', { currentPin: '1234', newPin: '2468' })).status).toBe(429)
+    })
+  })
+
   describe('bill search', () => {
     let nums: Record<string, string> = {}
     beforeAll(async () => {

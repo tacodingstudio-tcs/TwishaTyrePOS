@@ -875,6 +875,14 @@ export function useUnlockUser() {
   })
 }
 
+export function useChangeMyPin() {
+  return useMutation({
+    mutationFn: ({ currentPin, newPin }: { currentPin: string; newPin: string }) => usersApi.changeMyPin(currentPin, newPin),
+    onSuccess: () => toast.success('PIN changed — use the new PIN next time you sign in'),
+    onError: (err: any) => toast.error(err?.response?.data?.error ?? 'Could not change the PIN'),
+  })
+}
+
 export function useResetUserPin() {
   return useMutation({
     mutationFn: ({ id, pin }: { id: string; pin: string }) => usersApi.resetPin(id, pin),

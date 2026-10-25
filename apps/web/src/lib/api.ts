@@ -505,6 +505,9 @@ export const usersApi = {
     role?: string; branchIds?: string[]; email?: string; lang?: string
   }) => api.post('/users', data).then((r) => r.data),
 
+  changeMyPin: (currentPin: string, newPin: string) =>
+    api.post('/users/me/change-pin', { currentPin, newPin }).then((r) => r.data),
+
   resetPin: (id: string, pin: string) =>
     api.post(`/users/${id}/reset-pin`, { pin }).then((r) => r.data),
 
