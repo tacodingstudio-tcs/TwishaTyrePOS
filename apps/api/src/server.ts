@@ -73,7 +73,8 @@ await app.register(cors, {
 await app.register(rateLimit, {
   // Tests run in-band against localhost and can exceed 500 req/min easily.
   // Production keeps the tight limit; dev/test gets a higher ceiling.
-  max: process.env['NODE_ENV'] === 'production' ? 500 : 10000,
+  // RATE_LIMIT_MAX is for test runs against a production-mode build (the suite sends thousands of requests a minute)
+  max: Number(process.env['RATE_LIMIT_MAX']) || (process.env['NODE_ENV'] === 'production' ? 500 : 10000),
   timeWindow: '1 minute',
   // Always key on the real client IP — never on a client-supplied header.
   // Using x-tenant-id (a header the client controls) lets an attacker

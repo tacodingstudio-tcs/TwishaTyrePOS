@@ -34,7 +34,7 @@ static class Program
         if (!File.Exists(Node) || !File.Exists(Cli))
         {
             MessageBox.Show("Twisha POS files are missing next to this program:\n\n" + Root + "\n\nPlease run the installer again.",
-                "Shakti Enterprise", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                "Twisha POS", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 2;
         }
 
@@ -72,7 +72,7 @@ static class Program
                     if (other.Id != me) { try { other.Kill(); } catch { } }
                 }
             }
-            if (args[0] == "--status") MessageBox.Show(output, "Shakti Enterprise", MessageBoxButtons.OK, code == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            if (args[0] == "--status") MessageBox.Show(output, "Twisha POS", MessageBoxButtons.OK, code == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
             return code;
         }
 
@@ -85,7 +85,7 @@ static class Program
                 // opens the app window again.
                 string text;
                 int code = Cli_Run("start", out text, 180000);
-                if (code != 0) MessageBox.Show("Shakti Enterprise could not start everything:\n\n" + Tail(text, 8), "Shakti Enterprise", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                if (code != 0) MessageBox.Show("Twisha POS could not start everything:\n\n" + Tail(text, 8), "Twisha POS", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return code;
             }
             Application.Run(new MainContext());
@@ -152,11 +152,12 @@ class MainContext : ApplicationContext
         Icon icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         tray = new NotifyIcon();
         tray.Icon = icon;
-        tray.Text = "Shakti Enterprise (starting...)";
+        tray.Text = "Twisha POS (starting...)";
         tray.Visible = true;
         ContextMenuStrip menu = new ContextMenuStrip();
-        menu.Items.Add("Open Shakti Enterprise", null, delegate { OpenApp(); });
+        menu.Items.Add("Open Twisha POS", null, delegate { OpenApp(); });
         menu.Items.Add("Back up now", null, delegate { BackupNow(); });
+        menu.Items.Add("Backup settings (where to save)...", null, delegate { try { Process.Start(Path.Combine(Program.Root, "Backup.exe")); } catch { } });
         menu.Items.Add("Show status", null, delegate { ShowStatus(); });
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Quit (stop and back up)", null, delegate { Quit(); });
@@ -199,13 +200,13 @@ class MainContext : ApplicationContext
         if (ok)
         {
             ready = true;
-            tray.Text = "Shakti Enterprise - running";
+            tray.Text = "Twisha POS - running";
             form.Hide();
-            tray.ShowBalloonTip(4000, "Shakti Enterprise", "Ready. Use the icon near the clock to open it again or to quit.", ToolTipIcon.Info);
+            tray.ShowBalloonTip(4000, "Twisha POS", "Ready. Use the icon near the clock to open it again or to quit.", ToolTipIcon.Info);
         }
         else
         {
-            tray.Text = "Shakti Enterprise - needs attention";
+            tray.Text = "Twisha POS - needs attention";
             form.ShowFailure();
         }
     }
@@ -218,24 +219,24 @@ class MainContext : ApplicationContext
 
     void BackupNow()
     {
-        tray.ShowBalloonTip(3000, "Shakti Enterprise", "Backing up...", ToolTipIcon.Info);
+        tray.ShowBalloonTip(3000, "Twisha POS", "Backing up...", ToolTipIcon.Info);
         ThreadPool.QueueUserWorkItem(delegate
         {
             string o; int c = Program.Cli_Run("backup", out o, 180000);
             string last = LastUseful(o);
-            tray.ShowBalloonTip(5000, "Shakti Enterprise", c == 0 ? "Backup saved. " + last : "Backup failed. " + last, c == 0 ? ToolTipIcon.Info : ToolTipIcon.Error);
+            tray.ShowBalloonTip(5000, "Twisha POS", c == 0 ? "Backup saved. " + last : "Backup failed. " + last, c == 0 ? ToolTipIcon.Info : ToolTipIcon.Error);
         });
     }
 
     void ShowStatus()
     {
         string o; int c = Program.Cli_Run("status", out o, 30000);
-        MessageBox.Show(o, "Shakti Enterprise - status", MessageBoxButtons.OK, c == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        MessageBox.Show(o, "Twisha POS - status", MessageBoxButtons.OK, c == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
     }
 
     void Quit()
     {
-        if (MessageBox.Show("Stop Shakti Enterprise now?\n\nA backup is taken first. Make sure no bill is being saved.",
+        if (MessageBox.Show("Stop Twisha POS now?\n\nA backup is taken first. Make sure no bill is being saved.",
             "Quit", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
         QuitNow();
     }
@@ -244,7 +245,7 @@ class MainContext : ApplicationContext
     {
         if (quitting) return;
         quitting = true;
-        tray.Text = "Shakti Enterprise - stopping...";
+        tray.Text = "Twisha POS - stopping...";
         form.ShowStopping();
         Thread t = new Thread(delegate()
         {
@@ -280,7 +281,7 @@ class StartForm : Form
 
     public StartForm(Icon icon)
     {
-        Text = "Shakti Enterprise";
+        Text = "Twisha POS";
         Icon = icon;
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -297,7 +298,7 @@ class StartForm : Form
         Controls.Add(logo);
 
         title = new Label();
-        title.Text = "Shakti Enterprise";
+        title.Text = "Twisha POS";
         title.Font = new Font("Segoe UI Semibold", 15f);
         title.SetBounds(88, 14, 410, 36);
         Controls.Add(title);
@@ -342,7 +343,7 @@ class StartForm : Form
         status.Text = "Starting...";
         bar.Style = ProgressBarStyle.Marquee; bar.Visible = true;
         retry.Visible = false; copy.Visible = false; quit.Visible = false;
-        title.Text = "Shakti Enterprise";
+        title.Text = "Twisha POS";
     }
 
     public void Append(string line)

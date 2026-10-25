@@ -524,7 +524,11 @@ describe('Tyre edge cases', () => {
       expect(sent.status).toBe(202)
       const log = (await owner.api.get('/api/tyre/notifications', { params: { refId: id } })).data.data
       expect(log).toHaveLength(1)
-      expect((await call(owner, 'POST', `/api/tyre/notifications/${log[0].id}/retry`)).status).toBe(422)  // queued / sent
+      // A queued or sent message cannot be retried (422). Where the message worker runs inside the app (the offline install) and
+      // WhatsApp is not configured, it has already marked the message "skipped" by now — that one may be retried (202).
+      const now = (await owner.api.get('/api/tyre/notifications', { params: { refId: id } })).data.data[0]
+      const retry = (await call(owner, 'POST', `/api/tyre/notifications/${log[0].id}/retry`)).status
+      expect(retry).toBe(['queued', 'sent'].includes(now.status) ? 422 : 202)
       expect((await call(owner, 'POST', `/api/tyre/notifications/${U}/retry`)).status).toBe(404)
 
       await call(manager, 'POST', `/api/invoices/${id}/cancel`, {})

@@ -138,9 +138,9 @@ async function main() {
   if (flag('skip-installer')) console.log('  (installer skipped)')
   else if (!isccAt) console.log('  Inno Setup not found — the folder is complete, but no one-file installer was made. Install Inno Setup 6 or set ISCC=<path to ISCC.exe>.')
   else {
-    say('Building the installer (Shakti-Enterprise-Setup.exe) — a few minutes')
+    say('Building the installer (Twisha-POS-Setup.exe) — a few minutes')
     sh(isccAt, ['/Q', `/DSrcDir=${OUT}`, `/DOutDir=${OUTROOT}`, `/DAppVer=${apiPkg.version}`, path.join(HERE, 'installer', 'TwishaPOS.iss')])
-    const setup = path.join(OUTROOT, 'Shakti-Enterprise-Setup.exe')
+    const setup = path.join(OUTROOT, 'Twisha-POS-Setup.exe')
     console.log(`
 ✔ Installer: ${setup}  (${(fs.statSync(setup).size / 1048576).toFixed(0)} MB)`)
   }

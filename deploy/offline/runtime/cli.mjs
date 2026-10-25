@@ -23,7 +23,9 @@ const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = process.env.TWISHA_ROOT ?? path.resolve(HERE, '..')
 const LOCAL = process.env.LOCALAPPDATA ?? path.join(os.homedir(), 'AppData', 'Local')
 const DATA = process.env.TWISHA_DATA ?? path.join(LOCAL, 'TwishaPOS')
-const BACKUPS = process.env.TWISHA_BACKUPS ?? path.join(os.homedir(), 'Documents', 'TwishaPOS Backups')
+const DEFAULT_BACKUPS = process.env.TWISHA_DEFAULT_BACKUPS ?? path.join(os.homedir(), 'Documents', 'TwishaPOS Backups')   // (the variable is for tests)
+const BACKUP_SETTINGS = path.join(DATA, 'backup-settings.json')       // written by Backup.exe: { folder?, copyTo? }
+const backupSettings = () => { try { return JSON.parse(fs.readFileSync(BACKUP_SETTINGS, 'utf8').replace(/^\uFEFF/, '')) } catch { return {} } }   // (tolerates the BOM some editors add)
 const SHOP_FILE = path.join(ROOT, 'config', 'shop.json')
 // "Detached" children get a console of their own. On a laptop where Windows Terminal is the default console host, every
 // such child opens a terminal window (a flashing / lingering "cmd"). The launcher sets TWISHA_NO_DETACH=1: children then share
@@ -45,7 +47,7 @@ const dir = {
   redisdata: path.join(DATA, 'redis-data'),
   logs: path.join(DATA, 'logs'),
 }
-for (const d of [DATA, dir.redisdata, dir.logs, BACKUPS]) fs.mkdirSync(d, { recursive: true })
+for (const d of [DATA, dir.redisdata, dir.logs]) fs.mkdirSync(d, { recursive: true })
 
 const cfg = JSON.parse(fs.readFileSync(SHOP_FILE, 'utf8'))
 const PORT = {
@@ -296,16 +298,48 @@ function openApp() {
 }
 
 // ── stop · status · backup · restore · reset-pin · unlock ───────────────────────────────────────────────────────
+/** The folder backups are written to: the one chosen in Backup.exe, else Documents\TwishaPOS Backups. A chosen folder that is
+ *  not there right now (a pen drive that is unplugged) falls back to the default so a backup is never skipped. */
+function backupDir() {
+  if (process.env.TWISHA_BACKUPS) { fs.mkdirSync(process.env.TWISHA_BACKUPS, { recursive: true }); return process.env.TWISHA_BACKUPS }
+  const chosen = backupSettings().folder
+  if (chosen) {
+    try { fs.mkdirSync(chosen, { recursive: true }); fs.accessSync(chosen, fs.constants.W_OK); return chosen }
+    catch { log(`  ! The backup folder ${chosen} is not available (is the drive plugged in?) — saving in ${DEFAULT_BACKUPS} instead`) }
+  }
+  fs.mkdirSync(DEFAULT_BACKUPS, { recursive: true }); return DEFAULT_BACKUPS
+}
+const prune = (folder) => {
+  const all = fs.readdirSync(folder).filter((f) => /^TwishaPOS-.*\.dump$/.test(f)).sort()
+  for (const old of all.slice(0, Math.max(0, all.length - 30))) fs.rmSync(path.join(folder, old), { force: true })
+}
+
 async function backup(quiet = false) {
   step('Saving a backup')
-  if (!pgRunning()) { if (!quiet) fail('The database is not running — nothing to back up'); return null }
+  let startedHere = false
+  if (!pgRunning()) {
+    // the app is closed: start just the database for the length of the backup (Backup.exe works with the app closed)
+    if (!fs.existsSync(path.join(dir.pgdata, 'PG_VERSION'))) { if (!quiet) fail('Nothing to back up yet — the database has not been created'); return null }
+    await startPg(); startedHere = true
+  }
+  const folder = backupDir()
   const d = new Date(), pad = (n) => String(n).padStart(2, '0')
-  const file = path.join(BACKUPS, `TwishaPOS-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.dump`)
+  const file = path.join(folder, `TwishaPOS-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.dump`)
   const r = run(exe('pg_dump'), ['-h', '127.0.0.1', '-p', String(PORT.pg), '-U', 'postgres', '-Fc', '-f', file, DB], { env: pgEnv() })
+  if (startedHere) run(exe('pg_ctl'), ['stop', '-D', dir.pgdata, '-m', 'fast', '-w', '-t', '60'])
   if (r.status !== 0) { fail('Backup failed', r.stderr.slice(0, 400)) }
-  const all = fs.readdirSync(BACKUPS).filter((f) => /^TwishaPOS-.*\.dump$/.test(f)).sort()
-  for (const old of all.slice(0, Math.max(0, all.length - 30))) fs.rmSync(path.join(BACKUPS, old), { force: true })
-  ok(`Backup saved: ${file} (${(fs.statSync(file).size / 1048576).toFixed(1)} MB)`); return file
+  prune(folder)
+  ok(`Backup saved: ${file} (${(fs.statSync(file).size / 1048576).toFixed(1)} MB)`)
+  // a second copy somewhere else (pen drive / external disk), if one was chosen
+  const copyTo = backupSettings().copyTo
+  if (copyTo && path.resolve(copyTo).toLowerCase() !== path.resolve(folder).toLowerCase()) {
+    try {
+      fs.mkdirSync(copyTo, { recursive: true })
+      const dest = path.join(copyTo, path.basename(file)); fs.copyFileSync(file, dest); prune(copyTo)
+      ok(`Also copied to ${dest}`)
+    } catch (e) { log(`  ! Could not copy to ${copyTo} — is the drive plugged in? The backup on this laptop is safe. (${e.code ?? e.message})`) }
+  }
+  return file
 }
 
 /** the process ids that are listening on a TCP port (read from netstat in code — no shell quoting involved) */
@@ -336,12 +370,12 @@ async function stop(withBackup = true) {
 async function status() {
   const up = { database: pgRunning(), 'job store': await portOpen(PORT.redis), app: await apiUp() }
   for (const [k, v] of Object.entries(up)) log(`  ${v ? '●' : '○'} ${k}: ${v ? 'running' : 'stopped'}`)
-  log(`  Data folder: ${DATA}`); log(`  Backups: ${BACKUPS}`); log(`  Address: ${URL_APP}`)
+  log(`  Data folder: ${DATA}`); log(`  Backups: ${backupDir()}${backupSettings().copyTo ? `  (+ a copy to ${backupSettings().copyTo})` : ''}`); log(`  Address: ${URL_APP}`)
 }
 
 async function restore(file) {
   step('Restoring a backup')
-  if (!file) { const l = fs.readdirSync(BACKUPS).filter((f) => f.endsWith('.dump')).sort().reverse(); log('Backups available:'); l.forEach((f) => log(`  ${path.join(BACKUPS, f)}`)); fail('Say which one: restore <full path>') }
+  if (!file) { const bk = backupDir(); const l = fs.readdirSync(bk).filter((f) => f.endsWith('.dump')).sort().reverse(); log('Backups available:'); l.forEach((f) => log(`  ${path.join(bk, f)}`)); fail('Say which one: restore <full path>') }
   if (!fs.existsSync(file)) fail(`File not found: ${file}`)
   if (!process.argv.includes('--yes')) fail('This REPLACES everything in the app with the backup.', 'Add --yes to confirm.')
   await stop(false); await startPg()

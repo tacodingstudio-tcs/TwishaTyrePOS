@@ -17,6 +17,9 @@ $manifest = Join-Path $Out 'app.manifest'
 '@ | Set-Content -Encoding UTF8 $manifest
 & $csc /nologo /target:winexe /optimize+ "/out:$Out\TwishaPOS.exe" "/win32icon:$PSScriptRoot\twisha.ico" "/win32manifest:$manifest" `
   /r:System.Windows.Forms.dll /r:System.Drawing.dll "$PSScriptRoot\TwishaPOS.cs"
-if ($LASTEXITCODE -ne 0) { throw "compile failed" }
+if ($LASTEXITCODE -ne 0) { throw "compile failed (TwishaPOS.exe)" }
+& $csc /nologo /target:winexe /optimize+ "/out:$Out\Backup.exe" "/win32icon:$PSScriptRoot\twisha.ico" "/win32manifest:$manifest" `
+  /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll "$PSScriptRoot\Backup.cs"
+if ($LASTEXITCODE -ne 0) { throw "compile failed (Backup.exe)" }
 Remove-Item $manifest
-"built $Out\TwishaPOS.exe ($([math]::Round((Get-Item $Out\TwishaPOS.exe).Length/1KB)) KB)"
+"built $Out\TwishaPOS.exe ($([math]::Round((Get-Item $Out\TwishaPOS.exe).Length/1KB)) KB) and Backup.exe ($([math]::Round((Get-Item $Out\Backup.exe).Length/1KB)) KB)"
