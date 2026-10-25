@@ -18,8 +18,8 @@ const HERE = path.dirname(fileURLToPath(import.meta.url))
 const REPO = path.resolve(HERE, '..', '..')
 const arg = (k) => { const i = process.argv.indexOf(`--${k}`); return i >= 0 ? process.argv[i + 1] : undefined }
 const flag = (k) => process.argv.includes(`--${k}`)
-const CACHE = path.resolve(arg('cache') ?? path.join(REPO, '..', '_offline-cache'))
-const OUTROOT = path.resolve(arg('out') ?? path.join(REPO, '..', '_offline-out'))
+const CACHE = path.resolve(arg('cache') ?? path.join(REPO, '..', 'tyre-build', '_offline-cache'))
+const OUTROOT = path.resolve(arg('out') ?? path.join(REPO, '..', 'tyre-build', '_offline-out'))
 const OUT = path.join(OUTROOT, 'TwishaPOS')
 const SHOP = fs.existsSync(path.join(HERE, 'shop.local.json')) ? path.join(HERE, 'shop.local.json') : path.join(HERE, 'shop.example.json')
 
@@ -149,7 +149,7 @@ async function main() {
   say('Building TwishaPOS.exe (the icon on the desktop)')
   sh('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(HERE, 'launcher', 'build.ps1'), '-Out', OUT])
   fs.copyFileSync(path.join(HERE, 'launcher', 'twisha.ico'), path.join(OUT, 'twisha.ico'))
-  const isccAt = [process.env.ISCC, path.join(REPO, '..', '_tools', 'InnoSetup', 'ISCC.exe'), 'C:/Program Files (x86)/Inno Setup 6/ISCC.exe', 'C:/Program Files/Inno Setup 6/ISCC.exe'].filter(Boolean).find((f) => fs.existsSync(f))
+  const isccAt = [process.env.ISCC, path.join(REPO, '..', 'tyre-build', '_tools', 'InnoSetup', 'ISCC.exe'), 'C:/Program Files (x86)/Inno Setup 6/ISCC.exe', 'C:/Program Files/Inno Setup 6/ISCC.exe'].filter(Boolean).find((f) => fs.existsSync(f))
   if (flag('skip-installer')) console.log('  (installer skipped)')
   else if (!isccAt) console.log('  Inno Setup not found — the folder is complete, but no one-file installer was made. Install Inno Setup 6 or set ISCC=<path to ISCC.exe>.')
   else {
