@@ -25,6 +25,15 @@ const LOCAL = process.env.LOCALAPPDATA ?? path.join(os.homedir(), 'AppData', 'Lo
 const DATA = process.env.TWISHA_DATA ?? path.join(LOCAL, 'TwishaPOS')
 const BACKUPS = process.env.TWISHA_BACKUPS ?? path.join(os.homedir(), 'Documents', 'TwishaPOS Backups')
 const SHOP_FILE = path.join(ROOT, 'config', 'shop.json')
+// "Detached" children get a console of their own. On a laptop where Windows Terminal is the default console host, every
+// such child opens a terminal window (a flashing / lingering "cmd"). The launcher sets TWISHA_NO_DETACH=1: children then share
+// its hidden console (and still outlive it). The step .bat files run in a visible console and keep the old behaviour.
+const DETACH = process.env.TWISHA_NO_DETACH !== '1'
+const HELPER = path.join(ROOT, 'TwishaPOS.exe')
+/** Start a long-running program with no window that keeps running after this script ends (see the note in TwishaPOS.cs). */
+function spawnHidden(program, args, logFile, o = {}) {
+  spawn(HELPER, ['--spawn', logFile, o.cwd ?? ROOT, program, ...args], { windowsHide: true, stdio: 'ignore', env: { ...process.env, ...(o.env ?? {}) } }).unref()
+}
 
 const dir = {
   pg: path.join(ROOT, 'pg', 'bin'),
@@ -111,11 +120,27 @@ async function check() {
 }
 
 // ── 2 · database ──────────────────────────────────────────────────────────────────────────────────────────────────
+const pgReady = () => run(exe('pg_isready'), ['-h', '127.0.0.1', '-p', String(PORT.pg)]).status === 0
+/** The port opens before the database accepts connections: after a power cut it first replays its log ("the database system is
+ *  starting up"). Wait until it really answers, and say so, instead of giving up on the first refusal. */
+async function waitPgReady() {
+  if (pgReady()) return
+  log('  … the database is checking itself after the last shutdown (this can take a minute)')
+  if (!(await waitFor(async () => pgReady(), 240, 500))) fail('The database is taking too long to get ready', `See ${path.join(dir.logs, 'postgres.log')}`)
+}
+
 async function startPg() {
-  if (pgRunning() && (await portOpen(PORT.pg))) return
+  if (pgRunning() && (await portOpen(PORT.pg))) { await waitPgReady(); return }
   if (await portOpen(PORT.pg)) fail(`Port ${PORT.pg} is in use by another program`, 'Close it, or change "ports.pg" in config\\shop.json.')
-  const r = run(exe('pg_ctl'), ['start', '-D', dir.pgdata, '-l', path.join(dir.logs, 'postgres.log'), '-w', '-t', '90', '-o', `-p ${PORT.pg}`])
-  if (r.status !== 0) fail('The database did not start', `See ${path.join(dir.logs, 'postgres.log')}\n${r.stderr.slice(0, 400)}`)
+  // Start the server program itself (not through pg_ctl, which wraps it in a "cmd /C" console window), with no pipes: it
+  // inherits the handles of whoever starts it, and a captured pipe would never reach end-of-file.
+  if (DETACH) {
+    const log = fs.openSync(path.join(dir.logs, 'postgres.log'), 'a')
+    spawn(exe('postgres'), ['-D', dir.pgdata, '-p', String(PORT.pg)], { detached: true, stdio: ['ignore', log, log], windowsHide: true }).unref()
+  } else spawnHidden(exe('postgres'), ['-D', dir.pgdata, '-p', String(PORT.pg)], path.join(dir.logs, 'postgres.log'))
+  if (!(await waitFor(async () => (await portOpen(PORT.pg)) && pgRunning(), 90, 500)))
+    fail('The database did not start', `See ${path.join(dir.logs, 'postgres.log')}`)
+  await waitPgReady()
 }
 
 async function db() {
@@ -168,9 +193,24 @@ log_timezone = 'Asia/Kolkata'
 
 // ── 3 · services ──────────────────────────────────────────────────────────────────────────────────────────────────
 function detached(cmd, args, logName, o = {}) {
+  if (!DETACH) { spawnHidden(cmd, args, path.join(dir.logs, logName), o); return undefined }
   const out = fs.openSync(path.join(dir.logs, logName), 'a')
-  const c = spawn(cmd, args, { detached: true, stdio: ['ignore', out, out], windowsHide: true, cwd: o.cwd, env: { ...process.env, ...(o.env ?? {}) } })
+  const c = spawn(cmd, args, { detached: DETACH, stdio: ['ignore', out, out], windowsHide: true, cwd: o.cwd, env: { ...process.env, ...(o.env ?? {}) } })
   c.unref(); return c.pid
+}
+
+/** Windows scans a program before it runs it, and for the (unsigned) job-store program that can take 30-70 s — and the
+ *  wait happens inside CreateProcess, i.e. inside whoever starts it. So a throw-away helper process does the starting. */
+function startRedisInBackground() {
+  const args = ['--port', String(PORT.redis), '--bind', '127.0.0.1', '--dir', dir.redisdata, '--appendonly', 'yes', '--save', '300', '10']
+  if (!DETACH) { spawnHidden(path.join(dir.redis, 'redis-server.exe'), args, path.join(dir.logs, 'redis.log'), { cwd: dir.redis }); return }
+  const code = `const fs=require('fs'),cp=require('child_process'),a=JSON.parse(process.env.TW_REDIS);
+const out=fs.openSync(a.log,'a');
+cp.spawn(a.exe,a.args,{detached:true,stdio:['ignore',out,out],windowsHide:true,cwd:a.cwd}).unref();`
+  spawn(process.execPath, ['-e', code], {
+    detached: true, stdio: 'ignore', windowsHide: true,
+    env: { ...process.env, TW_REDIS: JSON.stringify({ exe: path.join(dir.redis, 'redis-server.exe'), args, cwd: dir.redis, log: path.join(dir.logs, 'redis.log') }) },
+  }).unref()
 }
 
 async function services() {
@@ -180,10 +220,12 @@ async function services() {
 
   const p = pids()
   if (!(await portOpen(PORT.redis))) {
-    p.redis = detached(path.join(dir.redis, 'redis-server.exe'), ['--port', String(PORT.redis), '--bind', '127.0.0.1', '--dir', dir.redisdata, '--appendonly', 'yes', '--save', '300', '10'], 'redis.log', { cwd: dir.redis })
-    if (!(await waitFor(() => portOpen(PORT.redis), 20))) fail('The job store (Redis) did not start', `See ${path.join(dir.logs, 'redis.log')}`)
-  }
-  ok('Job store running')
+    startRedisInBackground()
+    // On some laptops the job store needs up to a minute to open its port (Windows scans its files). Nothing the shop needs
+    // waits for it — sign-in, billing, PDFs and exports all work without it, and the app connects as soon as it is up — so the
+    // start-up does not hold for it.
+    ok('Job store is starting in the background')
+  } else ok('Job store running')
 
   if (!(await apiUp())) {
     if (await portOpen(PORT.api)) fail(`Port ${PORT.api} is in use by another program`)
@@ -245,6 +287,7 @@ async function shop() {
 // ── 5 · open ──────────────────────────────────────────────────────────────────────────────────────────────────────
 function openApp() {
   step('Opening Twisha POS')
+  if (process.env.TWISHA_NO_BROWSER === '1') { ok('Window not opened (test mode)'); return }
   const pf = [process.env['ProgramFiles(x86)'], process.env.ProgramFiles, path.join(LOCAL, 'Programs')].filter(Boolean)
   const cands = pf.flatMap((b) => [path.join(b, 'Microsoft', 'Edge', 'Application', 'msedge.exe'), path.join(b, 'Google', 'Chrome', 'Application', 'chrome.exe')])
   const browser = cands.find((c) => fs.existsSync(c))
@@ -257,12 +300,23 @@ async function backup(quiet = false) {
   step('Saving a backup')
   if (!pgRunning()) { if (!quiet) fail('The database is not running — nothing to back up'); return null }
   const d = new Date(), pad = (n) => String(n).padStart(2, '0')
-  const file = path.join(BACKUPS, `TwishaPOS-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.dump`)
+  const file = path.join(BACKUPS, `TwishaPOS-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.dump`)
   const r = run(exe('pg_dump'), ['-h', '127.0.0.1', '-p', String(PORT.pg), '-U', 'postgres', '-Fc', '-f', file, DB], { env: pgEnv() })
   if (r.status !== 0) { fail('Backup failed', r.stderr.slice(0, 400)) }
   const all = fs.readdirSync(BACKUPS).filter((f) => /^TwishaPOS-.*\.dump$/.test(f)).sort()
   for (const old of all.slice(0, Math.max(0, all.length - 30))) fs.rmSync(path.join(BACKUPS, old), { force: true })
   ok(`Backup saved: ${file} (${(fs.statSync(file).size / 1048576).toFixed(1)} MB)`); return file
+}
+
+/** the process ids that are listening on a TCP port (read from netstat in code — no shell quoting involved) */
+function listeningPids(port) {
+  const out = new Set()
+  const re = new RegExp('^\\s*TCP\\s+\\S+:' + port + '\\s+\\S+\\s+LISTENING\\s+(\\d+)')
+  for (const l of run('netstat', ['-ano', '-p', 'TCP']).stdout.split('\n')) {
+    const m = l.match(re)
+    if (m) out.add(m[1])
+  }
+  return [...out]
 }
 
 async function stop(withBackup = true) {
@@ -271,10 +325,9 @@ async function stop(withBackup = true) {
   const p = pids()
   for (const k of ['api', 'redis']) if (p[k]) run('taskkill', ['/PID', String(p[k]), '/T', '/F'])
   // belt and braces: whatever still answers on our ports
-  for (const port of [PORT.api, PORT.redis]) {
-    const o = run('cmd', ['/c', `netstat -ano | findstr "127.0.0.1:${port} " | findstr LISTENING`]).stdout
-    for (const m of o.matchAll(/LISTENING\s+(\d+)/g)) run('taskkill', ['/PID', m[1], '/T', '/F'])
-  }
+  for (const port of [PORT.api, PORT.redis]) for (const pid of listeningPids(port)) run('taskkill', ['/PID', pid, '/T', '/F'])
+  // the job store may still be waiting to be let through by Windows (no port yet): find it by its own program path
+  run('powershell', ['-NoProfile', '-Command', `Get-CimInstance Win32_Process -Filter "Name='redis-server.exe'" | Where-Object { $_.ExecutablePath -like '${dir.redis.replace(/'/g, "''")}\\*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }`])
   savePids({})
   if (fs.existsSync(path.join(dir.pgdata, 'PG_VERSION'))) run(exe('pg_ctl'), ['stop', '-D', dir.pgdata, '-m', 'fast', '-w', '-t', '60'])
   ok('Everything stopped')

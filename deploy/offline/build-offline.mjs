@@ -130,6 +130,21 @@ async function main() {
   for (const f of fs.readdirSync(bats)) fs.copyFileSync(path.join(bats, f), path.join(OUT, f))
   fs.copyFileSync(path.join(REPO, 'apps', 'web', 'public', 'favicon.png'), path.join(OUT, 'favicon.png'))
 
+  // ── 5 · the program on the desktop, and the one-file installer ────────────────────────────────────────────────────
+  say('Building TwishaPOS.exe (the icon on the desktop)')
+  sh('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(HERE, 'launcher', 'build.ps1'), '-Out', OUT])
+  fs.copyFileSync(path.join(HERE, 'launcher', 'twisha.ico'), path.join(OUT, 'twisha.ico'))
+  const isccAt = [process.env.ISCC, path.join(REPO, '..', '_tools', 'InnoSetup', 'ISCC.exe'), 'C:/Program Files (x86)/Inno Setup 6/ISCC.exe', 'C:/Program Files/Inno Setup 6/ISCC.exe'].filter(Boolean).find((f) => fs.existsSync(f))
+  if (flag('skip-installer')) console.log('  (installer skipped)')
+  else if (!isccAt) console.log('  Inno Setup not found — the folder is complete, but no one-file installer was made. Install Inno Setup 6 or set ISCC=<path to ISCC.exe>.')
+  else {
+    say('Building the installer (Shakti-Enterprise-Setup.exe) — a few minutes')
+    sh(isccAt, ['/Q', `/DSrcDir=${OUT}`, `/DOutDir=${OUTROOT}`, `/DAppVer=${apiPkg.version}`, path.join(HERE, 'installer', 'TwishaPOS.iss')])
+    const setup = path.join(OUTROOT, 'Shakti-Enterprise-Setup.exe')
+    console.log(`
+✔ Installer: ${setup}  (${(fs.statSync(setup).size / 1048576).toFixed(0)} MB)`)
+  }
+
   const size = (p) => { let n = 0; const w = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); e.isDirectory() ? w(f) : (n += fs.statSync(f).size) } }; w(p); return n }
   console.log(`\n✔ Bundle ready: ${OUT}  (${(size(OUT) / 1048576).toFixed(0)} MB)`)
 }
