@@ -124,8 +124,7 @@ export function AppLayout() {
         <div className="flex items-center gap-3 px-4 h-[72px] border-b border-gray-200">
           <img src="/logo.png" alt="" className="w-11 h-11 flex-shrink-0" />
           <div className="min-w-0">
-            <div className="text-[15px] font-bold leading-tight text-gray-900 line-clamp-2">{tenant?.name ?? PRODUCT_NAME}</div>
-            {branch?.name && branch.name !== tenant?.name && <div className="text-xs text-gray-500 truncate">{branch.name}</div>}
+            <div className="text-[15px] font-bold leading-tight text-gray-900 line-clamp-2">{branch?.name ?? tenant?.name ?? PRODUCT_NAME}</div>
           </div>
         </div>
 

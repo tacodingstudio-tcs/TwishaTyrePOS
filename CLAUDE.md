@@ -67,6 +67,10 @@ pnpm provision:all                  # re-apply tenant DDL to existing tenants af
     (`@billing/pdf`), the daily AI reminder drafts. Bills/quotations/documents are PDFs built by pdfkit on demand
     (`/api/tyre/invoices/:id/pdf`) — do not reintroduce a queue for them. `src/__tests__/tyre-cleanup.test.ts` pins the removed routes to 404.
     The empty tables/columns of the other verticals stay in the tenant schema on purpose (zero runtime cost, no live migration).
+17. **The bill is the shop's Excel sheet, redrawn** (`lib/tyre-bill-shakti.ts`): same 11 columns / row heights / borders / number
+    formats, A4 fit-to-width, Calibri-twin font Carlito (`assets/fonts`, OFL). Do not restyle it. After any change run
+    `npx tsx e2e/bill-preview.ts` and compare with Excel's own export using `e2e/bill-compare.py` (positions must stay within 0.4 % of
+    the bill width). Tests read the PDF text through `__tests__/pdf-text.ts` (it understands embedded fonts).
 
 ## Testing notes
 

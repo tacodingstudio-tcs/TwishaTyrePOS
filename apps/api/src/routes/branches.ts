@@ -201,6 +201,13 @@ export const branchRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
+    // One shop per business: the business name shown at the top of the menu follows the shop name, so renaming the shop here
+    // renames it everywhere (the sign-in response, the menu, the bills) and an old demo name can never linger.
+    if (body.name !== undefined) {
+      const { db: publicDb } = await import('@billing/db')
+      await publicDb.tenant.update({ where: { id: req.tenantId }, data: { name: body.name } }).catch(() => undefined)
+    }
+
     return db.branch.update({
       where: { id },
       data:  {

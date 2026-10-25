@@ -1,5 +1,6 @@
 // The printed bill follows the shop's own Excel "Car Bill" / "2 Wheel Bill" sheets.
 import { newShopTenant, type Session } from './helpers'
+import { pdfText as readPdfText } from './pdf-text'
 
 describe("Bill layout = the shop's Excel bill", () => {
   let owner: Session, tyre: any, bike: any, labour: any, align: any
@@ -9,24 +10,11 @@ describe("Bill layout = the shop's Excel bill", () => {
     return base + CH[(36 - (s % 36)) % 36]
   })()
 
-  /** every string a PDF draws, in order (pdfkit's standard fonts write text as hex strings inside deflated streams) */
+  /** every string a PDF draws, in order (reads the bill's embedded Calibri-twin font as well as the standard fonts) */
   const pdfText = async (invoiceId: string): Promise<string> => {
-    const zlib = await import('node:zlib')
     const res = await owner.api.get(`/api/tyre/invoices/${invoiceId}/pdf`, { responseType: 'arraybuffer' })
     expect(res.status).toBe(200)
-    const str = Buffer.from(res.data).toString('latin1')
-    let all = '', i = 0
-    while ((i = str.indexOf('stream', i)) >= 0) {
-      const a = str.indexOf('\n', i) + 1, e = str.indexOf('endstream', a); if (e < 0) break
-      try { all += zlib.inflateSync(Buffer.from(str.slice(a, e), 'latin1')).toString('latin1') + '\n' } catch { /* not a compressed stream */ }
-      i = e + 9
-    }
-    const piece = /<([0-9a-fA-F]*)>|\(((?:\\.|[^\\)])*)\)/g
-    const str1 = (s: string) => [...s.matchAll(piece)].map((m) => (m[1] !== undefined ? Buffer.from(m[1], 'hex').toString('latin1') : m[2]!.replace(/\\(.)/g, '$1'))).join('')
-    // each text-drawing operator is one run: the pieces of a TJ array (kerned letters) belong together
-    const runs = [...all.matchAll(/\[((?:<[0-9a-fA-F]*>|\((?:\\.|[^\\)])*\)|[-\d.\s])*)\]\s*TJ|(<[0-9a-fA-F]*>|\((?:\\.|[^\\)])*\))\s*Tj/g)]
-      .map((m) => str1(m[1] ?? m[2] ?? ''))
-    return runs.join(' ').replace(/\s+/g, ' ')
+    return readPdfText(Buffer.from(res.data))
   }
   const pagesOf = async (invoiceId: string): Promise<number> => {
     const res = await owner.api.get(`/api/tyre/invoices/${invoiceId}/pdf`, { responseType: 'arraybuffer' })
@@ -74,8 +62,8 @@ describe("Bill layout = the shop's Excel bill", () => {
       'Debit Memo', 'Tax Invoice', 'Original', 'Bill No. -', '93', 'PO Date:', 'Date:',
       'Bill To,', 'GST No.: 24AFTFS9416C1ZP', 'GST.NO', G, 'Customer Name:', 'BHAVINBHAI PARMAR', 'Mobile Number', '9811100777', 'Address', 'NAVAGAM', 'Vehicle Number:', 'GJ32AA5467',
       'Sr.No.', 'Vehicle Company', 'Product Description', 'Tyre Brand', 'HSN Code', 'Unit Rate', 'Qty', 'Taxable Value', 'Total GST', 'Grand Total',
-      'NEXON', '215/60/16', 'YOKOHAMA', '401110', '8813.56', '4', '35254.24', '6345.76', '41600.00',
-      'Alignment', '600.00', 'Balancing', '0.00', 'Weight Charge', '0.00', 'Labour Charge', '400.00',
+      'NEXON', '215/60/16', 'YOKOHAMA', '401110', '8813.56', '4', '35254.24', '6345.76', '41600',
+      'Alignment', '600', 'Balancing', '0', 'Weight Charge', '0', 'Labour Charge', '400',
       'Sub total', '36254.24', 'CGST', '3172.88', 'SGST', '3172.88', 'Grand Total', '42000.00'])
     expect(await pagesOf(r.data.invoice.id)).toBe(1)                        // one sheet, no blank second page
     expect(t).toMatch(/Powered by Twisha Consultancy Services/)          // the software credit is always there
@@ -136,13 +124,9 @@ describe('Reprint copies', () => {
       { headers: { 'Idempotency-Key': crypto.randomUUID() } })
     const id = r.data.invoice.id
     const text = async (q = '') => {
-      const zlib = await import('node:zlib')
       const res = await owner.api.get(`/api/tyre/invoices/${id}/pdf${q}`, { responseType: 'arraybuffer' })
       expect(res.status).toBe(200)
-      const s = Buffer.from(res.data).toString('latin1'); let all = '', i = 0
-      while ((i = s.indexOf('stream', i)) >= 0) { const a = s.indexOf('\n', i) + 1, e = s.indexOf('endstream', a); if (e < 0) break; try { all += zlib.inflateSync(Buffer.from(s.slice(a, e), 'latin1')).toString('latin1') + '\n' } catch { /* raw */ } i = e + 9 }
-      return [...all.matchAll(/\[((?:<[0-9a-fA-F]*>|\((?:\.|[^\)])*\)|[-\d.\s])*)\]\s*TJ|(<[0-9a-fA-F]*>|\((?:\.|[^\)])*\))\s*Tj/g)]
-        .map((m) => [...(m[1] ?? m[2] ?? '').matchAll(/<([0-9a-fA-F]*)>|\(((?:\.|[^\)])*)\)/g)].map((x) => (x[1] !== undefined ? Buffer.from(x[1], 'hex').toString('latin1') : x[2]!)).join('')).join(' ')
+      return readPdfText(Buffer.from(res.data))
     }
     expect(await text()).toMatch(/Original/)
     expect(await text('?copy=original')).toMatch(/Original/)
