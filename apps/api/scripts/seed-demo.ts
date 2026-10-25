@@ -81,11 +81,11 @@ async function main() {
   const exists = await fetch(`${API}/api/tenants/check-phone/${OWNER.phone}`).then((r) => r.json()).catch(() => null)
   if (!exists || exists.available !== false) {
     await post('/api/tenants/register', {
-      businessName: 'Shree Tyres & Wheels', ownerName: 'Mahesh Shah',
+      businessName: 'Shakti Enterprise', ownerName: 'Yogesh Mori',
       phone: OWNER.phone, pin: OWNER.pin, city: 'Surat', stateCode: '24', lang: 'en',
       gstin: gstin('24', 'AAFPS4321K'), domainType: 'tyre',
     })
-    log('registered tenant "Shree Tyres & Wheels"')
+    log('registered tenant "Shakti Enterprise"')
   }
   const login = await post('/api/auth/login', { tenantPhone: OWNER.phone, phone: OWNER.phone, pin: OWNER.pin })
   token = login.accessToken

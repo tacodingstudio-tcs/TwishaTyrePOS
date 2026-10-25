@@ -43,7 +43,7 @@ pnpm --filter @billing/web dev                                     # Web  → ht
 pnpm seed                                                          # optional demo shop (API must be running)
 ```
 
-Log in at http://localhost:5175 — **owner `9200000001` / `1111`** (Shree Tyres & Wheels, 13 tyre models,
+Log in at http://localhost:5175 — **owner `9200000001` / `1111`** (Shakti Enterprise, 13 tyre models,
 ~25 bills over 15 days, customers with vehicles, an exchange, a credit bill, a warranty claim),
 manager `9200000011` / `2222`, viewer `9200000012` / `3333`.
 
