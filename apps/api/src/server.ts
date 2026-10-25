@@ -25,7 +25,6 @@ import { categoryRoutes }       from './routes/categories.js'
 import { brandRoutes }          from './routes/brands.js'
 import { expenseRoutes }        from './routes/expenses.js'
 import { inventoryRoutes }      from './routes/inventory.js'
-import { staffRoutes }          from './routes/staff.js'
 import { tyreRoutes }           from './routes/tyre.js'
 import { grnRoutes }            from './routes/grn.js'
 import { broadcastRoutes }      from './routes/broadcasts.js'
@@ -214,7 +213,6 @@ await app.register(async (protectedApp) => {
   await protectedApp.register(brandRoutes,          { prefix: '/api/brands' })
   await protectedApp.register(expenseRoutes,        { prefix: '/api/expenses' })
   await protectedApp.register(inventoryRoutes,      { prefix: '/api/inventory' })
-  await protectedApp.register(staffRoutes,          { prefix: '/api/staff' })
   await protectedApp.register(tyreRoutes,           { prefix: '/api/tyre' })
   await protectedApp.register(grnRoutes,            { prefix: '/api/grn' })
   await protectedApp.register(broadcastRoutes,      { prefix: '/api/broadcasts' })

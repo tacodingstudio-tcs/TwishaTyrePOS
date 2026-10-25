@@ -21,7 +21,6 @@ import { StockTransfersPage } from './pages/inventory/StockTransfersPage'
 import { ExpensePage } from './pages/ExpensePage'
 import { BranchesPage } from './pages/BranchesPage'
 import { ReportsPage } from './pages/ReportsPage'
-import { StaffPage } from './pages/StaffPage'
 import DocumentPipelinePage from './pages/DocumentPipelinePage'
 import ApprovalsPage from './pages/ApprovalsPage'
 import AdvancesPage from './pages/AdvancesPage'
@@ -90,7 +89,6 @@ export default function App() {
           <Route path="/expenses" element={<ExpensePage />} />
           <Route path="/branches" element={<BranchesPage />} />
           <Route path="/reports" element={<ReportsPage />} />
-          <Route path="/staff" element={<StaffPage />} />
           <Route path="/pipeline" element={<DocumentPipelinePage />} />
           <Route path="/approvals" element={<ApprovalsPage />} />
           <Route path="/advances" element={<AdvancesPage />} />

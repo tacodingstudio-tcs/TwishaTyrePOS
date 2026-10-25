@@ -527,33 +527,6 @@ export const reportsApi = {
   }) => api.post('/reports/bank-reconciliation', data).then((r) => r.data),
 }
 
-export const staffApi = {
-  users: () =>
-    api.get('/staff/users').then((r) => r.data),
-
-  getAttendance: (params: { date?: string; month?: string; userId?: string }) =>
-    api.get('/staff/attendance', { params }).then((r) => r.data),
-
-  recordAttendance: (data: {
-    userId: string; date: string; clockIn?: string; clockOut?: string
-    status?: string; notes?: string
-  }) => api.post('/staff/attendance', data).then((r) => r.data),
-
-  updateAttendance: (id: string, data: { clockOut?: string; status?: string; notes?: string }) =>
-    api.patch(`/staff/attendance/${id}`, data).then((r) => r.data),
-
-  getShifts: (params: { from?: string; to?: string; userId?: string }) =>
-    api.get('/staff/shifts', { params }).then((r) => r.data),
-
-  createShift: (data: {
-    userId: string; date: string; shiftType?: string
-    shiftStart?: string; shiftEnd?: string; notes?: string
-  }) => api.post('/staff/shifts', data).then((r) => r.data),
-
-  deleteShift: (id: string) =>
-    api.delete(`/staff/shifts/${id}`).then((r) => r.data),
-}
-
 export const categoryApi = {
   list: () =>
     api.get('/categories').then((r) => r.data),

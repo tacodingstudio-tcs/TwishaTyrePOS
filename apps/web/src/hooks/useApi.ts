@@ -7,7 +7,7 @@ import toast from 'react-hot-toast'
 import {
   invoiceApi, productApi, partyApi, stockApi, tenantApi, aiApi,
   supplierApi, purchaseOrderApi, grnApi, stockAdjustmentApi, stockTransferApi, stockSummaryApi,
-  expenseApi, branchApi, analyticsApi, reportsApi, staffApi, usersApi, advanceApi, approvalApi, discountRulesApi, } from '@/lib/api'
+  expenseApi, branchApi, analyticsApi, reportsApi, usersApi, advanceApi, approvalApi, discountRulesApi, } from '@/lib/api'
 import { useAuthStore } from '@/store/auth.store'
 
 // ── Query keys ──────────────────────────────────────────────────────────────
@@ -25,9 +25,6 @@ export const QK = {
   reportsBankAccounts:   ()                 => ['reports-bank-accounts'],
   reportsBankRecon:      (params?: unknown) => ['reports-bank-recon', params],
   reportsMonthly:        ()                 => ['reports-monthly'],
-  staffUsers:            ()                 => ['staff-users'],
-  staffAttendance:       (params?: unknown) => ['staff-attendance', params],
-  staffShifts:           (params?: unknown) => ['staff-shifts', params],
   users:                 (params?: unknown) => ['users', params],
   invoices:        (params?: unknown) => ['invoices', params],
   invoice:         (id: string)       => ['invoice', id],
@@ -822,77 +819,6 @@ export function useDayBook(params?: { date?: string }) {
     queryKey: ['reports-day-book', params],
     queryFn:  () => reportsApi.dayBook(params),
     staleTime: 60 * 1000,
-  })
-}
-
-// ── Staff ─────────────────────────────────────────────────────────────────────
-
-export function useStaffUsers() {
-  return useQuery({
-    queryKey: QK.staffUsers(),
-    queryFn:  () => staffApi.users(),
-  })
-}
-
-export function useStaffAttendance(params: { date?: string; month?: string; userId?: string }) {
-  return useQuery({
-    queryKey: QK.staffAttendance(params),
-    queryFn:  () => staffApi.getAttendance(params),
-  })
-}
-
-export function useRecordAttendance() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: staffApi.recordAttendance,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['staff-attendance'] })
-      toast.success('Attendance saved')
-    },
-    onError: () => toast.error('Failed to save attendance'),
-  })
-}
-
-export function useUpdateAttendance() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: { clockOut?: string; status?: string; notes?: string } }) =>
-      staffApi.updateAttendance(id, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['staff-attendance'] })
-      toast.success('Updated')
-    },
-    onError: () => toast.error('Update failed'),
-  })
-}
-
-export function useStaffShifts(params: { from?: string; to?: string; userId?: string }) {
-  return useQuery({
-    queryKey: QK.staffShifts(params),
-    queryFn:  () => staffApi.getShifts(params),
-  })
-}
-
-export function useCreateShift() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: staffApi.createShift,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['staff-shifts'] })
-      toast.success('Shift scheduled')
-    },
-    onError: () => toast.error('Failed to schedule shift'),
-  })
-}
-
-export function useDeleteShift() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: staffApi.deleteShift,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['staff-shifts'] })
-    },
-    onError: () => toast.error('Failed to delete shift'),
   })
 }
 
