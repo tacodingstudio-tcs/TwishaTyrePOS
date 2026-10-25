@@ -1,6 +1,7 @@
 // src/pages/ReportsPage.tsx
 import { useState } from 'react'
 import { useAuthStore } from '@/store/auth.store'
+import { CaExportButton } from '@/components/tyre/CaExportModal'
 import { PageHeader } from '@/components/layout/PageHeader'
 import {
   useAnalyticsGstSummary, useAnalyticsMargin,
@@ -87,13 +88,14 @@ const TABS = [
 
 export function ReportsPage() {
   const domainType = useAuthStore((s) => s.branch?.domainType as string | undefined)
+  const canManage = useAuthStore((s) => s.canManage)
   const showSvpTab = !SERVICE_DOMAINS.has(domainType ?? '')
   const visibleTabs = TABS.filter((t) => t.key !== 'svp' || showSvpTab)
   const [tab, setTab] = useState<'pl' | 'svp' | 'cash' | 'bank' | 'gst' | 'margin' | 'day-book'>('pl')
 
   return (
     <div>
-      <PageHeader title="Reports" subtitle="Financial & operational reports" />
+      <PageHeader title="Reports" subtitle="Financial & operational reports" action={canManage() ? <CaExportButton /> : undefined} />
 
       <div className="p-8 space-y-6">
         <div className="flex gap-1 border-b border-gray-200 flex-wrap">

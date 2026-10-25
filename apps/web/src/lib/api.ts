@@ -725,6 +725,7 @@ export const tyreApi = {
   salesReport: (params?: Record<string, unknown>) => api.get('/tyre/reports/sales', { params }).then((r) => r.data),
 
   // PDFs + WhatsApp
+  caPack:        (params: Record<string, string>) => api.get('/tyre/reports/ca-pack', { params, responseType: 'blob', timeout: 120_000 }).then((r) => r.data as Blob),
   pdfBlob:       (path: string) => api.get(`/tyre${path}`, { responseType: 'blob', timeout: 60_000 }).then((r) => r.data as Blob),
   notifyInvoice: (id: string, data?: unknown) => api.post(`/tyre/invoices/${id}/notify`, data ?? {}).then((r) => r.data),
   notifications: (params?: Record<string, unknown>) => api.get('/tyre/notifications', { params }).then((r) => r.data),
