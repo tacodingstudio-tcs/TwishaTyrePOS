@@ -99,7 +99,6 @@ export function AppLayout() {
   const isManager = canManage()
   const { data: branchList } = useBranches()
   const hidden = hiddenMenu((branchList as any[])?.[0]?.domainConfig)
-  if ((branchList as any[])?.[0]?.domainConfig?.ai_enabled === false) hidden.add('/ai')
   // salary details are for the owner / manager only, so the link is not offered to anyone else
   const show = (items: NavItem[]) => items.filter((i) => !hidden.has(i.to) && !(i.to === '/tyre/team' && !isManager))
   const { data: pendingApprovals } = usePendingApprovals({ enabled: isManager })

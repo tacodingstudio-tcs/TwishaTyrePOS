@@ -1,6 +1,6 @@
 // Sign-in throttle: five wrong PINs lock one account (tenant phone + user phone) for 15 minutes.
 // Shared by the login route (counts and blocks) and the staff screen (shows who is locked, lets an owner or manager unlock).
-import { redis } from './redis.js'
+import { redisFast as redis } from './redis.js'
 
 export const MAX_ATTEMPTS = 5
 export const LOCKOUT_SECONDS = 15 * 60

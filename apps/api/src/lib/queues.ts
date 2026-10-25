@@ -4,18 +4,6 @@
 import { Queue } from 'bullmq'
 import { redis } from './redis.js'
 
-// PDF generation queue
-// Triggered after every confirmed invoice
-export const pdfQueue = new Queue('pdf-generation', {
-  connection: redis,
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: { type: 'exponential', delay: 2000 },
-    removeOnComplete: { count: 100 },
-    removeOnFail:     { count: 50 },
-  },
-})
-
 // WhatsApp message queue
 // Triggered by payment reminders and invoice share actions
 export const whatsappQueue = new Queue('whatsapp-send', {
@@ -28,14 +16,15 @@ export const whatsappQueue = new Queue('whatsapp-send', {
   },
 })
 
-// AI processing queue
-// OCR jobs, HSN suggestions, follow-up message drafting
-export const aiQueue = new Queue('ai-processing', {
-  connection: redis,
-  defaultJobOptions: {
-    attempts: 2,
-    backoff: { type: 'fixed', delay: 3000 },
-    removeOnComplete: { count: 50 },
-    removeOnFail:     { count: 50 },
-  },
-})
+/** Add a job, but never wait on a dead Redis: rejects after `ms` so the caller can report "queue unavailable". */
+export async function addJob(queue: Queue, name: string, data: unknown, ms = 2500): Promise<void> {
+  let timer: NodeJS.Timeout | undefined
+  try {
+    await Promise.race([
+      queue.add(name, data as never),
+      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('The message queue is not reachable right now')), ms) }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}

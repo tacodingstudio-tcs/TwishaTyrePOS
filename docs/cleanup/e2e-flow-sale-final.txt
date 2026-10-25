@@ -1,0 +1,19 @@
+PASS  searching a tyre by size shows results that can be tapped  — Valve Replacement
+PASS  the tyre appears as a bill line with a price box
+PASS  a job can be added with one tap and the total updates  — ₹40
+PASS  Save is enabled once there is something to bill
+PASS  saving makes exactly one bill  — 49 → 50
+PASS  the saved bill carries the customer, the vehicle and the cash received  — paid 519 of 519
+PASS  the bill prints as a PDF
+PASS  an empty bill cannot be saved
+PASS  a credit bill with no customer asks for the customer, and does not save
+PASS  a half-typed mobile number is flagged right there
+PASS  stock is shown beside the tyre while billing  — 1 in stock
+PASS  asking for more than is in stock is stopped with a clear message
+PASS  double-tapping Save does not make two bills  — 50 → 51
+PASS  when the session has ended, Save sends the person to sign in instead of losing the bill silently  — http://localhost:5175/login
+PASS  the bill screen fits a phone without sideways scrolling
+PASS  the menu opens from a button on a phone
+PASS  a read-only user sees the bill screen but cannot save
+
+17/17 passed

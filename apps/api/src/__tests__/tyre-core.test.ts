@@ -369,7 +369,7 @@ describe('Billing core flows in a tyre shop', () => {
       expect((await owner.api.delete(`/api/expenses/${U}`)).status).toBe(404)
     })
 
-    test('staff: users, roles, PIN reset, deactivate; attendance and shifts', async () => {
+    test('staff: users, roles, PIN reset, deactivate', async () => {
       const u = await owner.api.post('/api/users', { name: 'Fitter Raju', phone: phone(), pin: '5678', role: 'cashier' })
       expect(u.status).toBe(201)
       expect((await owner.api.post('/api/users', { name: 'Dup', phone: u.data.phone, pin: '1234', role: 'cashier' })).status).toBe(409)
@@ -377,26 +377,10 @@ describe('Billing core flows in a tyre shop', () => {
       expect((await owner.api.post('/api/users', { name: 'Bad Role', phone: phone(), pin: '1234', role: 'emperor' })).status).toBe(422)
       expect((await cashier.api.post('/api/users', { name: 'Sneaky', phone: phone(), pin: '1234', role: 'manager' })).status).toBe(403)
       expect((await owner.api.post(`/api/users/${u.data.id}/reset-pin`, { pin: '4321' })).status).toBeLessThan(300)
-      const a = await owner.api.post('/api/staff/attendance', { userId: u.data.id, date: today(), clockIn: '09:30', status: 'present' })
-      expect(a.status).toBeLessThan(300)
-      expect((await owner.api.get('/api/staff/attendance', { params: { date: today() } })).status).toBe(200)
-      expect((await owner.api.get('/api/staff/shifts')).status).toBe(200)
       expect((await owner.api.post(`/api/users/${u.data.id}/deactivate`, {})).status).toBeLessThan(300)
       expect((await owner.api.get('/api/users/me')).data.role).toBe('owner')
     })
 
-    test('contracts: create, pause, resume, generate an invoice', async () => {
-      const c = await owner.api.post('/api/contracts', {
-        partyId: customer.id, title: 'Fleet tyre rotation — monthly', startDate: today(), billingCycle: 'monthly', amount: 5000, gstRate: 18,
-      })
-      expect(c.status).toBe(201)
-      expect((await owner.api.post(`/api/contracts/${c.data.id}/pause`, {})).status).toBeLessThan(300)
-      expect((await owner.api.post(`/api/contracts/${c.data.id}/resume`, {})).status).toBeLessThan(300)
-      const gen = await call(owner, 'POST', `/api/contracts/${c.data.id}/generate-invoice`, {})
-      expect(gen.status).toBeLessThan(300)
-      expect((await owner.api.post('/api/contracts', { partyId: customer.id, title: 'x', startDate: today(), amount: 0 })).status).toBe(422)
-      expect((await owner.api.get(`/api/contracts/${U}`)).status).toBe(404)
-    })
 
     test('discount rule: create → list → update → delete; a percentage over 100 is refused', async () => {
       const r = await owner.api.post('/api/discount-rules', {

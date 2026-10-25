@@ -15,7 +15,7 @@
 //
 // A failure to notify must never fail the business operation — callers use `safely()`.
 
-import { whatsappQueue } from './queues.js'
+import { whatsappQueue, addJob } from './queues.js'
 import { tbl, q, q1, run, todayStr, addDays, type Ctx } from './tyre-helpers.js'
 import { invoicePdf, loadBusiness, loadInvoiceDoc } from './tyre-docs.js'
 
@@ -92,7 +92,13 @@ export async function sendMessage(ctx: Ctx, a: SendArgs): Promise<SendResult> {
   if (!id) return { id: null, status: 'duplicate' }
   if (!phone) return { id, status: 'skipped', reason: 'No valid mobile number for this recipient' }
 
-  await enqueue(ctx, { id, toPhone: phone, message: a.message, attachment: a.attachment ?? null })
+  try {
+    await enqueue(ctx, { id, toPhone: phone, message: a.message, attachment: a.attachment ?? null })
+  } catch (err) {
+    const reason = `Could not queue the message: ${(err as Error).message}. Use Retry on WhatsApp Messages.`
+    await q(ctx, `UPDATE ${tbl(ctx.schemaName, 'tyre_notifications')} SET status = 'failed', error = $2 WHERE id = $1::uuid`, id, reason).catch(() => {})
+    return { id, status: 'skipped', reason }
+  }
   return { id, status: 'queued' }
 }
 
@@ -102,7 +108,7 @@ async function enqueue(ctx: Ctx, m: { id: string; toPhone: string; message: stri
     const built = await invoicePdf(ctx, m.attachment.id)
     document = { base64: built.buffer.toString('base64'), filename: built.filename }
   }
-  await whatsappQueue.add('shop_message', {
+  await addJob(whatsappQueue, 'shop_message', {
     type: 'shop_message',
     notificationId: m.id,
     schemaName: ctx.schemaName,

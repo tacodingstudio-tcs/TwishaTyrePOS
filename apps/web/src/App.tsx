@@ -10,7 +10,6 @@ import { InvoiceDetailPage } from './pages/InvoiceDetailPage'
 import { ProductListPage } from './pages/ProductListPage'
 import { PartyListPage } from './pages/PartyListPage'
 import { PartyStatementPage } from './pages/PartyStatementPage'
-import { AIPage } from './pages/AIPage'
 import { InventoryLayout } from './pages/inventory/InventoryLayout'
 import { StockLevelsPage } from './pages/inventory/StockLevelsPage'
 import { SuppliersPage } from './pages/inventory/SuppliersPage'
@@ -21,14 +20,11 @@ import { StockTransfersPage } from './pages/inventory/StockTransfersPage'
 import { ExpensePage } from './pages/ExpensePage'
 import { BranchesPage } from './pages/BranchesPage'
 import { ReportsPage } from './pages/ReportsPage'
-import { StaffPage } from './pages/StaffPage'
 import DocumentPipelinePage from './pages/DocumentPipelinePage'
 import ApprovalsPage from './pages/ApprovalsPage'
-import ContractsPage from './pages/ContractsPage'
 import AdvancesPage from './pages/AdvancesPage'
 import GRNPage from './pages/inventory/GRNPage'
 import AgingPage from './pages/AgingPage'
-import { BroadcastPage } from './pages/BroadcastPage'
 
 // Tyre shop
 import { TyreDashboardPage }     from './pages/tyre/TyreDashboardPage'
@@ -74,7 +70,6 @@ export default function App() {
           <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
           <Route path="/parties" element={<PartyListPage />} />
           <Route path="/parties/:id" element={<PartyStatementPage />} />
-          <Route path="/ai" element={<AIPage />} />
 
           {/* ── Stores (tyres, spares, lubricants) with shared sub-nav ── */}
           <Route path="/inventory" element={<InventoryLayout />}>
@@ -91,14 +86,11 @@ export default function App() {
           <Route path="/expenses" element={<ExpensePage />} />
           <Route path="/branches" element={<BranchesPage />} />
           <Route path="/reports" element={<ReportsPage />} />
-          <Route path="/staff" element={<StaffPage />} />
           <Route path="/pipeline" element={<DocumentPipelinePage />} />
           <Route path="/approvals" element={<ApprovalsPage />} />
-          <Route path="/contracts" element={<ContractsPage />} />
           <Route path="/advances" element={<AdvancesPage />} />
           <Route path="/inventory/grn" element={<GRNPage />} />
           <Route path="/aging" element={<AgingPage />} />
-          <Route path="/broadcast" element={<BroadcastPage />} />
 
           {/* Legacy /products redirect */}
           <Route path="/products" element={<Navigate to="/inventory/products" replace />} />

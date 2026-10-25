@@ -412,59 +412,14 @@ export const branchApi = {
 }
 
 export const aiApi = {
-  extractInvoice: (text: string) =>
-    api.post('/ai/extract-invoice', { text }).then((r) => r.data),
-
-  scanBill: (imageBase64: string, mediaType = 'image/jpeg') =>
-    api.post('/ai/scan-bill', { imageBase64, mediaType }).then((r) => r.data),
-
-  generateReminders: () =>
-    api.post('/ai/reminders/generate').then((r) => r.data),
-
-  pendingReminders: () =>
-    api.get('/ai/reminders/pending').then((r) => r.data),
-
-  approveReminder: (id: string) =>
-    api.post(`/ai/reminders/${id}/approve`).then((r) => r.data),
-
-  rejectReminder: (id: string) =>
-    api.post(`/ai/reminders/${id}/reject`).then((r) => r.data),
-
   insight: () =>
     api.get('/ai/insight').then((r) => r.data),
 
   reorder: () =>
     api.get('/ai/reorder').then((r) => r.data),
 
-  checkInvoice: (data: { partyId: string | null; grandTotal: number; items: any[] }) =>
-    api.post('/ai/check-invoice', data).then((r) => r.data),
-
-  creditRisk: (partyId: string) =>
-    api.get(`/ai/credit-risk/${partyId}`).then((r) => r.data),
-
   extractSupplierBill: (imageBase64: string, mediaType = 'image/jpeg') =>
     api.post('/ai/extract-supplier-bill', { imageBase64, mediaType }).then((r) => r.data),
-
-  categorizeExpense: (description: string, amount: number) =>
-    api.post('/ai/categorize-expense', { description, amount }).then((r) => r.data),
-
-  cashflowForecast: (horizon: 7 | 30 = 7) =>
-    api.get('/ai/cashflow-forecast', { params: { horizon } }).then((r) => r.data),
-
-  partyDuplicates: () =>
-    api.get('/ai/party-duplicates').then((r) => r.data),
-
-  priceAnomaly: (items: Array<{ productId: string; rate: number }>) =>
-    api.post('/ai/price-anomaly', { items }).then((r) => r.data),
-
-  gstSummaryAI: (month: string) =>
-    api.get('/ai/gst-summary', { params: { month } }).then((r) => r.data),
-
-  demandForecast: () =>
-    api.get('/ai/demand-forecast').then((r) => r.data),
-
-  chat: (question: string, history: Array<{ role: 'user' | 'assistant'; content: string }>) =>
-    api.post('/ai/chat', { question, history }).then((r) => r.data),
 }
 
 export const analyticsApi = {
@@ -527,33 +482,6 @@ export const reportsApi = {
   }) => api.post('/reports/bank-reconciliation', data).then((r) => r.data),
 }
 
-export const staffApi = {
-  users: () =>
-    api.get('/staff/users').then((r) => r.data),
-
-  getAttendance: (params: { date?: string; month?: string; userId?: string }) =>
-    api.get('/staff/attendance', { params }).then((r) => r.data),
-
-  recordAttendance: (data: {
-    userId: string; date: string; clockIn?: string; clockOut?: string
-    status?: string; notes?: string
-  }) => api.post('/staff/attendance', data).then((r) => r.data),
-
-  updateAttendance: (id: string, data: { clockOut?: string; status?: string; notes?: string }) =>
-    api.patch(`/staff/attendance/${id}`, data).then((r) => r.data),
-
-  getShifts: (params: { from?: string; to?: string; userId?: string }) =>
-    api.get('/staff/shifts', { params }).then((r) => r.data),
-
-  createShift: (data: {
-    userId: string; date: string; shiftType?: string
-    shiftStart?: string; shiftEnd?: string; notes?: string
-  }) => api.post('/staff/shifts', data).then((r) => r.data),
-
-  deleteShift: (id: string) =>
-    api.delete(`/staff/shifts/${id}`).then((r) => r.data),
-}
-
 export const categoryApi = {
   list: () =>
     api.get('/categories').then((r) => r.data),
@@ -594,9 +522,6 @@ export const usersApi = {
 }
 
 export const broadcastApi = {
-  getContacts: (params?: { type?: string; minSpend?: number; minLoyalty?: number; search?: string }) =>
-    api.get('/broadcasts/contacts', { params }).then((r) => r.data),
-
   getCelebrations: (days = 7) =>
     api.get('/broadcasts/celebrations', { params: { days } }).then((r) => r.data),
 }
@@ -610,32 +535,6 @@ export const brandApi = {
 
   update: (id: string, data: { name?: string; isActive?: boolean }) =>
     api.patch(`/brands/${id}`, data).then((r) => r.data),
-}
-
-export const contractApi = {
-  list: (params?: Record<string, unknown>) =>
-    api.get('/contracts', { params }).then((r) => r.data),
-
-  get: (id: string) =>
-    api.get(`/contracts/${id}`).then((r) => r.data),
-
-  create: (data: unknown) =>
-    api.post('/contracts', data).then((r) => r.data),
-
-  update: (id: string, data: unknown) =>
-    api.patch(`/contracts/${id}`, data).then((r) => r.data),
-
-  pause: (id: string) =>
-    api.post(`/contracts/${id}/pause`).then((r) => r.data),
-
-  resume: (id: string) =>
-    api.post(`/contracts/${id}/resume`).then((r) => r.data),
-
-  cancel: (id: string) =>
-    api.delete(`/contracts/${id}`).then((r) => r.data),
-
-  generateInvoice: (id: string) =>
-    api.post(`/contracts/${id}/generate-invoice`).then((r) => r.data),
 }
 
 export const advanceApi = {

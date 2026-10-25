@@ -23,8 +23,7 @@ import {
 import { DOMAIN_REGISTRY } from '@billing/domain-registry'
 import { voidWarrantyForInvoice, voidWarrantyForReturn } from '../lib/tyre-helpers.js'
 import { withIdempotency, IdempotencyConflictError } from '../lib/idempotency.js'
-import { createPaymentLink } from '../services/razorpayPayment.service.js'
-import { whatsappQueue } from '../lib/queues.js'
+import { whatsappQueue, addJob } from '../lib/queues.js'
 import { sendReceiptEmail } from '../services/email.service.js'
 
 export const invoiceRoutes: FastifyPluginAsync = async (app) => {
@@ -281,46 +280,6 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
       }
       throw err
     }
-  })
-
-  // ── POST /api/invoices/:id/payment-link ───────────────────────────────────
-  // Generates a Razorpay payment link for the outstanding balance and
-  // returns the shareable URL — the cashier sends this via WhatsApp
-  // (or copies it manually) for the customer to pay via UPI/card.
-  // Actual payment confirmation arrives separately via the webhook at
-  // /api/webhooks/razorpay, which calls recordPayment() automatically.
-  app.post('/:id/payment-link', async (req) => {
-    const { id } = z.object({ id: z.string().uuid() }).parse(req.params)
-    return createPaymentLink(id, {
-      db:         req.db,
-      branchId:   req.branchId,
-      schemaName: req.schemaName,
-      userId:     req.userId,
-      role:       req.role,
-    })
-  })
-
-  // ── GET /api/invoices/:id/pdf ─────────────────────────────────────────────
-  // Get the PDF URL for an invoice (generated async by worker)
-  app.get('/:id/pdf', async (req, reply) => {
-    const { id } = z.object({ id: z.string().uuid() }).parse(req.params)
-
-    // Check if PDF already exists
-    const pdfPath = `/tmp/billing-files/invoices/${id}.pdf`
-    const { existsSync } = await import('fs')
-
-    if (existsSync(pdfPath)) {
-      return reply.send({ pdfPath: `/invoices/${id}.pdf` })
-    }
-
-    // PDF not ready yet — re-queue generation
-    const { pdfQueue } = await import('../lib/queues.js')
-    await pdfQueue.add('generate-pdf', { invoiceId: id, branchId: req.branchId })
-
-    return reply.status(202).send({
-      message: 'PDF is being generated — try again in a few seconds',
-      invoiceId: id,
-    })
   })
 
   // ── POST /api/invoices/:id/credit-note ───────────────────────────────────
@@ -659,16 +618,20 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
       const phone = partyPhone.replace(/\D/g, '')
       const e164  = phone.startsWith('91') ? phone : `91${phone}`
 
-      await whatsappQueue.add('invoice_share', {
-        type:         'invoice_share',
-        invoiceId:    id,
-        tenantId:     req.schemaName,
-        toPhone:      e164,
-        partyName,
-        invoiceNo:    (invoice as any).number,
-        amount:       Number((invoice as any).grandTotal),
-        businessName,
-      })
+      try {
+        await addJob(whatsappQueue, 'invoice_share', {
+          type:         'invoice_share',
+          invoiceId:    id,
+          tenantId:     req.schemaName,
+          toPhone:      e164,
+          partyName,
+          invoiceNo:    (invoice as any).number,
+          amount:       Number((invoice as any).grandTotal),
+          businessName,
+        })
+      } catch {
+        return reply.code(503).send({ error: 'WhatsApp sending is unavailable right now. Please try again in a few minutes.' })
+      }
 
       return reply.send({ ok: true, channel: 'whatsapp', to: e164 })
     }

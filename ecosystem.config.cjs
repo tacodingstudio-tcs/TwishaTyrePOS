@@ -4,7 +4,7 @@
 //
 // Processes:
 //   tyre-api  — Fastify API server (2 workers in cluster mode)
-//   tyre-worker — PDF + WhatsApp + AI job worker (1 process)
+//   tyre-worker — WhatsApp + daily tyre alerts (1 process)
 //
 // Why not more API workers?
 //   Each API worker holds a Postgres connection pool of 10 connections.
@@ -47,7 +47,7 @@ module.exports = {
     // ── Background Worker ───────────────────────────────────────────────────
     {
       name:       'tyre-worker',
-      script:     'dist/workers/pdf.worker.js',
+      script:     'dist/workers/index.js',
       instances:  1,
       exec_mode:  'fork',         // Single process — Puppeteer not cluster-safe
       watch:      false,

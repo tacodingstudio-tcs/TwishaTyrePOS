@@ -17,7 +17,6 @@ import { tenantRoutes } from './routes/tenants.js'
 import { aiRoutes } from './routes/ai.js'
 import { analyticsRoutes }       from './routes/analytics.js'
 import { reportRoutes }          from './routes/reports.js'
-import { webhookRoutes } from './routes/webhooks.js'
 import { branchRoutes }         from './routes/branches.js'
 import { userRoutes }           from './routes/users.js'
 import { notificationRoutes }   from './routes/notifications.js'
@@ -25,8 +24,6 @@ import { categoryRoutes }       from './routes/categories.js'
 import { brandRoutes }          from './routes/brands.js'
 import { expenseRoutes }        from './routes/expenses.js'
 import { inventoryRoutes }      from './routes/inventory.js'
-import { staffRoutes }          from './routes/staff.js'
-import { contractRoutes }       from './routes/contracts.js'
 import { tyreRoutes }           from './routes/tyre.js'
 import { grnRoutes }            from './routes/grn.js'
 import { broadcastRoutes }      from './routes/broadcasts.js'
@@ -153,10 +150,6 @@ if (process.env['NODE_ENV'] !== 'production') {
 // ── Public routes (no auth required) ─────────────────────────────────────────
 await app.register(authRoutes, { prefix: '/api/auth' })
 await app.register(tenantRoutes, { prefix: '/api/tenants' })
-// Webhooks authenticate via HMAC signature, not JWT — must stay outside
-// the tenantMiddleware block below, since Razorpay's servers have no JWT.
-await app.register(webhookRoutes, { prefix: '/api/webhooks' })
-
 // Product images — browser <img src> can't send Authorization headers,
 // so we accept the JWT as a ?token= query param instead.
 app.get('/api/products/:id/image', async (req, reply) => {
@@ -215,8 +208,6 @@ await app.register(async (protectedApp) => {
   await protectedApp.register(brandRoutes,          { prefix: '/api/brands' })
   await protectedApp.register(expenseRoutes,        { prefix: '/api/expenses' })
   await protectedApp.register(inventoryRoutes,      { prefix: '/api/inventory' })
-  await protectedApp.register(staffRoutes,          { prefix: '/api/staff' })
-  await protectedApp.register(contractRoutes,       { prefix: '/api/contracts' })
   await protectedApp.register(tyreRoutes,           { prefix: '/api/tyre' })
   await protectedApp.register(grnRoutes,            { prefix: '/api/grn' })
   await protectedApp.register(broadcastRoutes,      { prefix: '/api/broadcasts' })

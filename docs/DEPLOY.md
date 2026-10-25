@@ -38,7 +38,7 @@ Open the Vercel address → **Register** to create the client's business. **Do n
 - **Free Render sleeps** after ~15 min idle; the first request then takes 30–60 s. Use the Starter plan for a real client.
 - Free Render Key Value (Redis) is not persistent — fine, it only holds queues/cache.
 - Uploaded files use local disk, which Render wipes on each deploy (`STORAGE_TYPE=local`). Nothing in the tyre flow depends on uploads today.
-- Invoice **PDF generation (puppeteer) is disabled** in the slim image; the app prints from the browser instead.
+- Bill / quotation PDFs are built on request with pdfkit (no Chromium, no queue). Redis only holds the WhatsApp queue and short-lived caches; if it is down or over its plan limit, sales, sign-in, PDFs and exports keep working (WhatsApp messages show "queue unreachable" with a Retry).
 - `.npmrc` has `strict-ssl=false` (local proxy workaround). Remove it before building in CI if you do not need it.
 - Existing tenants after a schema change: `pnpm provision:all` with `DATABASE_URL` set.
 - Backups: Neon keeps point-in-time history (length depends on plan); check it covers what the client expects.

@@ -13,7 +13,7 @@
 
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
-import { whatsappQueue } from '../lib/queues.js'
+import { whatsappQueue, addJob } from '../lib/queues.js'
 
 const NOTIF_TYPES = [
   'payment_reminder_draft',
@@ -148,7 +148,7 @@ export const notificationRoutes: FastifyPluginAsync = async (app) => {
     })
 
     // Queue the WhatsApp send job
-    await whatsappQueue.add('send', {
+    await addJob(whatsappQueue, 'send', {
       type:         'payment_reminder',
       invoiceId:    payload['partyId'] as string,  // used as a reference key in the worker
       tenantId:     req.tenantId,

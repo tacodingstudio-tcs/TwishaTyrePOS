@@ -1,0 +1,27 @@
+PASS  the serial-number box is already open on a tyre line (nothing to click)
+PASS  it warns that a claim cannot be matched without a serial
+PASS  the warning goes away once the serial is entered
+PASS  the bill with a serial number saves  — http://localhost:5175/invoices/98cd7e3f-d6e2-4b5d-b42f-29072be5b7f3
+PASS  the new tyre is on the Warranty page, in warranty, with its serial and the customer
+PASS  "Record claim" is offered
+PASS  Save claim stays disabled until the notes are filled
+PASS  a "waiting for the company" claim needs no replacement tyre
+PASS  the row now says "Waiting for company", with their reference and the days so far
+PASS  the "Waiting for company" filter lists it
+PASS  "Company replied" is offered to a manager
+PASS  choosing "Replaced" offers a replacement from stock (Save waits until one is picked)
+PASS  the replacement search lists tyres in stock  — MRF ZVTV 185/65 R15
+PASS  once decided, the claim leaves the "Waiting for company" list
+PASS  the claim now shows "replaced" and which serial replaced it
+PASS  the replacement tyre has its own warranty record, marked as a replacement
+PASS  "Edit details" is offered to a manager
+PASS  the corrected name shows on the record, and the history lists the edit
+PASS  the history lists the claim, the company reply and the edit
+PASS  the "Warranty claims" report tab is there for the owner
+PASS  the claims report shows totals and the outcomes
+PASS  voiding takes a reason (a prompt appeared) and succeeds
+PASS  the voided tyre shows under the Void filter
+PASS  a read-only user sees warranties but no claim, edit or void buttons
+PASS  and does not see the claims-cost report tab
+
+25/25 passed
