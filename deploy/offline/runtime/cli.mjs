@@ -32,6 +32,16 @@ const SHOP_FILE = path.join(ROOT, 'config', 'shop.json')
 // its hidden console (and still outlive it). The step .bat files run in a visible console and keep the old behaviour.
 const DETACH = process.env.TWISHA_NO_DETACH !== '1'
 const HELPER = path.join(ROOT, 'TwishaPOS.exe')
+/** Windows' own exit codes for "the program could not even be loaded" */
+const LOAD_FAIL = { 3221225781: 'a required Windows component (DLL) is missing', 3221225595: 'a required component could not be loaded', 3221225477: 'access violation', 3221226505: 'the program crashed while starting' }
+const startFailure = (r) => { const code = r.status === null ? (r.error?.code ?? 'no exit code') : r.status >>> 0; return `exit code ${code}${LOAD_FAIL[code] ? ' — ' + LOAD_FAIL[code] : ''}${r.error?.message ? ' — ' + r.error.message : ''}` }
+const startHint = (r) => {
+  const code = r.status === null ? 0 : r.status >>> 0
+  if (code === 3221225781 || code === 3221225595) return 'Install "Microsoft Visual C++ Redistributable (x64)" from https://aka.ms/vs/17/release/vc_redist.x64.exe (needs the internet once), then try again. Send the log file if it still fails.'
+  if (r.error?.code === 'EPERM' || r.error?.code === 'EACCES' || code === 3221225477) return 'The antivirus may be blocking this program. Allow the Twisha POS folder in the antivirus (or restore the blocked file), then try again.'
+  return `See ${path.join(dir.logs, 'setup.log')} and send it to support.`
+}
+
 /** Start a long-running program with no window that keeps running after this script ends (see the note in TwishaPOS.cs). */
 function spawnHidden(program, args, logFile, o = {}) {
   spawn(HELPER, ['--spawn', logFile, o.cwd ?? ROOT, program, ...args], { windowsHide: true, stdio: 'ignore', env: { ...process.env, ...(o.env ?? {}) } }).unref()
@@ -116,6 +126,12 @@ async function check() {
   for (const [what, p] of [['database engine', path.join(dir.pg, 'postgres.exe')], ['job store', path.join(dir.redis, 'redis-server.exe')], ['app', path.join(dir.app, 'src', 'server.ts')], ['screens', path.join(dir.web, 'index.html')]]) {
     need(fs.existsSync(p), `${what} files present`, `${what} files are missing (${p})`, 'Re-install Twisha POS.')
   }
+  // can the programs actually start on this laptop? (a missing system component makes Windows refuse before they print anything)
+  for (const [what, p] of [['database (initdb)', exe('initdb')], ['database server', exe('postgres')], ['job store', path.join(dir.redis, 'redis-server.exe')], ['app runtime (Node)', process.execPath]]) {
+    if (!fs.existsSync(p)) continue
+    const r = spawnSync(p, ['--version'], { encoding: 'utf8', windowsHide: true, timeout: 90000 })
+    need(r.status === 0, `${what} starts`, `${what} will not start (${startFailure(r)})`, startHint(r))
+  }
   try { fs.accessSync(DATA, fs.constants.W_OK); ok(`Can write to ${DATA}`) } catch { bad++; log(`  ✘ Cannot write to ${DATA}`) }
   if (bad) fail(`${bad} problem${bad === 1 ? '' : 's'} found — fix them and run this step again`)
   ok('This laptop is ready')
@@ -152,7 +168,7 @@ async function db() {
     const pw = path.join(DATA, 'pg.pw'); fs.writeFileSync(pw, s.pgPassword)
     const r = run(exe('initdb'), ['-D', dir.pgdata, '-U', 'postgres', '-A', 'scram-sha-256', `--pwfile=${pw}`, '-E', 'UTF8', '--locale-provider=icu', '--icu-locale=en-IN', '--locale=C'])
     fs.rmSync(pw, { force: true })
-    if (r.status !== 0) fail('Could not create the database folder', r.stderr.slice(0, 600))
+    if (r.status !== 0) fail(`Could not create the database folder (${startFailure(r)})`, `${startHint(r)}${r.stderr ? '\n' + r.stderr.slice(0, 600) : ''}${r.stdout ? '\n' + r.stdout.slice(-300) : ''}`)
     fs.appendFileSync(path.join(dir.pgdata, 'postgresql.conf'), `
 # ── Twisha POS ──
 listen_addresses = '127.0.0.1'

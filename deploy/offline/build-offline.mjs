@@ -110,6 +110,16 @@ async function main() {
   unzip(await download('pg'), path.join(tmp, 'pg'))
   for (const d of ['bin', 'lib', 'share']) cp(path.join(tmp, 'pg', 'pgsql', d), path.join(OUT, 'pg', d))
   for (const junk of ['pgAdmin 4', 'StackBuilder', 'doc', 'symbols']) rm(path.join(OUT, 'pg', junk))
+  // StackBuilder (a downloader for add-ons) is not needed — and it drags in a GUI toolkit
+  for (const f of fs.readdirSync(path.join(OUT, 'pg', 'bin'))) if (/^stackbuilder\.exe$|^wx.*\.dll$/i.test(f)) rm(path.join(OUT, 'pg', 'bin', f))
+  // PostgreSQL is built with Visual C++ and needs Microsoft's runtime DLLs. A laptop that has never had "Visual C++ Redistributable"
+  // installed does not have them, and the database program then cannot even start (an empty "could not create the database"). The
+  // redistributable files may be shipped app-local, next to the program that needs them.
+  for (const f of ['vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll', 'msvcp140_1.dll', 'concrt140.dll']) {
+    const from = path.join(process.env.SystemRoot ?? 'C:/Windows', 'System32', f)
+    if (!fs.existsSync(from)) { if (f === 'vcruntime140.dll' || f === 'vcruntime140_1.dll' || f === 'msvcp140.dll') throw new Error(`${f} not found on this build machine — install the Visual C++ Redistributable (x64) here once, then build again`); continue }
+    fs.copyFileSync(from, path.join(OUT, 'pg', 'bin', f))
+  }
 
   rm(path.join(OUT, 'redis')); unzip(await download('redis'), path.join(tmp, 'redis'))
   const rd = fs.readdirSync(path.join(tmp, 'redis'))
@@ -129,6 +139,11 @@ async function main() {
   const bats = path.join(HERE, 'steps')
   for (const f of fs.readdirSync(bats)) fs.copyFileSync(path.join(bats, f), path.join(OUT, f))
   fs.copyFileSync(path.join(REPO, 'apps', 'web', 'public', 'favicon.png'), path.join(OUT, 'favicon.png'))
+
+  // ── 6 · prove that nothing the programs need is missing on a clean laptop ─────────────────────────────────────────
+  say('Checking that every program has what it needs on a clean laptop')
+  sh(process.execPath, [path.join(HERE, 'check-deps.mjs'), OUT])
+
 
   // ── 5 · the program on the desktop, and the one-file installer ────────────────────────────────────────────────────
   say('Building TwishaPOS.exe (the icon on the desktop)')
