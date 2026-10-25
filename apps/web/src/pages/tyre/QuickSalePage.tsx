@@ -571,7 +571,7 @@ export function QuickSalePage() {
                       <div className="text-xs text-gray-500 mt-0.5">{inr(sv.salePrice)}{/tyre|wheel/.test(String(sv.unit)) ? ' each' : ''}</div>
                     </button>
                     {on && (
-                      <div className="mt-2 flex items-center justify-between">
+                      <div className="mt-2 space-y-1.5">
                         <div className="flex items-center gap-1.5">
                           <button type="button" aria-label="Fewer"
                             className="w-7 h-7 rounded-md border border-gray-300 bg-white flex items-center justify-center"
@@ -585,7 +585,7 @@ export function QuickSalePage() {
                             <Plus className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                        <span className="text-sm font-semibold text-green-800">{inr(price2(line!.qty * line!.price))}</span>
+                        <div className="text-sm font-semibold text-green-800 [overflow-wrap:anywhere]">{inr(price2(line!.qty * line!.price))}</div>
                       </div>
                     )}
                   </div>

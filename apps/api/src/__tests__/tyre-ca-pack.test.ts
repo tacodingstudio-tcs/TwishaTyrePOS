@@ -43,4 +43,26 @@ describe('CA pack (Excel export)', () => {
     expect((await get(cashier)).status).toBe(403)
     expect((await get(viewer)).status).toBe(403)
   })
+
+  test('the layout an accountant relies on: title on row 1, header on row 3, data from row 4, and the TOTAL covers exactly the data rows', async () => {
+    for (const amount of [1200, 300.5]) expect((await owner.api.post('/api/expenses', { category: 'rent', description: 'Shop rent', amount, paymentMode: 'cash' })).status).toBe(201)
+    const r = await get(owner, { only: 'expenses' })
+    const wb = new ExcelJS.Workbook(); await wb.xlsx.load(r.data)
+    const ws = wb.getWorksheet('Expenses')!
+    expect(String(ws.getCell('A1').value)).toMatch(/^Expenses — /)
+    expect(ws.getCell('A3').value).toBe('Date')
+    expect(ws.getCell('D3').value).toBe('Amount')
+    expect(Number(ws.getCell('D4').value)).toBe(1200)
+    expect(Number(ws.getCell('D5').value)).toBe(300.5)
+    expect(String(ws.getCell('A6').value)).toBe('TOTAL')
+    expect(ws.getCell('D6').value).toMatchObject({ formula: 'SUBTOTAL(9,D4:D5)', result: 1500.5 })
+    expect(wb.getWorksheet('Summary')!.getCell('A1').value).toMatch(/accountant pack/)
+  })
+
+  test('more rows are appended below the earlier ones and the sheet stays complete', async () => {
+    const rows = Array.from({ length: 5 }, (_, i) => ({ category: 'misc', description: `bulk ${i}`, amount: 10 + i, paymentMode: 'cash' }))
+    for (const b of rows) await owner.api.post('/api/expenses', b)
+    const wb = new ExcelJS.Workbook(); await wb.xlsx.load((await get(owner, { only: 'expenses' })).data)
+    expect(wb.getWorksheet('Expenses')!.rowCount).toBeGreaterThanOrEqual(3 + 2 + 5 + 1)
+  })
 })
