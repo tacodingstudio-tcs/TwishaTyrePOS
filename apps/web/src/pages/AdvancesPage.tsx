@@ -4,6 +4,7 @@ import { PartyIdSelect } from '@/components/ui/PartyCombobox'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { tyreApi } from '@/lib/api'
+import { useAuthStore } from '@/store/auth.store'
 import { format } from 'date-fns'
 import { Plus, X, CreditCard, CheckCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -177,7 +178,8 @@ export default function AdvancesPage() {
   const [allocating, setAllocating]   = useState<any>(null)
   const { data, isLoading } = useAdvances()
   // salary advances given to the team live in Team & Salary; show who still owes one so they are not "missing" from here
-  const { data: staffData } = useQuery({ queryKey: ['team-staff-advances'], queryFn: () => tyreApi.teamStaff(), retry: false })
+  const canManage = useAuthStore((st) => st.canManage)
+  const { data: staffData } = useQuery({ queryKey: ['team-staff-advances'], queryFn: () => tyreApi.teamStaff(), retry: false, enabled: canManage() })
   const staffAdv: any[] = (Array.isArray(staffData) ? staffData : staffData?.data ?? []).filter((p: any) => Number(p.advanceOutstanding) > 0)
   const advances = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : []
 

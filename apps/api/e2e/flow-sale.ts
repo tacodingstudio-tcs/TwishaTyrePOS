@@ -51,7 +51,7 @@ async function clickText(page: Page, tag: string, text: string | RegExp, nth = 0
 const shot = (page: Page, name: string) => page.screenshot({ path: `${OUT}/${name}.png` })
 const saveBtn = (page: Page) => page.evaluateHandle(() => [...document.querySelectorAll('button')].filter((b) => /^(Save bill|Saving…)$/.test(b.innerText.trim()) && (b as HTMLElement).offsetParent !== null && b.getBoundingClientRect().width > 0)[0] ?? null)
 const saveDisabled = async (page: Page) => (await (await saveBtn(page)).asElement()?.evaluate((b) => (b as HTMLButtonElement).disabled)) ?? true
-const invoiceCount = async (page: Page) => (await api(page, '/api/invoices?limit=1')).meta.total as number
+const invoiceCount = async (page: Page) => (await api(page, '/api/invoices?limit=1&txnType=sale_invoice')).meta.total as number
 
 async function newSale(page: Page) { await page.goto(`${WEB}/tyre/sale`, { waitUntil: 'networkidle2' }); await sleep(300) }
 async function addFirstTyre(page: Page, q = '185'): Promise<string> {
@@ -95,7 +95,7 @@ async function main() {
   const after = await invoiceCount(page)
   check('saving makes exactly one bill', after === before + 1, `${before} → ${after}`)
   await shot(page, 'sale-3-saved')
-  const latest = (await api(page, '/api/invoices?limit=1')).data[0]
+  const latest = (await api(page, '/api/invoices?limit=1&txnType=sale_invoice&search=E2E%20Counter')).data[0]
   const inv = await api(page, `/api/invoices/${latest.id}`)
   check('the saved bill carries the customer, the vehicle and the cash received', /E2E Counter/.test(JSON.stringify(inv)) && Number(inv.paidAmt) === Number(inv.grandTotal), `paid ${inv.paidAmt} of ${inv.grandTotal}`)
   const t = await token(page)
@@ -137,7 +137,7 @@ async function main() {
   await addFirstTyre(page)
   await clickText(page, 'button', 'Cash', 0)
   const sb = (await saveBtn(page)).asElement()!
-  await Promise.all([sb.click(), sb.click({ delay: 5 }).catch(() => {})])
+  await sb.evaluate((el) => { (el as HTMLElement).click(); (el as HTMLElement).click() })                      // two taps in the same instant
   await sleep(3000)
   const c1 = await invoiceCount(page)
   check('double-tapping Save does not make two bills', c1 === c0 + 1, `${c0} → ${c1}`)
