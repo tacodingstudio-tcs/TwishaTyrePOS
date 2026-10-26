@@ -3,6 +3,8 @@
 Tyre shop / dealer billing + counter operations (size finder → sale with fitting → serial / warranty →
 vehicle reminders). Tyre vertical of HisabKitab; same architecture as billingPlatform and transportPlatform.
 Read `README.md` (run it) and `docs/ARCHITECTURE.md` (how it works) first.
+**Licensing** (the offline installer only runs on the PC its signed license names): everything is in `docs/LICENSING.md` — read it before touching the
+installer, the `server.ts` license gate, or when asked to make / renew a license.
 
 ## Commands
 
@@ -71,6 +73,10 @@ pnpm provision:all                  # re-apply tenant DDL to existing tenants af
     formats, A4 fit-to-width, Calibri-twin font Carlito (`assets/fonts`, OFL). Do not restyle it. After any change run
     `npx tsx e2e/bill-preview.ts` and compare with Excel's own export using `e2e/bill-compare.py` (positions must stay within 0.4 % of
     the bill width). Tests read the PDF text through `__tests__/pdf-text.ts` (it understands embedded fonts).
+
+18. **Licensing is on in the packaged app only** (`LICENSE_REQUIRED=true` set by `deploy/offline/runtime/cli.mjs`). Every `/api/*` call except `/api/license/*`
+    answers 402 until a valid license is activated; the installer's own first-run `shop()` step passes `x-setup-key`. Never commit a private key
+    or a `.lic`; the signing key lives in `E:\softwares\_license-keys\private.pem`. Details: `docs/LICENSING.md`.
 
 ## Testing notes
 
