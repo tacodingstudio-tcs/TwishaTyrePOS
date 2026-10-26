@@ -341,6 +341,9 @@ class StartForm : Form
     double shown, floor, ceil = 8;
     int tipIndex, tick;
     bool failed;
+    float k = 1f;
+    int S(int v) { return (int)Math.Round(v * k); }
+    void B(Control c, int x, int y, int w, int h) { c.SetBounds(S(x), S(y), S(w), S(h)); }
     public event EventHandler RetryClicked;
     public event EventHandler QuitClicked;
 
@@ -362,15 +365,16 @@ class StartForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false; MinimizeBox = true;
         BackColor = Color.White;
-        ClientSize = new Size(520, 330);
-        AutoScaleDimensions = new SizeF(96F, 96F);
-        AutoScaleMode = AutoScaleMode.Dpi;      // positions grow with the screen's text size, so nothing is clipped
+        // every position is multiplied by the screen scale (k) by hand, so the window and what is inside it always match
+        using (Graphics g = CreateGraphics()) k = g.DpiX / 96f;
+        AutoScaleMode = AutoScaleMode.None;
+        ClientSize = new Size(S(520), S(330));
         Font = new Font("Segoe UI", 9.5f);
 
         logo = new PictureBox();
         logo.Image = icon.ToBitmap();
         logo.SizeMode = PictureBoxSizeMode.Zoom;
-        logo.SetBounds(220, 22, 80, 80);
+        B(logo, 220, 22, 80, 80);
         Controls.Add(logo);
 
         title = new Label();
@@ -378,31 +382,31 @@ class StartForm : Form
         title.Font = new Font("Segoe UI Semibold", 18f);
         title.ForeColor = Color.FromArgb(27, 94, 52);
         title.TextAlign = ContentAlignment.MiddleCenter;
-        title.SetBounds(20, 108, 480, 38);
+        B(title, 20, 108, 480, 38);
         Controls.Add(title);
 
         tagline = new Label();
         tagline.Text = "Tyre shop billing, warranty and reminders";
         tagline.ForeColor = Color.FromArgb(110, 118, 112);
         tagline.TextAlign = ContentAlignment.MiddleCenter;
-        tagline.SetBounds(20, 152, 480, 24);
+        B(tagline, 20, 152, 480, 24);
         Controls.Add(tagline);
 
         bar = new SmoothBar();
-        bar.SetBounds(60, 194, 400, 10);
+        B(bar, 60, 194, 400, 10);
         Controls.Add(bar);
 
         status = new Label();
         status.Text = "Getting ready...";
         status.Font = new Font("Segoe UI Semibold", 10f);
         status.TextAlign = ContentAlignment.MiddleCenter;
-        status.SetBounds(20, 208, 480, 26);
+        B(status, 20, 208, 480, 26);
         Controls.Add(status);
 
         tip = new Label();
         tip.ForeColor = Color.FromArgb(90, 100, 94);
         tip.TextAlign = ContentAlignment.MiddleCenter;
-        tip.SetBounds(50, 246, 420, 44);
+        B(tip, 50, 246, 420, 44);
         Controls.Add(tip);
 
         footer = new Label();
@@ -410,24 +414,24 @@ class StartForm : Form
         footer.Font = new Font("Segoe UI", 8f);
         footer.ForeColor = Color.FromArgb(160, 166, 162);
         footer.TextAlign = ContentAlignment.MiddleCenter;
-        footer.SetBounds(20, 300, 480, 20);
+        B(footer, 20, 300, 480, 20);
         Controls.Add(footer);
 
         // only shown when something goes wrong
         details = new TextBox();
         details.Multiline = true; details.ReadOnly = true; details.ScrollBars = ScrollBars.Vertical;
         details.Font = new Font("Consolas", 8.5f);
-        details.SetBounds(20, 120, 480, 150);
+        B(details, 20, 120, 480, 150);
         details.Visible = false;
         Controls.Add(details);
 
-        retry = new Button(); retry.Text = "Try again"; retry.SetBounds(20, 284, 110, 32); retry.Visible = false;
+        retry = new Button(); retry.Text = "Try again"; B(retry, 20, 284, 110, 32); retry.Visible = false;
         retry.Click += delegate { if (RetryClicked != null) RetryClicked(this, EventArgs.Empty); };
         Controls.Add(retry);
-        copy = new Button(); copy.Text = "Copy details"; copy.SetBounds(140, 284, 110, 32); copy.Visible = false;
+        copy = new Button(); copy.Text = "Copy details"; B(copy, 140, 284, 110, 32); copy.Visible = false;
         copy.Click += delegate { try { Clipboard.SetText(string.Join("\r\n", all.ToArray())); } catch { } };
         Controls.Add(copy);
-        quit = new Button(); quit.Text = "Close"; quit.SetBounds(390, 284, 110, 32); quit.Visible = false;
+        quit = new Button(); quit.Text = "Close"; B(quit, 390, 284, 110, 32); quit.Visible = false;
         quit.Click += delegate { if (QuitClicked != null) QuitClicked(this, EventArgs.Empty); };
         Controls.Add(quit);
 
@@ -472,13 +476,13 @@ class StartForm : Form
         foreach (Control c in new Control[] { logo, tagline, bar, tip, footer }) c.Visible = on;
         if (on)
         {
-            title.SetBounds(20, 108, 480, 38); title.TextAlign = ContentAlignment.MiddleCenter;
-            status.SetBounds(20, 208, 480, 26); status.TextAlign = ContentAlignment.MiddleCenter;
+            B(title, 20, 108, 480, 38); title.TextAlign = ContentAlignment.MiddleCenter;
+            B(status, 20, 208, 480, 26); status.TextAlign = ContentAlignment.MiddleCenter;
         }
         else
         {
-            title.SetBounds(20, 14, 480, 36); title.TextAlign = ContentAlignment.MiddleLeft;
-            status.SetBounds(20, 54, 480, 56); status.TextAlign = ContentAlignment.TopLeft;
+            B(title, 20, 14, 480, 36); title.TextAlign = ContentAlignment.MiddleLeft;
+            B(status, 20, 54, 480, 56); status.TextAlign = ContentAlignment.TopLeft;
         }
     }
 
