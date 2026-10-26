@@ -42,7 +42,7 @@ The customer pastes the whole line into the app's activate screen (or you send t
 | Shop | Product | Machine ID | Issued | Expires | File |
 |---|---|---|---|---|---|
 | Shakti Enterprise (Yogesh Mori, Veraval) | `tyre` | `D8298-80DED-3A615-5A797` | 2026-10-26 | 2027-11-01 | `E:\softwares\_deliver\Shakti-Enterprise.lic` |
-| "Twisha POS customer" (name not given; regenerate if a real shop name is wanted) | `tyre` | `041A1-3E2F0-A3664-6407E` | 2026-10-26 | 2099-12-31 (lifetime) | `E:\softwares\_deliver\041A1-license.lic` |
+| "Twisha POS customer" (the owner's own test laptop, not a client) | `tyre` | `041A1-3E2F0-A3664-6407E` | 2026-10-26 | 2099-12-31 (lifetime) | `E:\softwares\_deliver\041A1-license.lic` |
 
 Add a row for every license made. A renewal = a new license for the same Machine ID with a later `--expires`; pasting it replaces the old one.
 
