@@ -155,7 +155,7 @@ const pgReady = () => run(exe('pg_isready'), ['-h', '127.0.0.1', '-p', String(PO
  *  starting up"). Wait until it really answers, and say so, instead of giving up on the first refusal. */
 async function waitPgReady() {
   if (pgReady()) return
-  log('  … the database is checking itself after the last shutdown (this can take a minute)')
+  log('  … waiting for the database to accept connections')
   if (!(await waitFor(async () => pgReady(), 240, 500))) fail('The database is taking too long to get ready', `See ${path.join(dir.logs, 'postgres.log')}`)
 }
 

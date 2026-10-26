@@ -8,7 +8,7 @@
 // database in pages of PAGE rows and written straight into a streaming workbook (a temporary file), and the Summary
 // sheet comes from SQL totals — a 60,000-bill year stays within a few tens of MB instead of about 1 GB.
 
-import ExcelJS from 'exceljs'
+import type ExcelJS from 'exceljs'
 import { randomUUID } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -113,7 +113,8 @@ export async function buildWorkbook(ctx: Ctx, from: string, to: string, only?: S
 
   const file = join(tmpdir(), `capack-${randomUUID()}.xlsx`)
   try {
-    const wb = new ExcelJS.stream.xlsx.WorkbookWriter({ filename: file, useStyles: true, useSharedStrings: false })
+    const { default: ExcelJSLib } = await import('exceljs') // loaded on first export, not at start-up
+    const wb = new ExcelJSLib.stream.xlsx.WorkbookWriter({ filename: file, useStyles: true, useSharedStrings: false })
     wb.creator = 'Twisha POS'; wb.created = new Date()
 
     const summary = wb.addWorksheet('Summary', { properties: { tabColor: { argb: GREEN } } })

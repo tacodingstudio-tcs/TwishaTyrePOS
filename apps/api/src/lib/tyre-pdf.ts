@@ -9,7 +9,6 @@
 // pdfkit's built-in fonts have no ₹ glyph, so amounts are printed as "Rs." — a standard convention
 // on Indian invoices.
 
-import PDFDocument from 'pdfkit'
 import { drawShaktiBill } from './tyre-bill-shakti.js'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -193,7 +192,8 @@ export interface InvoicePdfData {
 }
 
 export async function renderInvoicePdf(b: InvoicePdfData, biz: BusinessHeader): Promise<Buffer> {
-  const doc = new PDFDocument({ size: 'A4', margin: 30, info: { Title: `Invoice ${b.number}`, Author: biz.name } })
+  const { default: PDFDocument } = await import('pdfkit') // loaded on first bill, not at start-up
+  const doc: PDFKit.PDFDocument = new PDFDocument({ size: 'A4', margin: 30, info: { Title: `Invoice ${b.number}`, Author: biz.name } })
   enableGujarati(doc)
   const done = collect(doc)
   const X = 30, W = doc.page.width - 60

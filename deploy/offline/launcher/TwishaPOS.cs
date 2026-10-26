@@ -298,15 +298,61 @@ class MainContext : ApplicationContext
     }
 }
 
+/// <summary>A smooth rounded progress bar (the stock Windows one looks flat and jumpy).</summary>
+class SmoothBar : Control
+{
+    double value;
+    public SmoothBar() { SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true); }
+    public double Value { get { return value; } set { this.value = Math.Max(0, Math.Min(100, value)); Invalidate(); } }
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        Graphics g = e.Graphics;
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.Clear(Parent != null ? Parent.BackColor : Color.White);
+        Rectangle r = new Rectangle(0, 0, Width - 1, Height - 1);
+        using (System.Drawing.Drawing2D.GraphicsPath track = Round(r, Height))
+        using (SolidBrush b = new SolidBrush(Color.FromArgb(230, 236, 231))) g.FillPath(b, track);
+        int w = (int)((Width - 1) * value / 100.0);
+        if (w < Height) w = Height;
+        Rectangle f = new Rectangle(0, 0, w, Height - 1);
+        using (System.Drawing.Drawing2D.GraphicsPath fill = Round(f, Height))
+        using (System.Drawing.Drawing2D.LinearGradientBrush b = new System.Drawing.Drawing2D.LinearGradientBrush(f, Color.FromArgb(67, 160, 71), Color.FromArgb(27, 110, 60), 0f)) g.FillPath(b, fill);
+    }
+    static System.Drawing.Drawing2D.GraphicsPath Round(Rectangle r, int d)
+    {
+        System.Drawing.Drawing2D.GraphicsPath p = new System.Drawing.Drawing2D.GraphicsPath();
+        d = Math.Max(2, d);
+        p.AddArc(r.X, r.Y, d, d, 180, 90); p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+        p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90); p.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+        p.CloseFigure();
+        return p;
+    }
+}
+
 class StartForm : Form
 {
-    Label title, status;
-    ProgressBar bar;
+    Label title, tagline, status, tip, footer;
+    PictureBox logo;
+    SmoothBar bar;
     TextBox details;
     Button retry, quit, copy;
+    System.Windows.Forms.Timer anim;
     List<string> all = new List<string>();
+    double shown, floor, ceil = 8;
+    int tipIndex, tick;
+    bool failed;
     public event EventHandler RetryClicked;
     public event EventHandler QuitClicked;
+
+    static readonly string[] Tips = new string[] {
+        "Type a tyre size in any style - 195/55 R16 or 195-55-16 - and the size finder matches it.",
+        "Enter the vehicle number on a bill and its tyre history and next-service reminder are kept for you.",
+        "Every tyre sold with a serial number carries its own warranty - claims are tracked from the bill.",
+        "An old tyre taken in exchange is a payment on the bill - GST stays on the full price.",
+        "Send the bill to your customer on WhatsApp right after the sale.",
+        "Quit from the tray menu and your shop data is backed up before the program closes.",
+        "Your data stays on this computer - nothing needs the internet to bill a customer."
+    };
 
     public StartForm(Icon icon)
     {
@@ -315,38 +361,64 @@ class StartForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false; MinimizeBox = true;
+        BackColor = Color.White;
         ClientSize = new Size(520, 330);
         AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;      // positions grow with the screen's text size, so nothing is clipped
         Font = new Font("Segoe UI", 9.5f);
 
-        PictureBox logo = new PictureBox();
+        logo = new PictureBox();
         logo.Image = icon.ToBitmap();
         logo.SizeMode = PictureBoxSizeMode.Zoom;
-        logo.SetBounds(20, 18, 56, 56);
+        logo.SetBounds(220, 22, 80, 80);
         Controls.Add(logo);
 
         title = new Label();
         title.Text = "Twisha POS";
-        title.Font = new Font("Segoe UI Semibold", 15f);
-        title.SetBounds(88, 14, 410, 36);
+        title.Font = new Font("Segoe UI Semibold", 18f);
+        title.ForeColor = Color.FromArgb(27, 94, 52);
+        title.TextAlign = ContentAlignment.MiddleCenter;
+        title.SetBounds(20, 108, 480, 38);
         Controls.Add(title);
 
-        status = new Label();
-        status.Text = "Starting...";
-        status.SetBounds(90, 54, 410, 26);
-        Controls.Add(status);
+        tagline = new Label();
+        tagline.Text = "Tyre shop billing, warranty and reminders";
+        tagline.ForeColor = Color.FromArgb(110, 118, 112);
+        tagline.TextAlign = ContentAlignment.MiddleCenter;
+        tagline.SetBounds(20, 152, 480, 24);
+        Controls.Add(tagline);
 
-        bar = new ProgressBar();
-        bar.Style = ProgressBarStyle.Marquee;
-        bar.MarqueeAnimationSpeed = 25;
-        bar.SetBounds(20, 92, 480, 14);
+        bar = new SmoothBar();
+        bar.SetBounds(60, 194, 400, 10);
         Controls.Add(bar);
 
+        status = new Label();
+        status.Text = "Getting ready...";
+        status.Font = new Font("Segoe UI Semibold", 10f);
+        status.TextAlign = ContentAlignment.MiddleCenter;
+        status.SetBounds(20, 208, 480, 26);
+        Controls.Add(status);
+
+        tip = new Label();
+        tip.ForeColor = Color.FromArgb(90, 100, 94);
+        tip.TextAlign = ContentAlignment.MiddleCenter;
+        tip.SetBounds(50, 246, 420, 44);
+        Controls.Add(tip);
+
+        footer = new Label();
+        footer.Text = "Twisha Consultancy Services";
+        footer.Font = new Font("Segoe UI", 8f);
+        footer.ForeColor = Color.FromArgb(160, 166, 162);
+        footer.TextAlign = ContentAlignment.MiddleCenter;
+        footer.SetBounds(20, 300, 480, 20);
+        Controls.Add(footer);
+
+        // only shown when something goes wrong
         details = new TextBox();
         details.Multiline = true; details.ReadOnly = true; details.ScrollBars = ScrollBars.Vertical;
         details.Font = new Font("Consolas", 8.5f);
         details.SetBounds(20, 120, 480, 150);
+        details.Visible = false;
         Controls.Add(details);
 
         retry = new Button(); retry.Text = "Try again"; retry.SetBounds(20, 284, 110, 32); retry.Visible = false;
@@ -359,6 +431,12 @@ class StartForm : Form
         quit.Click += delegate { if (QuitClicked != null) QuitClicked(this, EventArgs.Empty); };
         Controls.Add(quit);
 
+        anim = new System.Windows.Forms.Timer();
+        anim.Interval = 40;
+        anim.Tick += delegate { OnTick(); };
+        anim.Start();
+        ShowTip();
+
         FormClosing += delegate(object s, FormClosingEventArgs e)
         {
             // the X only tucks the window away; Quit is in the tray menu
@@ -366,13 +444,52 @@ class StartForm : Form
         };
     }
 
+    void ShowTip() { tip.Text = Tips[tipIndex % Tips.Length]; }
+
+    // the bar glides: quickly up to the start of the current step, then slowly towards its end, so it never looks stuck
+    void OnTick()
+    {
+        if (failed) return;
+        double speed = shown < floor ? 0.12 : 0.008;
+        shown += (ceil - shown) * speed;
+        bar.Value = shown;
+        if (++tick % 100 == 0) { tipIndex++; ShowTip(); }      // a new tip every 4 seconds
+    }
+
+    void SetStep(string line)
+    {
+        // friendly wording and a share of the bar for each STEP the setup script prints
+        if (line.StartsWith("Checking this laptop")) { status.Text = "Checking this computer..."; floor = 5; ceil = 20; }
+        else if (line.StartsWith("Preparing the database")) { status.Text = "Opening your shop data..."; floor = 20; ceil = 45; }
+        else if (line.StartsWith("Starting the database")) { status.Text = "Starting the shop engine..."; floor = 45; ceil = 85; }
+        else if (line.StartsWith("Creating the shop")) { status.Text = "Almost there..."; floor = 85; ceil = 95; }
+        else if (line.StartsWith("Opening Twisha POS")) { status.Text = "Opening Twisha POS..."; floor = 95; ceil = 99; }
+        else status.Text = line;
+    }
+
+    void ShowSplash(bool on)
+    {
+        foreach (Control c in new Control[] { logo, tagline, bar, tip, footer }) c.Visible = on;
+        if (on)
+        {
+            title.SetBounds(20, 108, 480, 38); title.TextAlign = ContentAlignment.MiddleCenter;
+            status.SetBounds(20, 208, 480, 26); status.TextAlign = ContentAlignment.MiddleCenter;
+        }
+        else
+        {
+            title.SetBounds(20, 14, 480, 36); title.TextAlign = ContentAlignment.MiddleLeft;
+            status.SetBounds(20, 54, 480, 56); status.TextAlign = ContentAlignment.TopLeft;
+        }
+    }
+
     public void Reset()
     {
         all.Clear(); details.Text = "";
-        status.Text = "Starting...";
-        bar.Style = ProgressBarStyle.Marquee; bar.Visible = true;
-        retry.Visible = false; copy.Visible = false; quit.Visible = false;
+        failed = false; shown = 0; floor = 0; ceil = 8; bar.Value = 0;
+        status.Text = "Getting ready...";
         title.Text = "Twisha POS";
+        ShowSplash(true);
+        details.Visible = false; retry.Visible = false; copy.Visible = false; quit.Visible = false;
     }
 
     public void Append(string line)
@@ -381,16 +498,18 @@ class StartForm : Form
         BeginInvoke((MethodInvoker)delegate
         {
             all.Add(line);
-            if (line.StartsWith("STEP ")) status.Text = line.Substring(5);
+            if (line.StartsWith("STEP ")) SetStep(line.Substring(5));
             details.AppendText(line + "\r\n");
         });
     }
 
     public void ShowFailure()
     {
-        bar.Visible = false;
+        failed = true;
+        ShowSplash(false);
         title.Text = "Could not start";
         status.Text = "Read the last lines below. Click Try again after fixing it.";
+        details.Visible = true; details.SelectionStart = details.TextLength; details.ScrollToCaret();
         retry.Visible = true; copy.Visible = true; quit.Visible = true;
         Show(); Activate();
     }
@@ -398,9 +517,11 @@ class StartForm : Form
     public void ShowStopping()
     {
         Show(); Activate();
+        failed = false; shown = 0; floor = 0; ceil = 90; bar.Value = 0;
+        ShowSplash(true);
+        details.Visible = false;
         title.Text = "Stopping...";
-        status.Text = "Backing up and shutting down. Please wait.";
-        bar.Style = ProgressBarStyle.Marquee; bar.Visible = true;
+        status.Text = "Backing up your data and shutting down. Please wait.";
         retry.Visible = false; copy.Visible = false; quit.Visible = false;
     }
 }
