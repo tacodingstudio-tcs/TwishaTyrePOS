@@ -1,7 +1,7 @@
 // Home: today at the counter, money to collect, stock position, and what needs a phone call.
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Plus, Boxes, ShieldCheck, BellRing, Wallet, TrendingUp, AlertTriangle } from 'lucide-react'
+import { Boxes, ShieldCheck, BellRing, Wallet, TrendingUp, AlertTriangle } from 'lucide-react'
 import { tyreApi } from '@/lib/api'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { StatusPill } from '@/components/tyre/StatusPill'
@@ -29,7 +29,6 @@ export function TyreDashboardPage() {
       <PageHeader
         title="Today"
         subtitle={new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
-        action={<Link to="/tyre/sale" className="btn-primary"><Plus className="w-4 h-4" /> New sale</Link>}
       />
       <div className="p-6 space-y-6">
 

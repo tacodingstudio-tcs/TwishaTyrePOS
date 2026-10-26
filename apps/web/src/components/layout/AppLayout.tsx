@@ -215,7 +215,7 @@ export function AppLayout() {
 
       {/* ── Main content ─────────────────────────────────────────────────── */}
       <main className="flex-1 min-w-0 overflow-y-auto flex flex-col">
-        <div className="h-12 flex items-center justify-end gap-3 px-3 sm:px-4 border-b border-gray-100 bg-white shrink-0">
+        <div className="h-12 lg:h-[72px] flex items-center justify-end gap-3 px-3 sm:px-4 border-b border-gray-200 bg-white shrink-0">     {/* same height + colour as the sidebar header on wide screens, so the two lines run as one */}
           <button type="button" onClick={() => setNavOpen(true)} aria-label="Open menu"
             className="lg:hidden mr-auto p-2 -ml-1 rounded-lg text-gray-600 hover:bg-gray-100">
             <Menu className="w-5 h-5" />

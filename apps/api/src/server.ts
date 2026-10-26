@@ -258,6 +258,11 @@ process.on('SIGINT',  () => shutdown('SIGINT'))
 // or if the DB was provisioned from an older schema version.
 {
   const { db: publicDb } = await import('@billing/db')
+  // The packaged app starts this server while the database is still opening (the two start side by side to save seconds):
+  // wait for it here. A normal start finds the database ready at once, so this costs nothing.
+  for (let i = 0; ; i++) {
+    try { await publicDb.$queryRawUnsafe('SELECT 1'); break } catch (e) { if (i >= 240) throw e; await new Promise((r) => setTimeout(r, 250)) }
+  }
   await publicDb.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS refresh_tokens (
       id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),

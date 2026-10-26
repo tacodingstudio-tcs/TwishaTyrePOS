@@ -168,10 +168,12 @@ async function startPg() {
     const log = fs.openSync(path.join(dir.logs, 'postgres.log'), 'a')
     spawn(exe('postgres'), ['-D', dir.pgdata, '-p', String(PORT.pg)], { detached: true, stdio: ['ignore', log, log], windowsHide: true }).unref()
   } else spawnHidden(exe('postgres'), ['-D', dir.pgdata, '-p', String(PORT.pg)], path.join(dir.logs, 'postgres.log'))
-  if (!(await waitFor(async () => (await portOpen(PORT.pg)) && pgRunning(), 90, 500)))
+  if (!(await waitFor(async () => (await portOpen(PORT.pg)) && pgRunning(), 90, 200)))
     fail('The database did not start', `See ${path.join(dir.logs, 'postgres.log')}`)
   await waitPgReady()
 }
+
+let pgStarting = null                                                     // set by db() when it left the database starting in the background
 
 async function db() {
   step('Preparing the database')
@@ -179,7 +181,8 @@ async function db() {
   const migNames = (() => { try { return fs.readdirSync(path.join(dir.sql, 'migrations')).sort().join(',') } catch { return '' } })()
   const dbSig = `${STAMP}|${migNames}`
   if (readMarker().db === dbSig && fs.existsSync(path.join(dir.pgdata, 'PG_VERSION'))) {
-    await startPg(); ok('Database is running'); ok('Database structure already up to date')
+    pgStarting = startPg(); pgStarting.catch(() => {})                    // services() starts the app server while the database opens
+    ok('Database is starting'); ok('Database structure already up to date')
     return
   }
   if (!fs.existsSync(path.join(dir.pgdata, 'PG_VERSION'))) {
@@ -253,7 +256,7 @@ cp.spawn(a.exe,a.args,{detached:true,stdio:['ignore',out,out],windowsHide:true,c
 async function services() {
   step('Starting the database, job store and app')
   if (!fs.existsSync(path.join(dir.pgdata, 'PG_VERSION'))) fail('The database has not been prepared yet', 'Run step 2 (SETUP-DATABASE) first.')
-  await startPg(); ok('Database running')
+  const pgP = pgStarting ?? startPg(); pgStarting = null; pgP.catch(() => {})       // (the app server waits for the database by itself)
 
   const p = pids()
   if (!(await portOpen(PORT.redis))) {
@@ -293,12 +296,13 @@ async function services() {
       while (Date.now() < end) {
         if (await apiUp()) { started = true; break }
         if (exited(from)) break
-        await sleep(1000)
+        await sleep(250)
       }
       if (!started && attempt < 4) { log(`  … the app did not come up (try ${attempt} of 4), starting it again`); await sleep(3000) }
     }
     if (!started) fail('The app did not start', `See ${apiLog}`)
   }
+  await pgP; ok('Database running')
   savePids(p); ok(`App running at ${URL_APP}`)
 }
 
