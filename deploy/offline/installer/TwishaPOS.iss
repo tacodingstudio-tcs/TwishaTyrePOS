@@ -68,6 +68,19 @@ Filename: "{app}\TwishaPOS.exe"; Description: "Start Twisha POS now"; WorkingDir
 Filename: "{app}\TwishaPOS.exe"; Parameters: "--stop"; WorkingDir: "{app}"; RunOnceId: "StopTwishaPOS"; Flags: waituntilterminated
 
 [Code]
+// Ends every process whose program file is inside the install folder (postgres, redis, node, the launcher), then waits a moment.
+procedure KillProgramsInInstallFolder();
+var
+  code: Integer;
+  dir, ps: String;
+begin
+  dir := ExpandConstant('{app}');
+  if not DirExists(dir) then Exit;
+  ps := '-NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith(''' + dir + '\'', [StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"';
+  Exec('powershell.exe', ps, '', SW_HIDE, ewWaitUntilTerminated, code);
+  Sleep(1500);
+end;
+
 // An upgrade over a running copy: stop it first (this also takes a backup), so no file is in use.
 function StopRunningCopy(): Boolean;
 var
@@ -78,6 +91,10 @@ begin
   exe := ExpandConstant('{app}\TwishaPOS.exe');
   if FileExists(exe) then
     Exec(exe, '--stop', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, code);
+  // Anything of Twisha POS that is still running (the database server keeps its runtime DLLs open, and the app may have been started
+  // again at sign-in) would make Windows refuse to replace those files — "DeleteFile failed; code 5". Close every program that runs
+  // from the install folder; nothing else on the computer is touched.
+  KillProgramsInInstallFolder();
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
