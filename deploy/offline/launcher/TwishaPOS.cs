@@ -171,7 +171,10 @@ class MainContext : ApplicationContext
         tray.ContextMenuStrip = menu;
         tray.DoubleClick += delegate { OpenApp(); };
 
-        Microsoft.Win32.SystemEvents.SessionEnding += delegate { StopBlocking(); };
+        // Windows is restarting / shutting down / signing out and gives programs only a few seconds: close the database cleanly
+        // and quickly (no backup here - that would not finish in time and the database would be left "not properly shut down",
+        // which costs several seconds of crash recovery at the next start).
+        Microsoft.Win32.SystemEvents.SessionEnding += delegate { FastStopDatabase(); };
 
         form = new StartForm(icon);
         form.RetryClicked += delegate { StartAll(); };
@@ -266,6 +269,25 @@ class MainContext : ApplicationContext
     void StopBlocking()
     {
         string o; Program.Cli_Run("stop", out o, 120000);
+    }
+
+    /// <summary>pg_ctl stop -m fast: closes the database cleanly in a second or two. Used when Windows is ending the session.</summary>
+    static void FastStopDatabase()
+    {
+        try
+        {
+            string data = Environment.GetEnvironmentVariable("TWISHA_DATA");
+            if (string.IsNullOrEmpty(data)) data = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TwishaPOS");
+            string pgData = Path.Combine(data, "pg-data");
+            string pgCtl = Path.Combine(Program.Root, Path.Combine("pg", Path.Combine("bin", "pg_ctl.exe")));
+            if (!File.Exists(pgCtl) || !File.Exists(Path.Combine(pgData, "postmaster.pid"))) return;
+            ProcessStartInfo psi = new ProcessStartInfo(pgCtl, "stop -D \"" + pgData + "\" -m fast -w -t 8");
+            psi.UseShellExecute = false;
+            psi.CreateNoWindow = true;
+            Process p = Process.Start(psi);
+            p.WaitForExit(9000);
+        }
+        catch { }
     }
 
     static string LastUseful(string text)
