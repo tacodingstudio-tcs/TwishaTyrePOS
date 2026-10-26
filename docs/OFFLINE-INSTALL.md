@@ -85,7 +85,7 @@ If the window says **"Could not start"** — read the last lines, click **Try ag
 | "Could not start — port … is used by another program" | Restart the laptop and start again. If it keeps happening, tell me the number shown. |
 | Change the PIN (knows the old one) | Sign in → **My Business & Staff** → on your own row click **Change my PIN** → old PIN, new PIN twice. |
 | Forgot the PIN | Start menu → **Twisha POS** → **Forgot the PIN** → type a new 4-digit PIN. |
-| "Too many wrong PINs — locked for 15 minutes" | Start menu → **Twisha POS** → **Sign-in locked? Unlock**. |
+| "Too many wrong PINs — locked for 15 minutes" | Start menu → **Twisha POS** → **Sign-in locked - Unlock**. |
 | Laptop switched off suddenly / power cut | Just start the app again — it repairs itself (first start may take up to a minute). Nothing already saved is lost. |
 | The app window shows "can't reach this page" | The program is not running. Double-click the desktop icon. |
 | Need to go back to an earlier day | Start menu → **Restore a backup** → follow the instructions (this replaces everything with the chosen backup). |

@@ -55,7 +55,7 @@ Name: "{group}\{#AppName} Backup (choose where)"; Filename: "{app}\Backup.exe"; 
 Name: "{group}\Back up now (no questions)"; Filename: "{app}\Backup.exe"; Parameters: "--now"; WorkingDir: "{app}"
 Name: "{group}\Stop Twisha POS"; Filename: "{app}\TwishaPOS.exe"; Parameters: "--stop"; WorkingDir: "{app}"
 Name: "{group}\Show status"; Filename: "{app}\TwishaPOS.exe"; Parameters: "--status"; WorkingDir: "{app}"
-Name: "{group}\Sign-in locked? Unlock"; Filename: "{app}\UNLOCK-LOGIN.bat"; WorkingDir: "{app}"
+Name: "{group}\Sign-in locked - Unlock"; Filename: "{app}\UNLOCK-LOGIN.bat"; WorkingDir: "{app}"
 Name: "{group}\Forgot the PIN"; Filename: "{app}\FORGOT-PIN.bat"; WorkingDir: "{app}"
 Name: "{group}\Restore a backup"; Filename: "{app}\RESTORE-BACKUP.bat"; WorkingDir: "{app}"
 Name: "{group}\Open the backups folder"; Filename: "{userdocs}\TwishaPOS Backups"
