@@ -184,7 +184,8 @@ export function drawShaktiBill(doc: PDFKit.PDFDocument, b: InvoicePdfData, biz: 
   const bank = ([['Bank Name', biz.bankName], ['Bank A/c No.', biz.bankAccount], ['RTGS/IFSC Code', biz.bankIfsc]] as Array<[string, string | null | undefined]>)
     .filter(([, v]) => v && String(v).trim()) as Array<[string, string]>
   const bankH = bank.length ? 8 + bank.length * 14 + 4 : 0
-  const leftH = subRowH + bankH + 8 + (gst ? gstWordsH + 10 : 0) + billWordsH + 10 + 32
+  // the Note strip sits above the Received / Balance lines of the right-hand box, so the left side must leave room for them too
+  const leftH = subRowH + bankH + 8 + (gst ? gstWordsH + 10 : 0) + billWordsH + 10 + 32 + after.length * 15 + (after.length ? 4 : 0)
   const footBoxH = Math.max(rightH, leftH)
 
   const showDecl = !b.isDocument
@@ -232,7 +233,7 @@ export function drawShaktiBill(doc: PDFKit.PDFDocument, b: InvoicePdfData, biz: 
 
   // ── customer block: the shop ("Bill To,") on the left, bill / customer details in the grey box ──────────────────────
   const customerBlock = (top: number): number => {
-    const custX = xs[4]!                                             // the divider continues the table's HSN Code line
+    const custX = xs[gst ? 4 : 3]!                                   // the divider continues a table line (HSN Code | Tyre Brand on a cash memo)
     const rows: Array<[string, string]> = [
       ['Bill No. -', String(b.number)], ['Date:', dmy(b.date)],
       ['PO No.:', b.poNo ?? ''], ['PO Date:', b.poDate ? dmy(b.poDate) : ''],
@@ -250,8 +251,8 @@ export function drawShaktiBill(doc: PDFKit.PDFDocument, b: InvoicePdfData, biz: 
     if (biz.gstin && !gst) put(`GST No.: ${biz.gstin}`, L + 10, top + h - rh - 2, custX - L - 20, { size: 11 })
     rows.forEach(([k, v], i) => {
       const ry = top + 8 + i * rh
-      put(k, custX + 10, ry, 98, { bold: true, size: 11 })
-      if (v) put(v, custX + 112, ry, R - custX - 120, { size: 11, bold: k === 'GST.NO' })
+      put(k, custX + 10, ry, 84, { bold: true, size: 11 })
+      if (v) put(v, custX + 94, ry, R - custX - 100, { size: 11, bold: k === 'GST.NO' })
     })
     vline(custX, top, top + h, 0.8)
     hline(L, R, top + h, 0.8)
@@ -278,7 +279,8 @@ export function drawShaktiBill(doc: PDFKit.PDFDocument, b: InvoicePdfData, biz: 
   let tableTop = y
   y = tableHead(y)
   let bodyTop = y
-  const bodyLimit = footTop
+  // every page but the last uses its full height; only the last page keeps room for the totals box
+  const bodyLimit = pageBottom - 2
 
   const closeBody = (bottom: number) => { verticals(bodyTop, bottom); outerBox(tableTop, bottom) }
   const nextPage = (bottom: number) => {
@@ -292,7 +294,7 @@ export function drawShaktiBill(doc: PDFKit.PDFDocument, b: InvoicePdfData, biz: 
   const row = (cells: string[]) => {
     doc.font(face(false)).fontSize(11)
     const h = Math.max(18, doc.heightOfString(cells[DESC] ?? '', { width: colW(DESC) - 2 * PADX }) + 8)
-    if (y + h > bodyLimit) nextPage(y)
+    if (y + h > bodyLimit) nextPage(pageBottom)
     cells.forEach((v, i) => {
       if (!v) return
       if (i === DESC) para(v, colX(i) + PADX, y + 4, colW(i) - 2 * PADX, { size: 11 })
@@ -324,6 +326,8 @@ export function drawShaktiBill(doc: PDFKit.PDFDocument, b: InvoicePdfData, biz: 
   if (!two) for (const s of SLOTS) chargeRow(s, slotSum.get(s) ?? 0)
   else for (const s of SLOTS) if (slotSum.has(s)) chargeRow(s, slotSum.get(s)!)
   for (const e of extras) chargeRow(e.name, e.total)
+  // the totals did not fit under the last row: they go on a fresh page (heading row + totals), never over the rows
+  if (y > footTop) nextPage(pageBottom)
   // the table runs down to the totals, as on the printed format
   closeBody(footTop)
 
