@@ -19,14 +19,19 @@ const req = createRequire(path.join(REPO, 'apps', 'api', 'package.json'))
 const tsxDir = path.dirname(req.resolve('tsx'))
 const esbuild = createRequire(path.join(tsxDir, 'x.js'))('esbuild')
 
-// everything that is not our own code stays outside the bundle
+// Packages that stay OUTSIDE the bundle: native code (cannot be packed into a text file) or packages that read their own data files at run time.
+// Everything else is packed in, so the server opens a few dozen files at start-up instead of ~2,400 — on a laptop where every file open is
+// slow (antivirus, old disk) that is the difference between ~45 s and a few seconds.
+const KEEP = new Set(['@prisma/client', '.prisma/client', 'bcrypt', 'pdfkit', 'msgpackr-extract', 'pino-pretty', 'node-cron'])
+const pkgName = (spec) => (spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0])
 const keepOutside = {
-  name: 'keep-packages-outside',
+  name: 'keep-some-packages-outside',
   setup(build) {
     build.onResolve({ filter: /^[^./]/ }, (args) => {
-      if (args.kind === 'entry-point' || path.isAbsolute(args.path) || args.path.startsWith('@billing/')) return null
+      if (args.kind === 'entry-point' || path.isAbsolute(args.path)) return null
       if (args.path.startsWith('node:')) return { path: args.path, external: true }
-      return { path: args.path, external: true }
+      if (KEEP.has(pkgName(args.path))) return { path: args.path, external: true }
+      return null                                                      // our own @billing/* code and every other package: packed in
     })
   },
 }
@@ -39,9 +44,9 @@ const result = await esbuild.build({
   format: 'esm',
   target: 'node22',
   sourcemap: false,
-  logLevel: 'warning',
+  logLevel: 'error',
   plugins: [keepOutside],
-  banner: { js: "import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);" },
+  banner: { js: "import { createRequire as __cr } from 'node:module'; import { fileURLToPath as __fu } from 'node:url'; import { dirname as __dn } from 'node:path'; const require = __cr(import.meta.url); const __filename = __fu(import.meta.url); const __dirname = __dn(__filename);" },
 })
 if (result.errors.length) process.exit(1)
 console.log(`bundled → ${outFile} (${(fs.statSync(outFile).size / 1024).toFixed(0)} KB)`)

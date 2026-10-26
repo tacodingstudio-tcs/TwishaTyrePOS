@@ -35,11 +35,15 @@ import { discountRulesRoutes }  from './routes/discount-rules.js'
 import { tenantMiddleware } from './middleware/tenant.js'
 import { errorHandler } from './middleware/error.js'
 
+// seconds since the process started, printed to api.log: shows which part of a slow start is slow (modules / routes / database / listening)
+const boot = (m: string) => console.log(`[boot] ${process.uptime().toFixed(1)}s ${m}`)
+boot('code loaded')
+
 const app = Fastify({
   logger: {
     level: process.env['NODE_ENV'] === 'production' ? 'warn' : 'info',
     transport:
-      process.env['NODE_ENV'] !== 'production'
+      process.env['NODE_ENV'] !== 'production' && process.env['LOG_PRETTY'] !== 'false'    // LOG_PRETTY=false: plain logs (the packed server cannot start a log-formatting thread)
         ? { target: 'pino-pretty', options: { colorize: true } }
         : undefined,
   },
@@ -234,6 +238,8 @@ await app.register(async (protectedApp) => {
 // ── Graceful shutdown ─────────────────────────────────────────────────────────
 // Close all tenant DB connections cleanly so PostgreSQL doesn't log "unexpected
 // EOF" for every open connection when the process exits.
+boot('routes ready')
+
 async function shutdown(signal: string) {
   app.log.info(`Received ${signal} — shutting down gracefully`)
   try {
@@ -297,6 +303,7 @@ process.on('SIGINT',  () => shutdown('SIGINT'))
 
 // ── Offline / single-box install: the API also serves the built web app ─────────────────────────────────────────
 // SERVE_WEB_DIR=<apps/web/dist>. Same origin as /api, so nothing else (nginx, Vercel) is needed.
+boot('database checked')
 if (process.env['SERVE_WEB_DIR']) {
   const { default: fastifyStatic } = await import('@fastify/static')
   await app.register(fastifyStatic, { root: process.env['SERVE_WEB_DIR'], wildcard: false, index: ['index.html'] })
@@ -311,6 +318,7 @@ const port = parseInt(process.env['PORT'] ?? '3000', 10)
 
 try {
   await app.listen({ port, host: process.env['HOST'] ?? '0.0.0.0' })
+  boot('listening')
   app.log.info(`Server running on http://localhost:${port}`)
   // Small hosting plans have no separate worker service — run the BullMQ workers (PDF, WhatsApp, reminders) in this process.
   if (process.env['RUN_WORKERS_INLINE'] === 'true') await import('./workers/index.js')
