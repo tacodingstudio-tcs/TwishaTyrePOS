@@ -6,7 +6,7 @@ import { authApi } from '@/lib/api'
 import {
   LayoutDashboard, FileText, Warehouse, Users, LogOut, Plus, BarChart2, Building2, ShoppingCart,
   ClipboardCheck, ArrowLeftRight, Package, ChevronDown, TrendingDown, UserCheck, GitBranch, Clock,
-  Wallet, TrendingUp, MessageCircle, ReceiptText, LineChart, Container,
+  Wallet, TrendingUp, MessageCircle, LineChart, Container,
   CircleDot, Car, ShieldCheck, BellRing, Wrench, Menu,
 } from 'lucide-react'
 import { usePendingApprovals, useBranches } from '@/hooks/useApi'
@@ -20,7 +20,6 @@ type NavItem = { to: string; label: string; icon: React.ElementType; end?: boole
 // ── Tyre-shop navigation (this product is single-domain) ─────────────────────
 const OPERATIONS: NavItem[] = [
   { to: '/',                   label: 'Home',            icon: LayoutDashboard, end: true },
-  { to: '/tyre/sale',          label: 'New Sale',        icon: ReceiptText },
   { to: '/invoices',           label: 'All Bills',       icon: FileText },
   { to: '/pipeline',           label: 'Quotations',      icon: GitBranch },
   { to: '/parties',            label: 'Customers',       icon: Users },
