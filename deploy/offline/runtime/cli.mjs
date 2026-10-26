@@ -70,8 +70,10 @@ const URL_APP = `http://127.0.0.1:${PORT.api}`
 
 // ── small helpers ──────────────────────────────────────────────────────────────────────────────────────────────────
 const log = (m) => { console.log(m); try { fs.appendFileSync(path.join(dir.logs, 'setup.log'), `${new Date().toISOString()} ${m}\n`) } catch { /* log only */ } }
-const step = (m) => log(`STEP ${m}`)
-const ok = (m) => log(`  ✔ ${m}`)
+const T0 = Date.now()
+const since = () => `${((Date.now() - T0) / 1000).toFixed(1)}s`          // seconds since this start began — shows which phase is slow in logs\setup.log
+const step = (m) => log(`STEP ${m}  [${since()}]`)
+const ok = (m) => log(`  ✔ ${m}  [${since()}]`)
 const fail = (m, hint) => { log(`  ✘ ${m}`); if (hint) log(`    → ${hint}`); process.exit(1) }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const exe = (name) => path.join(dir.pg, `${name}.exe`)
