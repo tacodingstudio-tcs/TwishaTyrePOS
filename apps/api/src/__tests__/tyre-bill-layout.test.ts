@@ -23,9 +23,11 @@ describe("Bill layout = the shop's Excel bill", () => {
   const sale = (body: Record<string, unknown>) => owner.api.post('/api/tyre/sales', body, { headers: { 'Idempotency-Key': crypto.randomUUID() } })
   const item = (p: any, extra: Record<string, unknown> = {}) => ({ productId: p.id, qty: 1, ...extra })
   /** every part appears, in this order */
+  // the bill prints Indian digit grouping (1,23,456.00) and an upper-case title: compare without those
   const inOrder = (text: string, parts: string[]) => {
+    const flat = text.replace(/(\d),(?=\d)/g, '$1').toLowerCase()
     let at = 0
-    for (const p of parts) { const k = text.indexOf(p, at); expect([p, k >= 0]).toEqual([p, true]); at = k + p.length }
+    for (const p of parts) { const k = flat.indexOf(p.toLowerCase(), at); expect([p, k >= 0]).toEqual([p, true]); at = k + p.length }
   }
 
   beforeAll(async () => {
@@ -34,7 +36,7 @@ describe("Bill layout = the shop's Excel bill", () => {
     await owner.api.patch(`/api/branches/${b.id}`, {
       gstin: '24AFTFS9416C1ZP', address: { line1: 'Near Hero Showroom, Veraval-Kodinar Bypass' },
       domainConfig: {
-        business_phone: '9227575753', business_email: 'shaktityre.2026@gmail.com', prices_include_gst: true, default_service_gst: 0,
+        business_phone: '9227575753', business_email: 'shaktityre.2026@gmail.com', bank_name: 'AXIS BANK', bank_account_no: '541010200000471', bank_ifsc: 'UTIB0001591', prices_include_gst: true, default_service_gst: 0,
         bill_series: { car: { prefix: '', start: 93 }, two_wheel: { prefix: '2W-', start: 1 } },
       },
     })
@@ -59,15 +61,19 @@ describe("Bill layout = the shop's Excel bill", () => {
     expect(r.status).toBe(201)
     const t = await pdfText(r.data.invoice.id)
     inOrder(t, ['SHAKTI LAYOUT TYRES', 'Near Hero Showroom, Veraval-Kodinar Bypass', 'Co.No. 9227575753', 'Email ID: shaktityre.2026@gmail.com',
-      'Debit Memo', 'Tax Invoice', 'Original', 'Bill No. -', '93', 'PO Date:', 'Date:',
-      'Bill To,', 'GST No.: 24AFTFS9416C1ZP', 'GST.NO', G, 'Customer Name:', 'BHAVINBHAI PARMAR', 'Mobile Number', '9811100777', 'Address', 'NAVAGAM', 'Vehicle Number:', 'GJ32AA5467',
+      'Debit Memo', 'Tax Invoice', 'Original',
+      'Bill To,', 'Bill No. -', '93', 'Date:', 'PO No.:', 'PO Date:', 'GST.NO', G, 'Customer Name:', 'BHAVINBHAI PARMAR', 'Mobile Number', '9811100777', 'Address', 'NAVAGAM', 'Vehicle Number:', 'GJ32AA5467',
       'Sr.No.', 'Vehicle Company', 'Product Description', 'Tyre Brand', 'HSN Code', 'Unit Rate', 'Qty', 'Taxable Value', 'Total GST', 'Grand Total',
       'NEXON', '215/60/16', 'YOKOHAMA', '401110', '8813.56', '4', '35254.24', '6345.76', '41600',
       'Alignment', '600', 'Balancing', '0', 'Weight Charge', '0', 'Labour Charge', '400',
       'Sub total', '36254.24', 'CGST', '3172.88', 'SGST', '3172.88', 'Grand Total', '42000.00'])
+    inOrder(t, ['GSTIN No.: 24AFTFS9416C1ZP', 'Bank Name', 'AXIS BANK', 'Bank A/c No.', '541010200000471', 'RTGS/IFSC Code', 'UTIB0001591', 'Total GST'])   // the bank details saved in settings
+    expect(t).toContain('GSTIN No.: 24AFTFS9416C1ZP')                      // the shop's GSTIN sits in the footer band only
+    expect(t).not.toContain('GST No.:')
     expect(await pagesOf(r.data.invoice.id)).toBe(1)                        // one sheet, no blank second page
-    expect(t).toMatch(/Powered by Twisha Consultancy Services/)          // the software credit is always there
-    expect(t).not.toMatch(/AMOUNT IN WORDS|TERMS/)                         // not part of their bill
+    expect(t).not.toMatch(/Powered by/)                                  // no software credit on the bill
+    expect(t).toMatch(/TYRE WARRANTY & CLAIM TERMS/)                      // the shop's warranty terms sit under the totals
+    expect(t).not.toMatch(/GTA Declaration/)
   })
 
   test('two-wheeler bill: Total / GST columns and no fixed charge rows', async () => {
@@ -131,7 +137,7 @@ describe('Reprint copies', () => {
     expect(await text()).toMatch(/Original/)
     expect(await text('?copy=original')).toMatch(/Original/)
     const dup = await text('?copy=duplicate')
-    expect(dup).toMatch(/Duplicate/); expect(dup).not.toMatch(/Original/)
+    expect(dup).toMatch(/Duplicate/); expect(dup).not.toMatch(/Original(?! purchase bill)/)
     expect(await text('?copy=triplicate')).toMatch(/Triplicate/)
     expect((await owner.api.get(`/api/tyre/invoices/${id}/pdf?copy=fake`, { responseType: 'arraybuffer' })).status).toBe(422)
   })

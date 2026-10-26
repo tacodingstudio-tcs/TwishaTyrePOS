@@ -62,7 +62,7 @@ async function main() {
   // ── 1 · the screens ───────────────────────────────────────────────────────────────────────────────────────────
   if (!flag('skip-web')) {
     say('Building the screens (web app)')
-    sh('pnpm', ['--filter', '@billing/web', 'build'], { cwd: REPO })
+    sh('pnpm', ['--filter', '@billing/web', 'build'], { cwd: REPO, env: { ...process.env, VITE_SESSION_ONLY: 'true' } })       // the desktop app asks for the PIN again after its window is closed
   }
   rm(path.join(OUT, 'web')); cp(path.join(REPO, 'apps', 'web', 'dist'), path.join(OUT, 'web'))
 
@@ -95,6 +95,8 @@ async function main() {
   }
   rm(path.join(APP, 'src')); cp(path.join(REPO, 'apps', 'api', 'src'), path.join(APP, 'src'))
   rm(path.join(APP, 'src', '__tests__'))
+  // the app server precompiled into one file (the launcher starts that; the sources stay as a fallback)
+  sh(process.execPath, [path.join(HERE, 'bundle-api.mjs'), path.join(APP, 'src'), path.join(APP, 'src', 'lib', '_server.bundle.mjs')])
   rm(path.join(APP, 'assets')); cp(path.join(REPO, 'apps', 'api', 'assets'), path.join(APP, 'assets'))
 
   // ── 3 · runtimes ──────────────────────────────────────────────────────────────────────────────────────────────

@@ -8,6 +8,8 @@ import { redis } from './lib/redis.js'
 
 // Route handlers
 import { authRoutes } from './routes/auth.js'
+import { licenseRoutes } from './routes/license.js'
+import { licenseStatus } from './lib/license.js'
 import { invoiceRoutes } from './routes/invoices.js'
 import { productRoutes } from './routes/products.js'
 import { partyRoutes } from './routes/parties.js'
@@ -148,7 +150,21 @@ if (process.env['NODE_ENV'] !== 'production') {
   })
 }
 
+// ── License gate ──────────────────────────────────────────────────────────────
+// In the packaged app every /api call except the license screen's own is refused (402) until this PC has a valid license.
+app.addHook('onRequest', async (req, reply) => {
+  const url = req.url
+  if (!url.startsWith('/api/') || url.startsWith('/api/license/')) return
+  const setup = process.env['LICENSE_SETUP_KEY']
+  if (setup && req.headers['x-setup-key'] === setup) return          // the installer's own first-run setup (creates the shop)
+  const s = licenseStatus()
+  if (s.required && !s.valid) {
+    return reply.status(402).send({ error: 'License required', code: `LICENSE_${(s.reason ?? 'missing').toUpperCase()}`, machineId: s.machineId })
+  }
+})
+
 // ── Public routes (no auth required) ─────────────────────────────────────────
+await app.register(licenseRoutes, { prefix: '/api/license' })
 await app.register(authRoutes, { prefix: '/api/auth' })
 await app.register(tenantRoutes, { prefix: '/api/tenants' })
 // Product images — browser <img src> can't send Authorization headers,

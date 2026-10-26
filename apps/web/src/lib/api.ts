@@ -62,6 +62,11 @@ async function performRefresh(): Promise<string | null> {
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError<{ error?: string; message?: string; issues?: Record<string, string[]> }>) => {
+    // 402 = this PC has no valid license (packaged app only): reload, and the license screen takes over
+    if (error.response?.status === 402 && String((error.response.data as any)?.code ?? '').startsWith('LICENSE')) {
+      if (!sessionStorage.getItem('license-reload')) { sessionStorage.setItem('license-reload', '1'); window.location.reload() }
+      return Promise.reject(error)
+    }
     const originalRequest = error.config as (typeof error.config & { _retry?: boolean }) | undefined
 
     // A wrong PIN is a 401 from the sign-in call itself — that is an answer to show, not an expired session.
@@ -225,7 +230,7 @@ export const productApi = {
     api.get(`/products/barcode/${code}`).then((r) => r.data),
 
   imageUrl: (id: string) => {
-    const token = (JSON.parse(localStorage.getItem('billing-auth') ?? '{}')?.state?.accessToken ?? '') as string
+    const token = (JSON.parse(sessionStorage.getItem('billing-auth') ?? localStorage.getItem('billing-auth') ?? '{}')?.state?.accessToken ?? '') as string
     return `/api/products/${id}/image${token ? `?token=${token}` : ''}`
   },
 

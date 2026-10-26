@@ -32,6 +32,9 @@ export async function loadBusiness(ctx: Ctx): Promise<{ header: BusinessHeader; 
       gstin: b?.gstin ?? null,
       phone: config['business_phone'] ?? owner?.phone ?? null,
       email: config['business_email'] ?? null,
+      bankName: config['bank_name'] || null,
+      bankAccount: config['bank_account_no'] || null,
+      bankIfsc: config['bank_ifsc'] || null,
       // credit line for the software provider: always printed, not a per-business setting
       poweredBy: `Powered by ${process.env['POWERED_BY_NAME'] || 'Twisha Consultancy Services'} · ${process.env['POWERED_BY_URL'] || 'https://www.twishaconsultancyservices.com/'}`,
     },

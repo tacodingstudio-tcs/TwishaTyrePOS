@@ -22,9 +22,15 @@ static class Program
     public static string Node;
     public static string Cli;
 
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    static extern uint SetErrorMode(uint mode);
+
     [STAThread]
     static int Main(string[] args)
     {
+        // Programs started from here (inherited): no "Application Error 0xc0000142" box that waits for a click while the
+        // start-up waits for the program. They just end with an error code, and cli.mjs starts them again.
+        SetErrorMode(0x0001 | 0x0002 | 0x8000);   // SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX
         Root = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\');
         Node = Path.Combine(Root, "node\\node.exe");
         Cli = Path.Combine(Root, "scripts\\cli.mjs");
@@ -46,9 +52,10 @@ static class Program
         if (args.Length >= 4 && args[0] == "--spawn")
         {
             StringBuilder cmd = new StringBuilder();
-            cmd.Append("/d /c \"\"").Append(args[3]).Append("\"");
+            cmd.Append("/d /v:on /c \"\"").Append(args[3]).Append("\"");
             for (int i = 4; i < args.Length; i++) cmd.Append(' ').Append(QuoteArg(args[i]));
-            cmd.Append(" >> \"").Append(args[1]).Append("\" 2>&1\"");
+            // when the program ends, say so in its log: cli.mjs uses it to tell "died at start-up" from "slow to start"
+            cmd.Append(" >> \"").Append(args[1]).Append("\" 2>&1 & echo [twisha-exit !errorlevel!] >> \"").Append(args[1]).Append("\"\"");
             ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", cmd.ToString());
             psi.WorkingDirectory = args[2];
             psi.UseShellExecute = false;

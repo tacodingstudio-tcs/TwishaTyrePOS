@@ -103,7 +103,15 @@ const portOpen = (port) => new Promise((res) => {
 })
 const portFree = async (port) => !(await portOpen(port))
 async function waitFor(fn, seconds, every = 700) { const end = Date.now() + seconds * 1000; while (Date.now() < end) { if (await fn()) return true; await sleep(every) } return false }
-const pgRunning = () => run(exe('pg_ctl'), ['status', '-D', dir.pgdata]).status === 0
+/** Is the database server up? Its own pid file (the port is checked by the callers) — no program is launched, which matters on a laptop
+ *  whose antivirus scans every program the first time it runs after a restart. */
+const pgRunning = () => fs.existsSync(path.join(dir.pgdata, 'postmaster.pid'))
+
+// What is already known to work on this laptop, so a normal start does not repeat the one-time checks (each one launches a program).
+const STAMP = (() => { try { const st = fs.statSync(process.argv[1] ?? ''); return `${st.size}-${Math.round(st.mtimeMs)}` } catch { return 'x' } })()
+const markerFile = path.join(DATA, 'startup-ok.json')
+const readMarker = () => { try { return JSON.parse(fs.readFileSync(markerFile, 'utf8')) } catch { return {} } }
+const writeMarker = (patch) => { try { fs.writeFileSync(markerFile, JSON.stringify({ ...readMarker(), ...patch })) } catch { /* not fatal: the full checks simply run again */ } }
 const apiUp = async () => { try { return (await fetch(`${URL_APP}/health`, { signal: AbortSignal.timeout(2500) })).ok } catch { return false } }
 
 // ── 1 · check ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -113,7 +121,8 @@ async function check() {
   const need = (cond, good, problem, hint) => { if (cond) ok(good); else { log(`  ✘ ${problem}`); if (hint) log(`    → ${hint}`); bad++ } }
   need(process.platform === 'win32' && os.arch() === 'x64', `Windows 64-bit (${os.release()})`, 'This needs 64-bit Windows 10 or 11', 'Use a Windows 10/11 laptop.')
   need(Number(os.release().split('.')[0]) >= 10, 'Windows 10 or newer', 'Windows is too old', 'Windows 10 (64-bit) or 11 is required.')
-  const elevated = run('net', ['session']).status === 0
+  const known = readMarker().check === STAMP                      // this laptop already passed the full check with this version
+  const elevated = known ? false : run('net', ['session']).status === 0
   need(!elevated, 'Not running as Administrator', 'Running as Administrator — the database refuses to start that way', 'Close this window and open it normally (double-click, not "Run as administrator").')
   let freeGB = 0
   try { freeGB = Number(fs.statfsSync(DATA).bavail) * Number(fs.statfsSync(DATA).bsize) / 2 ** 30 } catch { freeGB = 99 }
@@ -127,13 +136,14 @@ async function check() {
     need(fs.existsSync(p), `${what} files present`, `${what} files are missing (${p})`, 'Re-install Twisha POS.')
   }
   // can the programs actually start on this laptop? (a missing system component makes Windows refuse before they print anything)
-  for (const [what, p] of [['database (initdb)', exe('initdb')], ['database server', exe('postgres')], ['job store', path.join(dir.redis, 'redis-server.exe')], ['app runtime (Node)', process.execPath]]) {
+  for (const [what, p] of known ? [] : [['database (initdb)', exe('initdb')], ['database server', exe('postgres')], ['job store', path.join(dir.redis, 'redis-server.exe')], ['app runtime (Node)', process.execPath]]) {
     if (!fs.existsSync(p)) continue
     const r = spawnSync(p, ['--version'], { encoding: 'utf8', windowsHide: true, timeout: 90000 })
     need(r.status === 0, `${what} starts`, `${what} will not start (${startFailure(r)})`, startHint(r))
   }
   try { fs.accessSync(DATA, fs.constants.W_OK); ok(`Can write to ${DATA}`) } catch { bad++; log(`  ✘ Cannot write to ${DATA}`) }
   if (bad) fail(`${bad} problem${bad === 1 ? '' : 's'} found — fix them and run this step again`)
+  if (!known) writeMarker({ check: STAMP })
   ok('This laptop is ready')
 }
 
@@ -164,6 +174,12 @@ async function startPg() {
 async function db() {
   step('Preparing the database')
   const s = secrets()
+  const migNames = (() => { try { return fs.readdirSync(path.join(dir.sql, 'migrations')).sort().join(',') } catch { return '' } })()
+  const dbSig = `${STAMP}|${migNames}`
+  if (readMarker().db === dbSig && fs.existsSync(path.join(dir.pgdata, 'PG_VERSION'))) {
+    await startPg(); ok('Database is running'); ok('Database structure already up to date')
+    return
+  }
   if (!fs.existsSync(path.join(dir.pgdata, 'PG_VERSION'))) {
     const pw = path.join(DATA, 'pg.pw'); fs.writeFileSync(pw, s.pgPassword)
     const r = run(exe('initdb'), ['-D', dir.pgdata, '-U', 'postgres', '-A', 'scram-sha-256', `--pwfile=${pw}`, '-E', 'UTF8', '--locale-provider=icu', '--icu-locale=en-IN', '--locale=C'])
@@ -207,6 +223,7 @@ log_timezone = 'Asia/Kolkata'
     ok(`Applied ${name}`); n++
   }
   if (!n) ok('Database structure already up to date')
+  writeMarker({ db: dbSig })
 }
 
 // ── 3 · services ──────────────────────────────────────────────────────────────────────────────────────────────────
@@ -253,24 +270,48 @@ async function services() {
       DATABASE_URL: `postgresql://postgres:${s.pgPassword}@127.0.0.1:${PORT.pg}/${DB}`,
       REDIS_URL: `redis://127.0.0.1:${PORT.redis}`, JWT_SECRET: s.jwtSecret, JWT_EXPIRES_IN: '12h',
       SERVE_WEB_DIR: dir.web, RUN_WORKERS_INLINE: 'true', SINGLE_TENANT: 'true', SINGLE_USER: 'true',
+      LICENSE_REQUIRED: 'true', LICENSE_FILE: path.join(DATA, 'license.lic'), LICENSE_SETUP_KEY: setupKey(),
       STORAGE_TYPE: 'local', STORAGE_LOCAL_PATH: path.join(DATA, 'files'), TZ: 'Asia/Kolkata', PUPPETEER_SKIP_DOWNLOAD: 'true',
     }
     const tsx = path.join(dir.app, 'node_modules', 'tsx', 'dist', 'cli.mjs')
-    p.api = detached(process.execPath, [tsx, 'src/server.ts'], 'api.log', { cwd: dir.app, env })
-    if (!(await waitFor(apiUp, 120, 1000))) fail('The app did not start', `See ${path.join(dir.logs, 'api.log')}`)
+    const bundle = path.join(dir.app, 'src', 'lib', '_server.bundle.mjs')
+    env.NODE_COMPILE_CACHE = path.join(DATA, 'node-cache')                      // Node 22 keeps the compiled code of every module it loads
+    const entry = fs.existsSync(bundle) ? [bundle] : [tsx, 'src/server.ts']     // precompiled: no TypeScript transpiling on every start; the sources are the fallback
+    // Right after sign-in (or a restart) Windows is busy scanning and loading, and now and then it refuses to start a program
+    // ("node.exe - Application Error 0xc0000142"). Starting it again a few seconds later works, so do that by ourselves: the
+    // launcher writes "[twisha-exit <code>]" to the log when the program ends, which tells us it died instead of just being slow.
+    const apiLog = path.join(dir.logs, 'api.log')
+    const logSize = () => { try { return fs.statSync(apiLog).size } catch { return 0 } }
+    const exited = (from) => { try { const b = fs.readFileSync(apiLog); return /\[twisha-exit/.test(b.subarray(from).toString('utf8')) } catch { return false } }
+    let started = false
+    for (let attempt = 1; attempt <= 4 && !started; attempt++) {
+      const from = logSize()
+      p.api = detached(process.execPath, entry, 'api.log', { cwd: dir.app, env })
+      const end = Date.now() + (attempt === 1 ? 90 : 60) * 1000
+      while (Date.now() < end) {
+        if (await apiUp()) { started = true; break }
+        if (exited(from)) break
+        await sleep(1000)
+      }
+      if (!started && attempt < 4) { log(`  … the app did not come up (try ${attempt} of 4), starting it again`); await sleep(3000) }
+    }
+    if (!started) fail('The app did not start', `See ${apiLog}`)
   }
   savePids(p); ok(`App running at ${URL_APP}`)
 }
 
 // ── 4 · shop + the one login ─────────────────────────────────────────────────────────────────────────────────────
+/** Lets this script (and only it) create the shop before a license is pasted: the key is derived from the installation's own secret. */
+const setupKey = () => crypto.createHash('sha256').update(`${secrets().jwtSecret}:setup`).digest('hex').slice(0, 32)
+
 async function shop() {
   step('Creating the shop and its login')
   if (!(await apiUp())) fail('The app is not running', 'Run step 3 (START-SERVICES) first.')
   const post = async (url, body, token) => {
-    const r = await fetch(`${URL_APP}${url}`, { method: 'POST', headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) })
+    const r = await fetch(`${URL_APP}${url}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-setup-key': setupKey(), ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) })
     return { status: r.status, data: await r.json().catch(() => ({})) }
   }
-  const check = await (await fetch(`${URL_APP}/api/tenants/check-phone/${cfg.ownerPhone}`)).json().catch(() => null)
+  const check = await (await fetch(`${URL_APP}/api/tenants/check-phone/${cfg.ownerPhone}`, { headers: { 'x-setup-key': setupKey() } })).json().catch(() => null)
   if (check && check.available === false) { ok(`The shop already exists — login number ${cfg.ownerPhone}`); return }
   if (!cfg.pin) fail('No PIN in config\\shop.json', 'The PIN is only needed the first time. Re-install, or add "pin": "1234" to config\\shop.json.')
 
@@ -285,7 +326,7 @@ async function shop() {
   if (login.status !== 200) fail('Could not sign in to finish the setup', JSON.stringify(login.data).slice(0, 300))
   const token = login.data.accessToken, branchId = login.data.branch.id
   const patch = await fetch(`${URL_APP}/api/branches/${branchId}`, {
-    method: 'PATCH', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+    method: 'PATCH', headers: { 'content-type': 'application/json', 'x-setup-key': setupKey(), authorization: `Bearer ${token}` },
     body: JSON.stringify({
       name: cfg.shopName, gstin: cfg.gstin, address: { line1: cfg.addressLine1, city: cfg.city },
       domainConfig: {

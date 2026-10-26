@@ -43,6 +43,10 @@ export interface BusinessHeader {
   email?: string | null
   /** e.g. "Powered by Twisha Consultancy Services · https://…" — printed small at the foot of a bill */
   poweredBy?: string | null
+  /** printed in the bill's footer when filled in (My Business → Edit business) */
+  bankName?: string | null
+  bankAccount?: string | null
+  bankIfsc?: string | null
 }
 
 const INK = '#111827'

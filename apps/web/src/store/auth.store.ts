@@ -6,7 +6,10 @@
 // without ever forcing a re-login mid-shift.
 
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage } from 'zustand/middleware'
+
+/** The packaged (desktop) app signs out when its window is closed: the session lives in sessionStorage, which the browser clears with the window. */
+export const SESSION_ONLY = import.meta.env['VITE_SESSION_ONLY'] === 'true'
 
 export interface AuthUser {
   id:    string
@@ -96,6 +99,7 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'billing-auth',
       version: 0,
+      storage: createJSONStorage(() => (SESSION_ONLY ? sessionStorage : localStorage)),
       partialize: (state) => ({
         accessToken: state.accessToken,
         refreshToken: state.refreshToken,

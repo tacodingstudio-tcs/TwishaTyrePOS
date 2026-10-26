@@ -7,7 +7,7 @@ const out = process.argv[2] ?? 'e2e-out/bills'
 mkdirSync(out, { recursive: true })
 const biz: BusinessHeader = {
   name: 'Shakti Enterprise', address: 'Near Hero Showroom, Veraval-Kodinar Bypass', phone: '9227575753', email: 'shaktityre.2026@gmail.com',
-  gstin: '24AFTFS9416C1ZP', poweredBy: 'Powered by Twisha Consultancy Services · https://www.twishaconsultancyservices.com/',
+  gstin: '24AFTFS9416C1ZP', bankName: 'AXIS BANK', bankAccount: '541010200000471', bankIfsc: 'UTIB0001591', poweredBy: 'Powered by Twisha Consultancy Services · https://www.twishaconsultancyservices.com/',
 } as BusinessHeader
 
 const base: InvoicePdfData = {

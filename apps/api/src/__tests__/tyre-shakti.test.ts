@@ -409,8 +409,8 @@ describe('Services follow the "GST on services" setting', () => {
   })
 })
 
-describe('Powered-by credit', () => {
-  test('bill PDFs always carry the provider credit and link, even if a business tries to switch it off, and never spill onto a new page', async () => {
+describe('Powered-by setting', () => {
+  test('the bill carries no provider credit (the show_powered_by setting changes nothing) and never spills onto a new page', async () => {
     const owner = await newShopTenant('Shakti Credit Tyres')
     const p = (await owner.api.post('/api/products', { itemType: 'product', gstRate: 18, unit: 'pcs', trackStock: true, name: 'Yokohama 175/70 R14',
       sku: 'YOK-1770', salePrice: 5000, openingStock: 9, domainAttrs: { item_kind: 'tyre', brand: 'Yokohama', size: '175/70 R14', vehicle_type: 'car' } })).data
