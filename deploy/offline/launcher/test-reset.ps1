@@ -1,6 +1,6 @@
 # ERASE-TEST-DATA: make test records, erase them, and check what stayed and what went - in both modes.
 #   powershell -ExecutionPolicy Bypass -File test-reset.ps1 -Root <bundle or installed folder> -Data <scratch data folder>
-param([string]$Root = 'E:\HisabKitab\tyre-build_offline-out\TwishaPOS', [string]$Data = 'E:\HisabKitab\_rs\data', [string]$Backups = 'E:\HisabKitab\_rs\backups')
+param([string]$Root = 'E:\HisabKitab\tyrePOS-build-tools_offline-out\TwishaPOS', [string]$Data = 'E:\HisabKitab\_rs\data', [string]$Backups = 'E:\HisabKitab\_rs\backups')
 $env:TWISHA_DATA = $Data; $env:TWISHA_BACKUPS = $Backups; $env:TWISHA_NO_BROWSER = '1'; $env:TWISHA_NO_DETACH = '1'
 Add-Type -AssemblyName System.Net.Http
 $hc = New-Object System.Net.Http.HttpClient; $hc.Timeout = [TimeSpan]::FromSeconds(30)

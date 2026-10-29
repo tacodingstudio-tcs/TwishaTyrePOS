@@ -7,7 +7,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-const ROOT = path.resolve(process.argv[2] ?? path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\//, '')), '..', '..', '..', 'tyre-build', '_offline-out', 'TwishaPOS'))
+const ROOT = path.resolve(process.argv[2] ?? path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\//, '')), '..', '..', '..', 'tyrePOS-build-tools', '_offline-out', 'TwishaPOS'))
 
 // DLLs that every Windows 10 / 11 installation has (matched by lower-case name or prefix)
 const OS = [/^api-ms-win-/, /^ext-ms-win-/, /^(kernel32|kernelbase|user32|gdi32|advapi32|ntdll|ws2_32|wsock32|mswsock|msvcrt|ucrtbase|shell32|shlwapi|ole32|oleaut32|rpcrt4|bcrypt|bcryptprimitives|crypt32|secur32|sspicli|version|userenv|iphlpapi|normaliz|netapi32|setupapi|psapi|dbghelp|imm32|comctl32|comdlg32|winmm|dnsapi|wldap32|nsi|cfgmgr32|powrprof|ncrypt|wintrust|imagehlp|d3d11|dxgi|dwmapi|uxtheme|opengl32|glu32|shcore|combase|win32u|sechost|cryptbase|cryptsp|rsaenh|gdiplus|mpr|ntmarta|wtsapi32|authz|dpapi|profapi|netutils|samcli|samlib|dhcpcsvc|dnsapi|winhttp|wininet|urlmon|msasn1|mfplat|ws2help|rasadhlp|fwpuclnt|sxs|ntshrui|cscapi|slc|logoncli|wevtapi|pdh|tdh|wmi|wbemprox|wbemsvc|fastprox|wbemcomn|cabinet|msi|cldapi|srvcli|mscms|usp10|lpk|msctf|windows\.storage|propsys|dwrite|d2d1|d3d9|ntdsapi|virtdisk|bcrypt|credui|kernel\.appcore|vcruntime140_threads|winspool|oleacc|msimg32)\.(dll|drv)$/]

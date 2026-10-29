@@ -24,7 +24,7 @@ Two implementations that must always agree:
 * `apps/api/src/lib/machine-id.mjs` (used by the app; also `node apps/api/src/lib/machine-id.mjs` prints it)
 * `tools/license/machine-id.ps1` (run on the customer's laptop *before* anything is installed)
 
-The delivery folder `E:\softwares\_deliver\` holds `Get-Machine-ID.bat` + `Get-Machine-ID.ps1` for the customer: double-click the .bat,
+The delivery folder `E:\softwares\tyrePOS-build-tools\_deliver\` holds `Get-Machine-ID.bat` + `Get-Machine-ID.ps1` for the customer: double-click the .bat,
 a green `Machine ID: …` line appears and is copied to the clipboard.
 Windows re-install changes MachineGuid -> a new license is needed. Replacing the laptop -> new license.
 
@@ -41,8 +41,8 @@ The customer pastes the whole line into the app's activate screen (or you send t
 
 | Shop | Product | Machine ID | Issued | Expires | File |
 |---|---|---|---|---|---|
-| Shakti Enterprise (Yogesh Mori, Veraval) | `tyre` | `D8298-80DED-3A615-5A797` | 2026-10-26 | 2027-11-01 | `E:\softwares\_deliver\Shakti-Enterprise.lic` |
-| "Twisha POS customer" (the owner's own test laptop, not a client) | `tyre` | `041A1-3E2F0-A3664-6407E` | 2026-10-26 | 2099-12-31 (lifetime) | `E:\softwares\_deliver\041A1-license.lic` |
+| Shakti Enterprise (Yogesh Mori, Veraval) | `tyre` | `D8298-80DED-3A615-5A797` | 2026-10-26 | 2027-11-01 | `E:\softwares\tyrePOS-build-tools\_deliver\Shakti-Enterprise.lic` |
+| "Twisha POS customer" (the owner's own test laptop, not a client) | `tyre` | `041A1-3E2F0-A3664-6407E` | 2026-10-26 | 2099-12-31 (lifetime) | `E:\softwares\tyrePOS-build-tools\_deliver\041A1-license.lic` |
 
 Add a row for every license made. A renewal = a new license for the same Machine ID with a later `--expires`; pasting it replaces the old one.
 
@@ -104,3 +104,11 @@ set `LICENSE_PRODUCT = 'buildmaterials'`, and issue licenses with `--product bui
 * **Open decision:** an installer step that adds Windows Defender exclusions for the app and data folders (`SPEED-UP-START.ps1`) was written
   but the tooling blocked saving it; the owner chose to first measure on the customer's laptop by adding the two exclusions by hand
   (Windows Security > Exclusions > `%LOCALAPPDATA%\Programs\Twisha POS` and `%LOCALAPPDATA%\TwishaPOS`). Result not yet known.
+
+## Where the build and delivery files live (moved 2026-10-29)
+
+Everything the tyre build and the delivery needs is in `E:\softwares\tyrePOS-build-tools\` (outside the repo, owned by this product only):
+`_tools` (Inno Setup), `_offline-cache` (Node / PostgreSQL / Redis downloads), `.pnpm-store` (package store for this repo's `node_modules`:
+`pnpm install --store-dir E:\softwares\tyrePOS-build-tools\.pnpm-store\v3`), `_offline-out` (build output, created by the build) and
+`_deliver` (what goes to the customer: licences, Machine-ID helper, update patches). The paths are in `deploy/offline/build-offline.mjs`.
+`E:\softwares\_shared-build-tools` is a different, shared folder that other products may use - do not rely on it.
