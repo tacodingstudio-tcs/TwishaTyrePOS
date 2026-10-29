@@ -291,9 +291,13 @@ export function drawShaktiBill(doc: PDFKit.PDFDocument, b: InvoicePdfData, biz: 
     y = tableHead(pageTop)
     bodyTop = y
   }
-  const row = (cells: string[]) => {
+  const pending: string[][] = []
+  const row = (cells: string[]) => { pending.push(cells) }
+  const rowHeight = (cells: string[]) => {
     doc.font(face(false)).fontSize(11)
-    const h = Math.max(18, doc.heightOfString(cells[DESC] ?? '', { width: colW(DESC) - 2 * PADX }) + 8)
+    return Math.max(18, doc.heightOfString(cells[DESC] ?? '', { width: colW(DESC) - 2 * PADX }) + 8)
+  }
+  const drawRow = (cells: string[], h: number) => {
     if (y + h > bodyLimit) nextPage(pageBottom)
     cells.forEach((v, i) => {
       if (!v) return
@@ -327,6 +331,15 @@ export function drawShaktiBill(doc: PDFKit.PDFDocument, b: InvoicePdfData, biz: 
   else for (const s of SLOTS) if (slotSum.has(s)) chargeRow(s, slotSum.get(s)!)
   for (const e of extras) chargeRow(e.name, e.total)
   // the totals did not fit under the last row: they go on a fresh page (heading row + totals), never over the rows
+  const heights = pending.map(rowHeight)
+  const endY = (): number => { let yy = y; for (const h of heights) { if (yy + h > bodyLimit) yy = pageTop + 30; yy += h } return yy }
+  // The totals box is tall. When the rows end below the place it needs, the totals would sit alone on a new page above an empty
+  // table; instead the last few rows move over with them, so that page always carries some rows too.
+  const keepWithTotals = pending.length > 1 && endY() > footTop ? Math.min(3, pending.length - 1) : 0
+  pending.forEach((cells, i) => {
+    if (keepWithTotals && i === pending.length - keepWithTotals) nextPage(pageBottom)
+    drawRow(cells, heights[i]!)
+  })
   if (y > footTop) nextPage(pageBottom)
   // the table runs down to the totals, as on the printed format
   closeBody(footTop)

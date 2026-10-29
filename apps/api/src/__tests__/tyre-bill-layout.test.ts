@@ -96,6 +96,21 @@ describe("Bill layout = the shop's Excel bill", () => {
     expect(t).not.toMatch(/Tax Invoice|HSN Code|Total GST|CGST|SGST/)
   })
 
+  test('a 60-line bill continues onto more pages: every line once, the totals once, never a page of totals alone', async () => {
+    const many = (await owner.api.post('/api/products', {
+      itemType: 'product', gstRate: 18, unit: 'pcs', trackStock: true, name: 'MRF 185/65 R15', sku: 'M-185', salePrice: 1180, purchasePrice: 800, openingStock: 200,
+      domainAttrs: { item_kind: 'tyre', brand: 'MRF', size: '185/65/15', vehicle_type: 'car' },
+    })).data
+    const r = await sale({ customer: { name: 'LONG BILL', phone: '9811100779' }, vehicleNo: 'GJ32AA0060', makeModel: 'NEXON', billSeries: 'car', items: Array.from({ length: 60 }, () => item(many)), payments: [{ method: 'cash', amount: 70800 }] })
+    expect(r.status).toBe(201)
+    const id = r.data.invoice.id
+    const t = await pdfText(id)
+    expect(await pagesOf(id)).toBeGreaterThan(1)
+    expect((t.match(/185\/65\/15/g) ?? []).length).toBe(60)
+    expect((t.match(/Bill Amount/g) ?? []).length).toBe(1)
+    expect((t.match(/TYRE WARRANTY & CLAIM TERMS/g) ?? []).length).toBe(1)
+  })
+
   test('a credit bill shows what is still to pay; no GSTIN leaves the GST.NO box empty', async () => {
     const r = await sale({ customer: { name: 'Udhaar Wala', phone: '9811100780' }, items: [item(tyre)], payments: [{ method: 'cash', amount: 4000 }], creditDays: 15 })
     expect(r.status).toBe(201)
