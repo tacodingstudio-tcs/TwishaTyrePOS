@@ -181,9 +181,10 @@ export function drawShaktiBill(doc: PDFKit.PDFDocument, b: InvoicePdfData, biz: 
   const gstWordsH = gst ? wordsH(amountInWords(totalGst)) : 0
   const billWordsH = wordsH(amountInWords(b.grandTotal))
   // bank details the shop saved in My Business → Edit business (printed only when filled in)
-  const bank = ([['Bank Name', biz.bankName], ['Bank A/c No.', biz.bankAccount], ['RTGS/IFSC Code', biz.bankIfsc]] as Array<[string, string | null | undefined]>)
+  const QR = 72                                                      // the scan-and-pay QR (a bill with a balance, when the shop has saved its UPI ID)
+  const bank = ([['Bank Name', biz.bankName], ['Bank A/c No.', biz.bankAccount], ['RTGS/IFSC Code', biz.bankIfsc], ['UPI ID', b.payQr?.upiId]] as Array<[string, string | null | undefined]>)
     .filter(([, v]) => v && String(v).trim()) as Array<[string, string]>
-  const bankH = bank.length ? 8 + bank.length * 14 + 4 : 0
+  const bankH = bank.length || b.payQr ? Math.max(8 + bank.length * 14 + (b.payQr ? 18 : 0) + 4, b.payQr ? 8 + QR + 4 : 0) : 0
   // the Note strip sits above the Received / Balance lines of the right-hand box, so the left side must leave room for them too
   const leftH = subRowH + bankH + 8 + (gst ? gstWordsH + 10 : 0) + billWordsH + 10 + 32 + after.length * 15 + (after.length ? 4 : 0)
   const footBoxH = Math.max(rightH, leftH)
@@ -357,13 +358,22 @@ export function drawShaktiBill(doc: PDFKit.PDFDocument, b: InvoicePdfData, biz: 
     ly += 24
     hline(L, splitX, ly, 0.8)
   }
-  if (bank.length) {
-    ly += 8
+  if (bank.length || b.payQr) {
+    const bankTop = ly + 8
+    ly = bankTop
+    // the values stop short of the QR, which sits at the right end of this band
+    const valW = splitX - L - 118 - (b.payQr ? QR + 14 : 0)
     for (const [k, v] of bank) {
-      put(k, L + 8, ly, 90, { bold: true, size: 11 }); put(':', L + 98, ly, 8, { size: 11 }); put(v, L + 108, ly, splitX - L - 118, { size: 11 })
+      put(k, L + 8, ly, 90, { bold: true, size: 11 }); put(':', L + 98, ly, 8, { size: 11 }); put(v, L + 108, ly, valW, { size: 11 })
       ly += 14
     }
-    ly += 4
+    if (b.payQr) {
+      put(`Scan the QR to pay Rs. ${money(b.payQr.amount)}`, L + 8, ly + 3, splitX - L - QR - 30, { bold: true, size: 10 })
+      const n = b.payQr.rows.length, m = QR / n, qx = splitX - 8 - QR
+      doc.fillColor(INK)
+      b.payQr.rows.forEach((row, r) => row.forEach((on, c) => { if (on) doc.rect(qx + c * m, bankTop + r * m, m + 0.15, m + 0.15).fill() }))
+    }
+    ly = bankTop + Math.max(bank.length * 14 + (b.payQr ? 18 : 0) - 4, b.payQr ? QR : 0) + 8
     hline(L, splitX, ly, 0.8)
   }
   ly += 8

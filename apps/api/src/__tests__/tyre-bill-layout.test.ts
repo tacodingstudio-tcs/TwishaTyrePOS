@@ -1,6 +1,7 @@
 // The printed bill follows the shop's own Excel "Car Bill" / "2 Wheel Bill" sheets.
 import { newShopTenant, type Session } from './helpers'
 import { pdfText as readPdfText } from './pdf-text'
+import { upiLink, upiSettings } from '../lib/tyre-upi'
 
 describe("Bill layout = the shop's Excel bill", () => {
   let owner: Session, tyre: any, bike: any, labour: any, align: any
@@ -133,6 +134,62 @@ describe("Bill layout = the shop's Excel bill", () => {
     expect(r.status).toBe(201)
     const res = await owner.api.get(`/api/tyre/invoices/${r.data.invoice.id}/pdf`, { responseType: 'arraybuffer' })
     expect((Buffer.from(res.data).toString('latin1').match(/\/Subtype \/Image/g) ?? []).length).toBeGreaterThanOrEqual(1)
+  })
+})
+
+describe('Scan-and-pay QR on the bill', () => {
+  let owner: Session, tyre: any
+  const sale = (body: Record<string, unknown>) => owner.api.post('/api/tyre/sales', body, { headers: { 'Idempotency-Key': crypto.randomUUID() } })
+  const text = async (id: string) => readPdfText(Buffer.from((await owner.api.get(`/api/tyre/invoices/${id}/pdf`, { responseType: 'arraybuffer' })).data))
+  const setUpi = async (cfg: Record<string, unknown>) => {
+    const b = (await owner.api.get('/api/branches')).data[0]
+    await owner.api.patch(`/api/branches/${b.id}`, { domainConfig: { ...(b.domainConfig ?? {}), ...cfg } })
+  }
+
+  beforeAll(async () => {
+    owner = await newShopTenant('Shakti QR Tyres')
+    const br = (await owner.api.get('/api/branches')).data[0]
+    await owner.api.patch(`/api/branches/${br.id}`, {
+      gstin: '24AFTFS9416C1ZP', address: { line1: 'Near Hero Showroom, Veraval-Kodinar Bypass' },
+      domainConfig: { business_phone: '9227575753', prices_include_gst: true, default_service_gst: 0, bill_series: { car: { prefix: '', start: 1 }, two_wheel: { prefix: '2W-', start: 1 } } },
+    })
+    tyre = (await owner.api.post('/api/products', {
+      itemType: 'product', gstRate: 18, unit: 'pcs', trackStock: true, name: 'Yokohama 215/60 R16', sku: 'Y-QR', salePrice: 10400, purchasePrice: 7000, openingStock: 50,
+      domainAttrs: { item_kind: 'tyre', brand: 'Yokohama', size: '215/60/16', vehicle_type: 'car' },
+    })).data
+  })
+
+  test('the link is exactly what the Show QR screen builds (same string on both sides)', () => {
+    const s = upiSettings({ upi_id: 'shaktienterprise@gscb' }, 'Shakti Enterprise')!
+    expect(upiLink(s, 16400, 'Bill 30')).toBe('upi://pay?pa=shaktienterprise@gscb&pn=Shakti%20Enterprise&mc=5532&am=16400.00&cu=INR&tn=Bill%2030')
+    expect(upiLink(s, 0, 'x')).toBeNull()
+    expect(upiSettings({ upi_id: 'not a upi id' }, 'S')).toBeNull()
+  })
+
+  test('no UPI ID saved: no QR, no UPI lines', async () => {
+    const r = await sale({ customer: { name: 'NO UPI', phone: '9811100701' }, vehicleNo: 'GJ32AA0701', billSeries: 'car', items: [{ productId: tyre.id, qty: 1 }], payments: [{ method: 'cash', amount: 5000 }] })
+    expect([r.status, r.data?.error]).toEqual([201, undefined])
+    const t = await text(r.data.invoice.id)
+    expect(t).not.toMatch(/Scan the QR/); expect(t).not.toMatch(/UPI ID/)
+  })
+
+  test('a bill with a balance carries the QR and the amount to pay; a fully paid bill does not', async () => {
+    await setUpi({ upi_id: 'shaktienterprise@gscb' })
+    const part = await sale({ customer: { name: 'PART PAID', phone: '9811100702' }, vehicleNo: 'GJ32AA0702', billSeries: 'car', items: [{ productId: tyre.id, qty: 1 }], payments: [{ method: 'cash', amount: 5000 }] })
+    expect(part.status).toBe(201)
+    const due = Number(part.data.invoice.grandTotal) - 5000
+    const t = await text(part.data.invoice.id)
+    expect(t).toMatch(/Scan the QR to pay/); expect(t).toMatch(/UPI ID/); expect(t).toMatch(/shaktienterprise@gscb/)
+    expect(t.replace(/,/g, '')).toContain(`Rs. ${due.toFixed(2)}`)
+    const paid = await sale({ customer: { name: 'ALL PAID', phone: '9811100703' }, vehicleNo: 'GJ32AA0703', billSeries: 'car', items: [{ productId: tyre.id, qty: 1 }], payments: [{ method: 'cash', amount: Number(part.data.invoice.grandTotal) }] })
+    const t2 = await text(paid.data.invoice.id)
+    expect(t2).not.toMatch(/Scan the QR/)
+  })
+
+  test('a wrong UPI ID is ignored (no QR) instead of printing a QR that cannot pay', async () => {
+    await setUpi({ upi_id: 'shop name at bank' })
+    const r = await sale({ customer: { name: 'BAD UPI', phone: '9811100704' }, vehicleNo: 'GJ32AA0704', billSeries: 'car', items: [{ productId: tyre.id, qty: 1 }], payments: [{ method: 'cash', amount: 1000 }] })
+    expect(await text(r.data.invoice.id)).not.toMatch(/Scan the QR/)
   })
 })
 

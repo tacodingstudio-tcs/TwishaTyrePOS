@@ -32,5 +32,5 @@ export function upiLink(s: UpiSettings, amount: number, note: string): string | 
   q.set('pa', s.id); q.set('pn', s.name); q.set('mc', s.mcc); q.set('am', am); q.set('cu', 'INR')
   if (note.trim()) q.set('tn', note.trim().slice(0, 50))
   // URLSearchParams writes spaces as "+"; UPI apps want %20
-  return `upi://pay?${q.toString().replace(/\+/g, '%20')}`
+  return `upi://pay?${q.toString().replace(/\+/g, '%20').replace(/%40/g, '@')}`
 }

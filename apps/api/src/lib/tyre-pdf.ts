@@ -10,6 +10,7 @@
 // on Indian invoices.
 
 import { drawShaktiBill } from './tyre-bill-shakti.js'
+import { upiSettings, upiLink, qrModules } from './tyre-upi.js'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
@@ -46,6 +47,10 @@ export interface BusinessHeader {
   bankName?: string | null
   bankAccount?: string | null
   bankIfsc?: string | null
+  /** the shop's UPI ID (+ name / merchant code): a bill with a balance then carries a scan-and-pay QR */
+  upiId?: string | null
+  upiName?: string | null
+  upiMcc?: string | null
 }
 
 const INK = '#111827'
@@ -148,6 +153,8 @@ export interface WarrantyCardRow {
 
 export interface InvoicePdfData {
   number: string
+  /** scan-and-pay QR for the balance still to pay (filled in by renderInvoicePdf): the black squares, the amount and the UPI ID shown beside it */
+  payQr?: { rows: boolean[][]; amount: number; upiId: string }
   /** 'shakti' = the bill as the shop prints it from its Excel bill book (default); 'standard' = the generic GST invoice */
   layout?: 'shakti' | 'standard'
   /** two-wheeler bills use the shorter column set */
@@ -196,6 +203,14 @@ export async function renderInvoicePdf(b: InvoicePdfData, biz: BusinessHeader): 
   const doc: PDFKit.PDFDocument = new PDFDocument({ size: 'A4', margin: 30, info: { Title: `Invoice ${b.number}`, Author: biz.name } })
   enableGujarati(doc)
   const done = collect(doc)
+  // a sale bill that still has a balance carries a QR the customer can scan to pay exactly that (the bill goes out on WhatsApp as this same PDF)
+  const balanceDue = Math.max(0, b.grandTotal - b.paidAmt)
+  if (b.layout !== 'standard' && !b.isDocument && !b.docLabel && balanceDue > 0.004) {
+    const cfg = { upi_id: biz.upiId, upi_name: biz.upiName, upi_mcc: biz.upiMcc }
+    const upi = upiSettings(cfg, biz.name)
+    const link = upi ? upiLink(upi, balanceDue, `Bill ${b.number}`) : null
+    if (upi && link) b = { ...b, payQr: { rows: await qrModules(link), amount: balanceDue, upiId: upi.id } }
+  }
   const X = 30, W = doc.page.width - 60
   const pageBottom = () => doc.page.height - 40
 
