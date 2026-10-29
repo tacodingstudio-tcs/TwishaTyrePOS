@@ -12,6 +12,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { invoiceApi, tyreApi, apiError } from '@/lib/api'
 import { openPdf, printPdf } from '@/components/tyre/openPdf'
 import { ReprintMenu } from '@/components/tyre/ReprintMenu'
+import { UpiQrButton } from '@/components/tyre/UpiQrButton'
 import {
   Download, MessageCircle, XCircle, IndianRupee, Mail, Send,
   ArrowRight, CheckCircle, Clock, AlertCircle, RotateCcw, FileX,
@@ -385,6 +386,9 @@ export function InvoiceDetailPage() {
                 className="btn-primary w-full justify-center mt-4">
                 <IndianRupee className="w-4 h-4" /> {isPurchase ? 'Pay Supplier' : 'Record Payment'}
               </button>
+            )}
+            {balanceDue > 0.01 && isActive && !isPurchase && (
+              <UpiQrButton amount={balanceDue} note={`Bill ${invoice.number}`} className="btn-ghost border border-gray-200 w-full justify-center mt-2" label="Show QR to customer" />
             )}
           </div>
 

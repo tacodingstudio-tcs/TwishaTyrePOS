@@ -13,6 +13,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { PartyCombobox, type PickedParty } from '@/components/ui/PartyCombobox'
 import { inr, num, VEHICLE_TYPE_LABEL, POSITION_LABEL, dotInfo } from '@/components/tyre/format'
 import { isValidGstin } from '@/lib/gstin'
+import { UpiQrButton } from '@/components/tyre/UpiQrButton'
 
 /** GST state codes (first two digits of a GSTIN), shown under the field so a wrong state code is easy to spot. */
 const GST_STATE: Record<string, string> = {
@@ -617,6 +618,7 @@ export function QuickSalePage() {
             ))}
           </div>
           {payMode === 'split' && <p className="text-xs text-gray-500 mt-2">Split payment — see Optional details below</p>}
+          {payMode === 'upi' && <UpiQrButton amount={amountDue} note={`Bill payment`} className="btn-ghost border border-gray-200 w-full justify-center mt-3" label="Show QR to customer" />}
           {balance > 0.5 && <p className="text-xs text-amber-700 mt-2">Balance on credit {inr(balance, 2)}{!hasCustomer ? ' — add the customer name and mobile' : ''}</p>}
           <button type="button" className="btn-primary w-full justify-center py-3 text-base mt-4" disabled={!canSave} onClick={() => save.mutate()}>
             {save.isPending ? 'Saving…' : 'Save bill'}
@@ -688,6 +690,7 @@ export function QuickSalePage() {
               </button>
             ))}
             {payMode === 'split' && <span className="px-3 py-2 text-xs text-gray-500">Split — see More details</span>}
+            {payMode === 'upi' && <UpiQrButton amount={amountDue} note={`Bill payment`} />}
           </div>
           <div className="flex items-center gap-3">
             {balance > 0.5 && <span className="text-xs text-amber-700">Balance {inr(balance, 2)}{!hasCustomer ? ' — add customer' : ''}</span>}

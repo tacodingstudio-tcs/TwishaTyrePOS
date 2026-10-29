@@ -9,6 +9,8 @@ import {
 } from '@/hooks/useApi'
 import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { isUpiId } from '@/lib/upi'
+import toast from 'react-hot-toast'
 import {
   Plus, Building2, MapPin, FileText, Users, KeyRound, LockOpen, UserX, UserCheck, ArrowLeft, CircleDot, Pencil,
 } from 'lucide-react'
@@ -65,6 +67,9 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
     bankName:  String(cfg['bank_name'] ?? ''),
     bankAcc:   String(cfg['bank_account_no'] ?? ''),
     bankIfsc:  String(cfg['bank_ifsc'] ?? ''),
+    upiId:     String(cfg['upi_id'] ?? ''),
+    upiName:   String(cfg['upi_name'] ?? ''),
+    upiBanner: String(cfg['upi_banner'] ?? ''),
     terms:     String(cfg['invoice_terms'] ?? ''),
     email:     String(cfg['business_email'] ?? ''),
     hidden:    Array.from(hiddenMenu(cfg)),
@@ -79,7 +84,8 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm({ ...form, [k]: e.target.value })
 
-  const shopError = firstError(['gstin', form.gstin], ['pincode', form.pincode], ['email', form.email], ['pan', form.pan], ['ifsc', form.bankIfsc], ['hsn', form.serviceSac])
+  const shopFieldError = firstError(['gstin', form.gstin], ['pincode', form.pincode], ['email', form.email], ['pan', form.pan], ['ifsc', form.bankIfsc], ['hsn', form.serviceSac])
+  const shopError = shopFieldError ?? (form.upiId.trim() && !isUpiId(form.upiId) ? 'UPI ID looks wrong - it is like name@bank' : null)
 
   async function handleSubmit() {
     if (form.name.trim().length < 2) return
@@ -106,6 +112,7 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
         allow_below_cost: form.allowBelowCost,
         pan: form.pan.trim().toUpperCase(),
         bank_name: form.bankName.trim(), bank_account_no: form.bankAcc.trim(), bank_ifsc: form.bankIfsc.trim().toUpperCase(),
+        upi_id: form.upiId.trim(), upi_name: form.upiName.trim(), upi_banner: form.upiBanner,
         invoice_terms: form.terms.trim(),
         business_email: form.email.trim(),
         hidden_menu: form.hidden,
@@ -202,6 +209,16 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
               <div><label className="label">Bank name</label><input className="input" value={form.bankName} onChange={set('bankName')} /></div>
               <div><label className="label">Account no</label><ValidatedInput kind="account" value={form.bankAcc} onChange={(v) => setForm({ ...form, bankAcc: v })} /></div>
               <div><label className="label">IFSC</label><ValidatedInput kind="ifsc" placeholder="SBIN0001234" value={form.bankIfsc} onChange={(v) => setForm({ ...form, bankIfsc: v })} /></div>
+              <div><label className="label">UPI ID <span className="text-gray-400 font-normal">(for the payment QR)</span></label><input className="input" placeholder="shopname@bank" value={form.upiId} onChange={set('upiId')} autoCapitalize="none" /></div>
+              <div><label className="label">Name shown on the QR <span className="text-gray-400 font-normal">(optional)</span></label><input className="input" placeholder={form.name} value={form.upiName} onChange={set('upiName')} /></div>
+              <div className="col-span-2">
+                <label className="label">Bank banner on the QR screen <span className="text-gray-400 font-normal">(optional picture, like the one on your QR sheet)</span></label>
+                <div className="flex items-center gap-3">
+                  <input type="file" accept="image/png,image/jpeg" className="text-sm"
+                    onChange={async (e) => { const f = e.target.files?.[0]; if (f) { try { setForm({ ...form, upiBanner: await shrinkImage(f, 900) }) } catch { toast.error('That picture could not be read') } } }} />
+                  {form.upiBanner && <><img src={form.upiBanner} alt="" className="h-10 rounded border border-gray-200" /><button type="button" className="text-xs text-red-600" onClick={() => setForm({ ...form, upiBanner: '' })}>Remove</button></>}
+                </div>
+              </div>
               <div className="col-span-2">
                 <label className="label">Terms &amp; conditions <span className="text-gray-400 font-normal">(one per line; blank = standard wording)</span></label>
                 <textarea className="input h-20 resize-none" value={form.terms} onChange={(e) => setForm({ ...form, terms: e.target.value })} />
@@ -673,4 +690,21 @@ export function BranchesPage() {
       {editing && b && <BusinessModal branch={b} onClose={() => setEditing(false)} />}
     </div>
   )
+}
+
+/** a picture file -> a small JPEG data URL (at most `maxW` wide), so it can be kept with the shop's settings */
+function shrinkImage(file: File, maxW: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      const k = Math.min(1, maxW / img.width)
+      const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k)
+      const g = c.getContext('2d'); if (!g) { reject(new Error('canvas')); return }
+      g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height)
+      URL.revokeObjectURL(url); resolve(c.toDataURL('image/jpeg', 0.88))
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image')) }
+    img.src = url
+  })
 }
