@@ -70,6 +70,7 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
     upiId:     String(cfg['upi_id'] ?? ''),
     upiName:   String(cfg['upi_name'] ?? ''),
     upiBanner: String(cfg['upi_banner'] ?? ''),
+    upiQrAll:  cfg['upi_qr_all_bills'] !== false,
     terms:     String(cfg['invoice_terms'] ?? ''),
     email:     String(cfg['business_email'] ?? ''),
     hidden:    Array.from(hiddenMenu(cfg)),
@@ -112,7 +113,7 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
         allow_below_cost: form.allowBelowCost,
         pan: form.pan.trim().toUpperCase(),
         bank_name: form.bankName.trim(), bank_account_no: form.bankAcc.trim(), bank_ifsc: form.bankIfsc.trim().toUpperCase(),
-        upi_id: form.upiId.trim(), upi_name: form.upiName.trim(), upi_banner: form.upiBanner,
+        upi_id: form.upiId.trim(), upi_name: form.upiName.trim(), upi_banner: form.upiBanner, upi_qr_all_bills: form.upiQrAll,
         invoice_terms: form.terms.trim(),
         business_email: form.email.trim(),
         hidden_menu: form.hidden,
@@ -211,6 +212,10 @@ function BusinessModal({ branch, onClose }: { branch: any; onClose: () => void }
               <div><label className="label">IFSC</label><ValidatedInput kind="ifsc" placeholder="SBIN0001234" value={form.bankIfsc} onChange={(v) => setForm({ ...form, bankIfsc: v })} /></div>
               <div><label className="label">UPI ID <span className="text-gray-400 font-normal">(for the payment QR)</span></label><input className="input" placeholder="shopname@bank" value={form.upiId} onChange={set('upiId')} autoCapitalize="none" /></div>
               <div><label className="label">Name shown on the QR <span className="text-gray-400 font-normal">(optional)</span></label><input className="input" placeholder={form.name} value={form.upiName} onChange={set('upiName')} /></div>
+              <label className="col-span-2 flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={form.upiQrAll} onChange={(e) => setForm({ ...form, upiQrAll: e.target.checked })} />
+                Print the payment QR on every bill (a bill with a balance shows the amount to pay; a paid bill shows the shop's plain QR)
+              </label>
               <div className="col-span-2">
                 <label className="label">Bank banner on the QR screen <span className="text-gray-400 font-normal">(optional picture, like the one on your QR sheet)</span></label>
                 <div className="flex items-center gap-3">

@@ -173,7 +173,7 @@ describe('Scan-and-pay QR on the bill', () => {
     expect(t).not.toMatch(/Scan the QR/); expect(t).not.toMatch(/UPI ID/)
   })
 
-  test('a bill with a balance carries the QR and the amount to pay; a fully paid bill does not', async () => {
+  test('a bill with a balance carries the QR and the amount to pay; a fully paid bill carries the plain shop QR with no amount', async () => {
     await setUpi({ upi_id: 'shaktienterprise@gscb' })
     const part = await sale({ customer: { name: 'PART PAID', phone: '9811100702' }, vehicleNo: 'GJ32AA0702', billSeries: 'car', items: [{ productId: tyre.id, qty: 1 }], payments: [{ method: 'cash', amount: 5000 }] })
     expect(part.status).toBe(201)
@@ -181,9 +181,21 @@ describe('Scan-and-pay QR on the bill', () => {
     const t = await text(part.data.invoice.id)
     expect(t).toMatch(/Scan the QR to pay/); expect(t).toMatch(/UPI ID/); expect(t).toMatch(/shaktienterprise@gscb/)
     expect(t.replace(/,/g, '')).toContain(`Rs. ${due.toFixed(2)}`)
-    const paid = await sale({ customer: { name: 'ALL PAID', phone: '9811100703' }, vehicleNo: 'GJ32AA0703', billSeries: 'car', items: [{ productId: tyre.id, qty: 1 }], payments: [{ method: 'cash', amount: Number(part.data.invoice.grandTotal) }] })
+    const paid = await sale({ customer: { name: 'ALL PAID', phone: '9811100703' }, vehicleNo: 'GJ32AA0703', billSeries: 'car', items: [{ productId: tyre.id, qty: 1 }], payments: [{ method: 'upi', amount: Number(part.data.invoice.grandTotal) }] })
     const t2 = await text(paid.data.invoice.id)
-    expect(t2).not.toMatch(/Scan the QR/)
+    expect(t2).toMatch(/Scan the QR to pay by UPI/); expect(t2).toMatch(/shaktienterprise@gscb/)
+    expect(t2).not.toMatch(/Scan the QR to pay Rs\./)
+  })
+
+  test('the setting can limit the QR to bills with a balance', async () => {
+    await setUpi({ upi_id: 'shaktienterprise@gscb', upi_qr_all_bills: false })
+    const total = Number(tyre.salePrice)   // GST-inclusive entry: the bill total equals the item's price
+    const paid = await sale({ customer: { name: 'ALL PAID 2', phone: '9811100705' }, vehicleNo: 'GJ32AA0705', billSeries: 'car', items: [{ productId: tyre.id, qty: 1 }], payments: [{ method: 'cash', amount: total }] })
+    expect([paid.status, paid.data?.error]).toEqual([201, undefined])
+    expect(await text(paid.data.invoice.id)).not.toMatch(/Scan the QR/)
+    const part = await sale({ customer: { name: 'PART 2', phone: '9811100706' }, vehicleNo: 'GJ32AA0706', billSeries: 'car', items: [{ productId: tyre.id, qty: 1 }], payments: [{ method: 'cash', amount: 1000 }] })
+    expect(await text(part.data.invoice.id)).toMatch(/Scan the QR to pay Rs\./)
+    await setUpi({ upi_qr_all_bills: true })
   })
 
   test('a wrong UPI ID is ignored (no QR) instead of printing a QR that cannot pay', async () => {

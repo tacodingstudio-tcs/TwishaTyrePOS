@@ -10,7 +10,7 @@
 // on Indian invoices.
 
 import { drawShaktiBill } from './tyre-bill-shakti.js'
-import { upiSettings, upiLink, qrModules } from './tyre-upi.js'
+import { upiSettings, upiLink, upiPlainLink, qrModules } from './tyre-upi.js'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
@@ -51,6 +51,8 @@ export interface BusinessHeader {
   upiId?: string | null
   upiName?: string | null
   upiMcc?: string | null
+  /** false = print the QR only while a balance is due (default: on every sale bill) */
+  upiQrAlways?: boolean
 }
 
 const INK = '#111827'
@@ -154,7 +156,7 @@ export interface WarrantyCardRow {
 export interface InvoicePdfData {
   number: string
   /** scan-and-pay QR for the balance still to pay (filled in by renderInvoicePdf): the black squares, the amount and the UPI ID shown beside it */
-  payQr?: { rows: boolean[][]; amount: number; upiId: string }
+  payQr?: { rows: boolean[][]; amount: number; upiId: string }   // amount 0 = the shop's plain QR on a fully paid bill
   /** 'shakti' = the bill as the shop prints it from its Excel bill book (default); 'standard' = the generic GST invoice */
   layout?: 'shakti' | 'standard'
   /** two-wheeler bills use the shorter column set */
@@ -203,13 +205,14 @@ export async function renderInvoicePdf(b: InvoicePdfData, biz: BusinessHeader): 
   const doc: PDFKit.PDFDocument = new PDFDocument({ size: 'A4', margin: 30, info: { Title: `Invoice ${b.number}`, Author: biz.name } })
   enableGujarati(doc)
   const done = collect(doc)
-  // a sale bill that still has a balance carries a QR the customer can scan to pay exactly that (the bill goes out on WhatsApp as this same PDF)
+  // every sale bill carries the shop's payment QR: for the balance when something is still to pay, else the plain shop QR (no amount),
+  // so a customer who got the bill on WhatsApp can pay or top up. Quotations, returns and purchase papers carry none.
   const balanceDue = Math.max(0, b.grandTotal - b.paidAmt)
-  if (b.layout !== 'standard' && !b.isDocument && !b.docLabel && balanceDue > 0.004) {
+  if (b.layout !== 'standard' && !b.isDocument && !b.docLabel && (balanceDue > 0.004 || biz.upiQrAlways !== false)) {
     const cfg = { upi_id: biz.upiId, upi_name: biz.upiName, upi_mcc: biz.upiMcc }
     const upi = upiSettings(cfg, biz.name)
-    const link = upi ? upiLink(upi, balanceDue, `Bill ${b.number}`) : null
-    if (upi && link) b = { ...b, payQr: { rows: await qrModules(link), amount: balanceDue, upiId: upi.id } }
+    const link = upi ? (balanceDue > 0.004 ? upiLink(upi, balanceDue, `Bill ${b.number}`) : upiPlainLink(upi)) : null
+    if (upi && link) b = { ...b, payQr: { rows: await qrModules(link), amount: balanceDue > 0.004 ? balanceDue : 0, upiId: upi.id } }
   }
   const X = 30, W = doc.page.width - 60
   const pageBottom = () => doc.page.height - 40

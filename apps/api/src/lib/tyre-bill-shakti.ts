@@ -368,7 +368,7 @@ export function drawShaktiBill(doc: PDFKit.PDFDocument, b: InvoicePdfData, biz: 
       ly += 14
     }
     if (b.payQr) {
-      put(`Scan the QR to pay Rs. ${money(b.payQr.amount)}`, L + 8, ly + 3, splitX - L - QR - 30, { bold: true, size: 10 })
+      put(b.payQr.amount > 0 ? `Scan the QR to pay Rs. ${money(b.payQr.amount)}` : 'Scan the QR to pay by UPI', L + 8, ly + 3, splitX - L - QR - 30, { bold: true, size: 10 })
       const n = b.payQr.rows.length, m = QR / n, qx = splitX - 8 - QR
       doc.fillColor(INK)
       b.payQr.rows.forEach((row, r) => row.forEach((on, c) => { if (on) doc.rect(qx + c * m, bankTop + r * m, m + 0.15, m + 0.15).fill() }))

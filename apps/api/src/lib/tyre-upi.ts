@@ -29,6 +29,13 @@ export function upiLink(s: UpiSettings, amount: number, note: string): string | 
   return `upi://pay?${q.toString().replace(/\+/g, '%20').replace(/%40/g, '@')}`
 }
 
+/** the shop's plain QR, with no amount (like the one on the bank's sheet): printed on fully paid bills so anyone can still scan and pay */
+export function upiPlainLink(s: UpiSettings): string {
+  const q = new URLSearchParams()
+  q.set('pa', s.id); q.set('pn', s.name); q.set('mc', s.mcc); q.set('cu', 'INR')
+  return `upi://pay?${q.toString().replace(/\+/g, '%20').replace(/%40/g, '@')}`
+}
+
 /** the QR's black squares as rows of booleans, ready to be drawn as vector squares in the PDF */
 export async function qrModules(text: string): Promise<boolean[][]> {
   const { default: QRCode } = await import('qrcode')   // loaded on the first bill that needs it, not at start-up

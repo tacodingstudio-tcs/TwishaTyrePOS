@@ -3,6 +3,7 @@
 Tyre shop / dealer billing + counter operations (size finder → sale with fitting → serial / warranty →
 vehicle reminders). Tyre vertical of HisabKitab; same architecture as billingPlatform and transportPlatform.
 Read `README.md` (run it) and `docs/ARCHITECTURE.md` (how it works) first.
+For a company / reviewer: `docs/ARCHITECTURE-AND-PERFORMANCE.md` (system architecture, integrations and API, start-up and run-time optimisation with measured numbers, security, testing, roadmap).
 **Licensing** (the offline installer only runs on the PC its signed license names): everything is in `docs/LICENSING.md` — read it before touching the
 installer, the `server.ts` license gate, or when asked to make / renew a license.
 
@@ -73,9 +74,9 @@ pnpm provision:all                  # re-apply tenant DDL to existing tenants af
     formats, A4 fit-to-width, Calibri-twin font Carlito (`assets/fonts`, OFL). Do not restyle it. After any change run
     `npx tsx e2e/bill-preview.ts` and compare with Excel's own export using `e2e/bill-compare.py` (positions must stay within 0.4 % of
     the bill width). Tests read the PDF text through `__tests__/pdf-text.ts` (it understands embedded fonts).
-    **Payment QR:** a sale bill that still has a balance, for a shop that saved its UPI ID (My Business → Edit business: `upi_id`, optional `upi_name`,
-    `upi_mcc`, `upi_banner`), prints a scan-and-pay QR for the balance in the bank-details band (vector squares, `payQr` in `InvoicePdfData`, built in
-    `renderInvoicePdf` via `lib/tyre-upi.ts`). The same PDF goes out on WhatsApp, so the QR travels with it. Fully paid bills, quotations and
+    **Payment QR:** every sale bill, for a shop that saved its UPI ID (My Business → Edit business: `upi_id`, optional `upi_name`,
+    `upi_mcc`, `upi_banner`), prints a scan-and-pay QR in the bank-details band: for the balance when something is still due, else the shop's plain QR with no amount (setting `upi_qr_all_bills`, default on; off = balance bills only) (vector squares, `payQr` in `InvoicePdfData`, built in
+    `renderInvoicePdf` via `lib/tyre-upi.ts`). The same PDF goes out on WhatsApp, so the QR travels with it. Quotations and
     purchase / return documents carry none. The link builder exists twice and must stay identical: `apps/api/src/lib/tyre-upi.ts` and
     `apps/web/src/lib/upi.ts` (the "Show QR to customer" card); `tyre-bill-layout.test.ts` pins the exact string. Check a bill's QR with
     `npx tsx e2e/bill-preview.ts <dir>` then `python e2e/bill-qr-decode.py <dir> credit memo`.

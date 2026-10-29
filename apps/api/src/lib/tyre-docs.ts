@@ -38,6 +38,7 @@ export async function loadBusiness(ctx: Ctx): Promise<{ header: BusinessHeader; 
       upiId: config['upi_id'] || null,
       upiName: config['upi_name'] || null,
       upiMcc: config['upi_mcc'] || null,
+      upiQrAlways: config['upi_qr_all_bills'] !== false,
       // credit line for the software provider: always printed, not a per-business setting
       poweredBy: `Powered by ${process.env['POWERED_BY_NAME'] || 'Twisha Consultancy Services'} · ${process.env['POWERED_BY_URL'] || 'https://www.twishaconsultancyservices.com/'}`,
     },
