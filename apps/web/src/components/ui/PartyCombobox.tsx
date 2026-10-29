@@ -146,7 +146,7 @@ export function PartyCombobox({
             {isFetching && open && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 animate-spin" />}
           </div>
           {open && !disabled && (
-            <div role="listbox" className="absolute z-30 w-full mt-1 bg-white rounded-lg border border-gray-200 shadow-lg max-h-64 overflow-y-auto">
+            <div role="listbox" className="absolute z-30 w-full mt-1 bg-white rounded-lg border border-gray-200 shadow-lg max-h-[min(16rem,30vh)] overflow-y-auto">
               {results.map((p, i) => (
                 <button
                   key={p.id}
