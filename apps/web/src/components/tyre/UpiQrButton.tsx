@@ -8,7 +8,7 @@ import { branchApi } from '@/lib/api'
 import { upiSettings, upiAmount } from '@/lib/upi'
 import { UpiQrCard } from './UpiQrCard'
 
-export function UpiQrButton({ amount, note, className = 'btn-ghost border border-gray-200', label = 'Show QR' }: { amount: number; note: string; className?: string; label?: string }) {
+export function UpiQrButton({ amount, note, className = 'btn-ghost border border-gray-200', label = 'Show QR', onOpen }: { amount: number; note: string; className?: string; label?: string; onOpen?: () => void }) {
   const [open, setOpen] = useState(false)
   const { data: branches } = useQuery({ queryKey: ['branches'], queryFn: () => branchApi.list(), staleTime: 60_000 })
   const b = (branches as any[] | undefined)?.[0]
@@ -17,7 +17,7 @@ export function UpiQrButton({ amount, note, className = 'btn-ghost border border
   return (
     <>
       <button type="button" className={`${className} whitespace-nowrap`} disabled={!ok} title={ok ? 'Show a QR the customer can scan to pay this amount' : 'Nothing to pay yet'}
-        onClick={() => { if (!settings) { toast.error('Add the shop’s UPI ID first: My Business → Edit business → UPI ID'); return } setOpen(true) }}>
+        onClick={() => { if (!settings) { toast.error('Add the shop’s UPI ID first: My Business → Edit business → UPI ID'); return } setOpen(true); onOpen?.() }}>
         <QrCode className="w-4 h-4" /> {label}
       </button>
       {open && settings && <UpiQrCard settings={settings} amount={amount} note={note} onClose={() => setOpen(false)} />}

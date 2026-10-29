@@ -77,9 +77,10 @@ for (const [w, h] of [[1400, 900], [1024, 576]] as Array<[number, number]>) {
   })
   await new Promise((r) => setTimeout(r, 600))
   const clickBtn = (re: string) => page.evaluate((src) => { const r = new RegExp(src); const b = Array.from(document.querySelectorAll('button')).find((x) => r.test(x.textContent ?? '') && (x as HTMLElement).offsetParent !== null); if (b) { (b as HTMLElement).click(); return true } return false }, re)
-  check(await clickBtn('^\s*UPI\s*$'), `${size}: New Sale has a UPI button`)
-  await new Promise((r) => setTimeout(r, 300))
-  check(await clickBtn('Show QR'), `${size}: Show QR appears once UPI is chosen`)
+  // Cash is the default: the QR button must already be there, and opening it switches the bill to UPI
+  const cashSelected = await page.evaluate(() => { const b = Array.from(document.querySelectorAll('button')).find((x) => /^\s*Cash\s*$/.test(x.textContent ?? '') && (x as HTMLElement).offsetParent !== null); return !!b && /bg-primary-600/.test(b.className) })
+  check(cashSelected, `${size}: New Sale starts on Cash`)
+  check(await clickBtn('Show QR'), `${size}: Show QR is available while Cash is selected`)
   await new Promise((r) => setTimeout(r, 500))
   const link: string = await page.evaluate(() => document.querySelector('[data-upi]')?.getAttribute('data-upi') ?? '')
   const shown: string = await page.evaluate(() => (document.querySelector('[role="dialog"]') as HTMLElement | null)?.innerText ?? '')
@@ -87,6 +88,9 @@ for (const [w, h] of [[1400, 900], [1024, 576]] as Array<[number, number]>) {
   check(!!am && Number(am) > 0 && shown.replace(/[,₹\s]/g, '').includes(String(Math.round(Number(am)))), `${size}: QR amount ${am} is the amount shown on the card`)
   await page.screenshot({ path: `${OUT}/sale-${size}.png` })
   await page.keyboard.press('Escape')
+  await new Promise((r) => setTimeout(r, 200))
+  const upiNow = await page.evaluate(() => { const b = Array.from(document.querySelectorAll('button')).find((x) => /^\s*UPI\s*$/.test(x.textContent ?? '') && (x as HTMLElement).offsetParent !== null); return !!b && /bg-primary-600/.test(b.className) })
+  check(upiNow, `${size}: opening the QR switched the payment type to UPI`)
 }
 await browser.close()
 console.log(bad ? `\n${bad} check(s) failed` : '\nall checks passed')

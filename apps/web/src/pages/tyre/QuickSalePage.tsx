@@ -618,7 +618,7 @@ export function QuickSalePage() {
             ))}
           </div>
           {payMode === 'split' && <p className="text-xs text-gray-500 mt-2">Split payment — see Optional details below</p>}
-          {payMode === 'upi' && <UpiQrButton amount={amountDue} note={`Bill payment`} className="btn-ghost border border-gray-200 w-full justify-center mt-3" label="Show QR to customer" />}
+          {lines.length > 0 && <UpiQrButton amount={amountDue} note={`Bill payment`} onOpen={() => setPayMode('upi')} className="btn-ghost border border-gray-200 w-full justify-center mt-3" label="Show QR to customer" />}
           {balance > 0.5 && <p className="text-xs text-amber-700 mt-2">Balance on credit {inr(balance, 2)}{!hasCustomer ? ' — add the customer name and mobile' : ''}</p>}
           <button type="button" className="btn-primary w-full justify-center py-3 text-base mt-4" disabled={!canSave} onClick={() => save.mutate()}>
             {save.isPending ? 'Saving…' : 'Save bill'}
@@ -690,7 +690,7 @@ export function QuickSalePage() {
               </button>
             ))}
             {payMode === 'split' && <span className="px-3 py-2 text-xs text-gray-500">Split — see More details</span>}
-            {payMode === 'upi' && <UpiQrButton amount={amountDue} note={`Bill payment`} />}
+            {lines.length > 0 && <UpiQrButton amount={amountDue} note={`Bill payment`} onOpen={() => setPayMode('upi')} />}
           </div>
           <div className="flex items-center gap-3">
             {balance > 0.5 && <span className="text-xs text-amber-700">Balance {inr(balance, 2)}{!hasCustomer ? ' — add customer' : ''}</span>}
