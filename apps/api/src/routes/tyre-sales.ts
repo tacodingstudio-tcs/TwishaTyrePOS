@@ -26,6 +26,7 @@ import {
 import { notifyInvoice, safely } from '../lib/tyre-notify.js'
 import { loadInvoiceDoc } from '../lib/tyre-docs.js'
 import { isValidGstin } from '../lib/gstin.js'
+import { nestTx, reverseBill } from '../lib/tyre-correct.js'
 
 const idParam = z.object({ id: z.string().uuid() })
 /** A customer's GSTIN: blank is fine, anything typed must be a real one (format + check digit). */
@@ -163,6 +164,78 @@ export const tyreSalesRoutes: FastifyPluginAsync = async (app) => {
     }
   })
 
+  // POST /api/tyre/sales/:id/correct — replace a wrong bill by a corrected one with the same number and date.
+  // Body = a normal sale (+ optional `reason`). One transaction: if anything fails the old bill is exactly as it was.
+  app.post('/sales/:id/correct', async (req, reply) => {
+    requireWrite(req)
+    if (req.role !== 'owner' && req.role !== 'manager') throw httpError(403, 'Only the owner or a manager can correct a bill')
+    const { id } = idParam.parse(req.params)
+    const body = SaleBody.parse(req.body)
+    const reason = z.object({ reason: z.string().trim().max(200).optional() }).parse(req.body ?? {}).reason || 'bill corrected'
+    const cfg = await branchConfig(req)
+
+    const run_ = () => (req.db as any).$transaction(async (tx: any) => {
+      const sub: any = Object.create(req)
+      sub.db = nestTx(tx)
+      const rev = await reverseBill(sub, id, reason)
+      const out = await createSale(sub, { ...body, date: rev.date, billSeries: rev.billSeries ?? body.billSeries }, cfg, { correction: { number: rev.number } })
+      return { ...out, corrected: { number: rev.number, oldBillRenamedTo: rev.renamedTo, oldBillId: rev.oldId } }
+    }, { maxWait: 5000, timeout: 30000 })
+
+    const headerKey = (req.headers['idempotency-key'] as string | undefined)?.trim() || undefined
+    const derivedKey = 'tcorr:' + createHash('sha1').update(JSON.stringify([req.userId, id, body]) + '|' + Math.floor(Date.now() / 20_000)).digest('hex')
+    try {
+      const { result, replayed } = await withIdempotency(
+        { branchId: req.branchId, endpoint: 'POST /tyre/sales/correct', key: headerKey ?? derivedKey }, run_)
+      return reply.status(replayed ? 200 : 201).send(result)
+    } catch (err) {
+      if (err instanceof IdempotencyConflictError) throw httpError(409, 'This correction is already being saved — wait a moment')
+      throw err
+    }
+  })
+
+  // PATCH /api/tyre/sales/:id/details — fix words, not money: vehicle, make, odometer, notes, and the name / address of a
+  // customer who has no customer record. Stock, tax, totals and payments cannot change here.
+  app.patch('/sales/:id/details', async (req) => {
+    requireWrite(req)
+    const { id } = idParam.parse(req.params)
+    const b = z.object({
+      vehicleNo:       z.string().trim().max(20).optional(),
+      makeModel:       z.string().trim().max(60).optional(),
+      odometer:        z.number().int().nonnegative().max(2_000_000).nullable().optional(),
+      notes:           z.string().max(500).optional(),
+      customerName:    z.string().trim().min(1).max(120).optional(),
+      customerAddress: z.string().trim().max(300).optional(),
+    }).strict().parse(req.body)
+    const inv = await q1<any>(req,
+      `SELECT id, number, status, "txnType", "partyId", "domainData" FROM ${tbl(req.schemaName, 'invoices')}
+       WHERE id = $1::uuid AND "branchId" = $2::uuid`, id, req.branchId)
+    if (!inv) throw httpError(404, 'Bill not found')
+    if (inv.txnType !== 'sale_invoice') throw httpError(422, 'Only a sale bill can be edited')
+    if (inv.status === 'cancelled') throw httpError(409, 'A cancelled bill cannot be edited')
+    if ((b.customerName !== undefined || b.customerAddress !== undefined) && inv.partyId) {
+      throw httpError(422, 'This customer is saved in Customers — change the name or address there')
+    }
+    const patch: Record<string, unknown> = {}
+    if (b.vehicleNo !== undefined) patch['vehicle_no'] = normReg(b.vehicleNo) || null
+    if (b.makeModel !== undefined) patch['vehicle_make'] = b.makeModel || null
+    if (b.odometer !== undefined) patch['odometer'] = b.odometer
+    if (b.customerName !== undefined) patch['customer_name'] = b.customerName
+    if (b.customerAddress !== undefined) patch['customer_address'] = b.customerAddress || null
+    await run(req,
+      `UPDATE ${tbl(req.schemaName, 'invoices')}
+       SET "domainData" = (COALESCE("domainData", '{}'::jsonb) || $2::jsonb),
+           notes = CASE WHEN $3::boolean THEN $4 ELSE notes END, "updatedAt" = NOW()
+       WHERE id = $1::uuid`,
+      id, JSON.stringify(patch), b.notes !== undefined, b.notes ?? null)
+    if (b.vehicleNo !== undefined) {
+      await run(req,
+        `UPDATE ${tbl(req.schemaName, 'tyre_warranty')} SET "vehicleNo" = $3, "updatedAt" = NOW()
+         WHERE "invoiceId" = $1::uuid AND "branchId" = $2::uuid`, id, req.branchId, normReg(b.vehicleNo) || null)
+    }
+    return { ok: true, invoiceId: id, number: inv.number }
+  })
+
   // GET /api/tyre/sales/:id — the bill as the counter sees it: lines, warranty rows, vehicle
   app.get('/sales/:id', async (req) => {
     const { id } = idParam.parse(req.params)
@@ -179,12 +252,16 @@ export const tyreSalesRoutes: FastifyPluginAsync = async (app) => {
 
 // ── The sale ──────────────────────────────────────────────────────────────────
 
-async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<string, any>) {
+/** `correction`: the bill is written inside the correction transaction — it keeps the old bill's number, any
+ *  failure aborts the whole thing (no "warnings"), and no customer message is sent. */
+interface SaleOpts { correction?: { number: string } }
+
+async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<string, any>, opts: SaleOpts = {}) {
   const defaults = DOMAIN_REGISTRY.tyre.defaultDomainConfig as Record<string, any>
   const conf = (k: string) => cfg[k] ?? defaults[k]
   const date = body.date ?? todayStr()
   // a mistyped year (2016 for 2026) or a day that has not happened would file the bill in the wrong GST month
-  if (body.date) {
+  if (body.date && !opts.correction) {
     const today = todayStr()
     if (body.date > today) throw httpError(422, `The bill date ${body.date} is in the future — check it`)
     if (body.date < addDays(today, -366)) throw httpError(422, `The bill date ${body.date} is more than a year ago — check the year`)
@@ -404,6 +481,7 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
   } as Parameters<typeof createInvoice>[0], {
     db: req.db, branchId: req.branchId, schemaName: req.schemaName,
     userId: req.userId, role: req.role, branchDomainType: 'tyre', numberSeries,
+    fixedNumber: opts.correction?.number,
   })
   } catch (err) {
     // Two counters sold the last unit at the same moment: the core's row lock lets one through and
@@ -438,6 +516,7 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
       }
     }
   } catch (err) {
+    if (opts.correction) throw err          // inside the correction transaction a failed statement poisons it: undo everything
     warnings.push(`Warranty register could not be updated: ${(err as Error).message}`)
   }
   result['warranty'] = warrantyRows
@@ -472,6 +551,7 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
         (invoice as any).domainData?.next_service_km ?? null, vehicleType ?? null, nextServiceFor ?? null)
     }
   } catch (err) {
+    if (opts.correction) throw err
     warnings.push(`Vehicle record could not be updated: ${(err as Error).message}`)
   }
 
@@ -499,12 +579,13 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
         warnings.push('Old tyres were not added to stock — no "scrap" item in the catalogue')
       }
     } catch (err) {
+      if (opts.correction) throw err
       warnings.push(`Old-tyre allowance could not be recorded: ${(err as Error).message}`)
     }
   }
 
   // Customer-facing message (opt-in per business; never blocks the sale)
-  safely('invoice', notifyInvoice(ctx, (invoice as any).id))
+  if (!opts.correction) safely('invoice', notifyInvoice(ctx, (invoice as any).id))
 
   result['invoice'] = finalInvoice
   void ymd

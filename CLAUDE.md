@@ -81,6 +81,23 @@ pnpm provision:all                  # re-apply tenant DDL to existing tenants af
     `apps/web/src/lib/upi.ts` (the "Show QR to customer" card); `tyre-bill-layout.test.ts` pins the exact string. Check a bill's QR with
     `npx tsx e2e/bill-preview.ts <dir>` then `python e2e/bill-qr-decode.py <dir> credit memo`.
 
+    **Paid by:** a sale bill prints a "Paid by" row under Grand Total (`paymentMode` in `InvoicePdfData`, built in `loadInvoiceDoc`
+    from the active non-exchange payments: `Cash`, `UPI`, `Cash + UPI`, `Credit`, `Cash + Credit`). Pinned in `tyre-correct.test.ts`.
+    **Correct this bill** (`POST /api/tyre/sales/:id/correct`, owner/manager; `lib/tyre-correct.ts`): ONE transaction reverses the old
+    bill (stock ledger rows incl. scrap, payments voided, party balance, warranty voided), renames it `<no>-OLD` (`-OLDB` …, status
+    cancelled, note kept) and runs `createSale` again with the same number + date (`fixedNumber`, `nestTx` makes the invoice service's own
+    `$transaction` join the open one). In correction mode `createSale` throws instead of adding `warnings` (a failed statement poisons the
+    transaction) and sends no WhatsApp. Refused: returns/credit notes linked to the bill, payments shared with other bills (advance), IRN.
+    `PATCH /api/tyre/sales/:id/details` fixes words only (vehicle, make, km, notes, a walk-in customer's name). Screen: bill page → "Correct
+    bill" opens `/tyre/sale?correct=<id>` prefilled. Browser check: `npx tsx e2e/flow-correct.ts`.
+
+    **Installer safety** (`deploy/offline/installer/TwishaPOS.iss`): `PrepareToInstall` runs the installed `TwishaPOS.exe --backup` first
+    (starts the database just for that if the app is closed) and REFUSES to install if the backup fails; then `--stop`; then
+    `TwishaKill.exe` (window-less, unpacked from the installer to {tmp}) ends anything still running from the install folder. Never run
+    `powershell`/`cmd` from `[Code]` — with Windows Terminal as the default console host each such call flashes a terminal window. Test it
+    WITHOUT touching a real install: build a throw-away installer with `ISCC /DTestMode=1 …` (own AppId, no shortcuts), then
+    `tyrePOS-build-tools\_wintest\run-install-test.ps1` + `watch-windows.ps1` (counts console windows; must say 0). `--stop` only closes
+    the tray icon of ITS OWN folder.
 18. **Licensing is on in the packaged app only** (`LICENSE_REQUIRED=true` set by `deploy/offline/runtime/cli.mjs`). Every `/api/*` call except `/api/license/*`
     answers 402 until a valid license is activated; the installer's own first-run `shop()` step passes `x-setup-key`. Never commit a private key
     or a `.lic`; the signing key lives in `E:\softwares\_license-keys\private.pem`. Details: `docs/LICENSING.md`.

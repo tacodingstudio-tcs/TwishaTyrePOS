@@ -16,8 +16,10 @@ import { UpiQrButton } from '@/components/tyre/UpiQrButton'
 import {
   Download, MessageCircle, XCircle, IndianRupee, Mail, Send,
   ArrowRight, CheckCircle, Clock, AlertCircle, RotateCcw, FileX,
-  Zap, Truck, Printer,
+  Zap, Truck, Printer, Pencil,
 } from 'lucide-react'
+import { useAuthStore } from '@/store/auth.store'
+import { useQueryClient } from '@tanstack/react-query'
 import { ThermalReceipt } from '@/components/invoice/ThermalReceipt'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -86,6 +88,13 @@ export function InvoiceDetailPage() {
   const [ewayVehicle, setEwayVehicle]     = useState('')
   const [ewayDistance, setEwayDistance]   = useState('')
 
+  // "Edit details": words on the bill (vehicle, make, km, notes, a walk-in customer's name) — never money or stock
+  const role = useAuthStore((s) => s.user?.role)
+  const qc = useQueryClient()
+  const [showDetails, setShowDetails] = useState(false)
+  const [det, setDet] = useState({ vehicleNo: '', makeModel: '', odometer: '', notes: '', customerName: '', customerAddress: '' })
+  const [savingDet, setSavingDet] = useState(false)
+
   if (isLoading) return <div className="p-8 text-gray-400">Loading...</div>
   if (!invoice)  return <div className="p-8 text-gray-400">Invoice not found</div>
 
@@ -96,6 +105,31 @@ export function InvoiceDetailPage() {
   const docName    = ({ quotation: 'quotation', proforma: 'proforma', sales_order: 'order', delivery_challan: 'challan', credit_note: 'credit note', sale_return: 'return', debit_note: 'debit note' } as Record<string, string>)[invoice.txnType] ?? 'document'
   const isPurchase = invoice.txnType === 'purchase_invoice'
   const isActive   = invoice.status !== 'cancelled' && invoice.status !== 'converted'
+
+  const canCorrect = isSale && isActive && (role === 'owner' || role === 'manager')
+  const canEditDetails = isSale && isActive && role !== 'viewer'
+  const noParty = !invoice.partyId
+  function openDetails() {
+    const d = (invoice.domainData ?? {}) as Record<string, any>
+    setDet({
+      vehicleNo: d.vehicle_no ?? '', makeModel: d.vehicle_make ?? '', odometer: d.odometer != null ? String(d.odometer) : '',
+      notes: invoice.notes ?? '', customerName: d.customer_name ?? '', customerAddress: d.customer_address ?? '',
+    })
+    setShowDetails(true)
+  }
+  async function saveDetails() {
+    setSavingDet(true)
+    try {
+      await tyreApi.editSaleDetails(id!, {
+        vehicleNo: det.vehicleNo.trim(), makeModel: det.makeModel.trim(), notes: det.notes,
+        odometer: det.odometer.trim() ? Number(det.odometer) : null,
+        ...(noParty && det.customerName.trim() ? { customerName: det.customerName.trim(), customerAddress: det.customerAddress.trim() } : {}),
+      })
+      await qc.invalidateQueries()
+      setShowDetails(false)
+      toast.success('Bill details saved')
+    } catch (e) { toast.error(apiError(e)) } finally { setSavingDet(false) }
+  }
 
   async function handlePayment() {
     const amount = Number(paymentAmount)
@@ -261,6 +295,18 @@ export function InvoiceDetailPage() {
               </>
             )}
 
+            {canEditDetails && (
+              <button type="button" onClick={openDetails} className="btn-ghost" title="Fix the vehicle number, make, km, notes — not the tyres or amounts">
+                <Pencil className="w-4 h-4" /> Edit details
+              </button>
+            )}
+            {canCorrect && (
+              <button type="button" onClick={() => navigate(`/tyre/sale?correct=${id}`)} className="btn-primary bg-amber-600 hover:bg-amber-700"
+                title="Wrong tyre or amount? Make the right bill — same number and date">
+                <Pencil className="w-4 h-4" /> Correct bill
+              </button>
+            )}
+
             {isActive && invoice.status !== 'paid' && (
               <button onClick={handleCancel} className="btn-danger">
                 <XCircle className="w-4 h-4" /> Cancel
@@ -388,7 +434,7 @@ export function InvoiceDetailPage() {
               </button>
             )}
             {balanceDue > 0.01 && isActive && !isPurchase && (
-              <UpiQrButton amount={balanceDue} note={`Bill ${invoice.number}`} className="btn-ghost border border-gray-200 w-full justify-center mt-2" label="Show QR to customer" />
+              <UpiQrButton amount={balanceDue} note={`Bill ${invoice.number}`} refId={String(invoice.number)} className="btn-ghost border border-gray-200 w-full justify-center mt-2" label="Show QR to customer" />
             )}
           </div>
 
@@ -449,6 +495,31 @@ export function InvoiceDetailPage() {
               <button type="button" onClick={handleSendReceipt} disabled={sendReceipt.isPending || !shareTo || !!check(shareChannel === 'whatsapp' ? 'mobile' : 'email', shareTo)} className="btn-primary flex-1 justify-center">
                 <Send className="w-4 h-4" /> {sendReceipt.isPending ? 'Sending…' : 'Send'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDetails && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl space-y-3">
+            <h3 className="text-base font-semibold text-gray-900">Edit details of bill {String(invoice.number)}</h3>
+            <p className="text-xs text-gray-500">Words only. To change a tyre, a price or a payment use <b>Correct bill</b>.</p>
+            {noParty && (
+              <>
+                <div><label className="label">Customer name</label><input className="input" value={det.customerName} onChange={(e) => setDet({ ...det, customerName: e.target.value })} /></div>
+                <div><label className="label">Customer address</label><input className="input" value={det.customerAddress} onChange={(e) => setDet({ ...det, customerAddress: e.target.value })} /></div>
+              </>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="label">Vehicle number</label><input className="input" value={det.vehicleNo} onChange={(e) => setDet({ ...det, vehicleNo: e.target.value.toUpperCase() })} /></div>
+              <div><label className="label">Make / model</label><input className="input" value={det.makeModel} onChange={(e) => setDet({ ...det, makeModel: e.target.value })} /></div>
+            </div>
+            <div><label className="label">Odometer (km)</label><input type="number" min={0} className="input" value={det.odometer} onChange={(e) => setDet({ ...det, odometer: e.target.value })} /></div>
+            <div><label className="label">Notes</label><textarea className="input" rows={2} value={det.notes} onChange={(e) => setDet({ ...det, notes: e.target.value })} /></div>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setShowDetails(false)} className="btn-ghost flex-1 justify-center">Close</button>
+              <button type="button" onClick={saveDetails} disabled={savingDet} className="btn-primary flex-1 justify-center">{savingDet ? 'Saving…' : 'Save'}</button>
             </div>
           </div>
         </div>

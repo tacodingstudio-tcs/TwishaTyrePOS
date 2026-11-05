@@ -74,9 +74,16 @@ static class Program
             {
                 // a running tray icon would otherwise be left pointing at services that are gone
                 int me = Process.GetCurrentProcess().Id;
+                // (only the one that belongs to THIS folder: another Twisha POS copy on the same PC is not ours to close)
                 foreach (Process other in Process.GetProcessesByName("TwishaPOS"))
                 {
-                    if (other.Id != me) { try { other.Kill(); } catch { } }
+                    if (other.Id == me) continue;
+                    try
+                    {
+                        string f = other.MainModule.FileName;
+                        if (f != null && f.StartsWith(Root + "\\", StringComparison.OrdinalIgnoreCase)) other.Kill();
+                    }
+                    catch { }
                 }
             }
             if (args[0] == "--status") MessageBox.Show(output, "Twisha POS", MessageBoxButtons.OK, code == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);

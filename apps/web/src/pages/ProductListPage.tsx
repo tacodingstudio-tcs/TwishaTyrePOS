@@ -1212,6 +1212,19 @@ function AddProductModal({
             </div>
           </div>
 
+          <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+            <label className="label" htmlFor="prod-stock">Stock to add now ({form.unit || 'pcs'}) <span className="text-gray-400 font-normal">(optional)</span></label>
+            <input
+              id="prod-stock"
+              type="number" min={0}
+              placeholder="e.g. 8 tyres on the shelf"
+              value={form.openingStock}
+              onChange={(e) => setForm({ ...form, openingStock: e.target.value })}
+              className="input"
+            />
+            <p className="text-xs text-gray-500 mt-1">Put the pieces you have in hand right now; leave empty to add stock later through a purchase or Stock Levels.</p>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label" htmlFor="prod-gst">GST rate</label>
@@ -1263,18 +1276,6 @@ function AddProductModal({
           <div>
             <label className="label" htmlFor="prod-hsn">HSN code (optional)</label>
             <ValidatedInput id="prod-hsn" kind="hsn" value={form.hsn} onChange={(v) => setForm({ ...form, hsn: v })} placeholder="leave blank — tyres get theirs automatically" />
-          </div>
-
-          <div>
-            <label className="label" htmlFor="prod-stock">Opening stock (optional)</label>
-            <input
-              id="prod-stock"
-              type="number" min={0}
-              placeholder="0"
-              value={form.openingStock}
-              onChange={(e) => setForm({ ...form, openingStock: e.target.value })}
-              className="input"
-            />
           </div>
 
           <label className="flex items-center gap-3 cursor-pointer">

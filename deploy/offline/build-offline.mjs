@@ -141,6 +141,11 @@ async function main() {
   const bats = path.join(HERE, 'steps')
   for (const f of fs.readdirSync(bats)) fs.copyFileSync(path.join(bats, f), path.join(OUT, f))
   fs.copyFileSync(path.join(REPO, 'apps', 'web', 'public', 'favicon.png'), path.join(OUT, 'favicon.png'))
+  // the client's own bill book, when one was prepared (apps/api/scripts/prepare-bill-book.mjs): IMPORT-BILL-BOOK.bat loads it
+  rm(path.join(OUT, 'import-data'))
+  const bookData = path.join(HERE, 'import-data')
+  if (fs.existsSync(bookData)) { cp(bookData, path.join(OUT, 'import-data')); console.log('   + the shop bill book (import-data) is included') }
+  else fs.rmSync(path.join(OUT, 'IMPORT-BILL-BOOK.bat'), { force: true })
 
   // ── 6 · prove that nothing the programs need is missing on a clean laptop ─────────────────────────────────────────
   say('Checking that every program has what it needs on a clean laptop')

@@ -1,7 +1,7 @@
 // The printed bill follows the shop's own Excel "Car Bill" / "2 Wheel Bill" sheets.
 import { newShopTenant, type Session } from './helpers'
 import { pdfText as readPdfText } from './pdf-text'
-import { upiLink, upiSettings } from '../lib/tyre-upi'
+import { upiLink, upiPlainLink, upiSettings } from '../lib/tyre-upi'
 
 describe("Bill layout = the shop's Excel bill", () => {
   let owner: Session, tyre: any, bike: any, labour: any, align: any
@@ -161,8 +161,10 @@ describe('Scan-and-pay QR on the bill', () => {
 
   test('the link is exactly what the Show QR screen builds (same string on both sides)', () => {
     const s = upiSettings({ upi_id: 'shaktienterprise@gscb' }, 'Shakti Enterprise')!
-    expect(upiLink(s, 16400, 'Bill 30')).toBe('upi://pay?pa=shaktienterprise@gscb&pn=Shakti%20Enterprise&mc=5532&am=16400.00&cu=INR&tn=Bill%2030')
-    expect(upiLink(s, 0, 'x')).toBeNull()
+    expect(upiLink(s, 16400, 'Bill 30', '30')).toBe('upi://pay?pa=shaktienterprise@gscb&pn=Shakti%20Enterprise&mc=5532&tr=301640000&am=16400.00&cu=INR&tn=Bill%2030')
+    expect(upiLink(s, 0, 'x', 'x')).toBeNull()
+    // the plain shop QR has the same form as the bank's own sheet
+    expect(upiPlainLink(s)).toBe('upi://pay?ver=01&mode=01&pa=shaktienterprise@gscb&pn=Shakti%20Enterprise&mc=5532&qrMedium=06')
     expect(upiSettings({ upi_id: 'not a upi id' }, 'S')).toBeNull()
   })
 

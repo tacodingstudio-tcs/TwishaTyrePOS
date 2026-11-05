@@ -166,6 +166,7 @@ export function drawShaktiBill(doc: PDFKit.PDFDocument, b: InvoicePdfData, biz: 
     sums.push(['Round Off', money(b.roundOff)])
   } else if (b.discountTotal > 0) sums.push(['Discount', money(b.discountTotal)])
   const after: Array<[string, string]> = []
+  if (b.paymentMode && !b.isDocument) after.push(['Paid by', b.paymentMode])
   if (b.exchangeValue > 0 && !b.isDocument) after.push([`Old tyre exchange${b.exchangeQty ? ` (${b.exchangeQty})` : ''}`, `- ${money(b.exchangeValue)}`])
   const received = Math.max(0, b.paidAmt - b.exchangeValue)
   const balance = Math.max(0, b.grandTotal - b.paidAmt)

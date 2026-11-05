@@ -95,6 +95,18 @@ describe('Tyre shop', () => {
 
   // ═══════════════════════════════════════════════════════════════════════════
   describe('size finder', () => {
+    test('the tyre list and the size chips run in size order: rim, then width, then profile', async () => {
+      const rows = await find(owner, { kind: 'tyre', limit: 50 })
+      const sizes = rows.map((r: any) => String(r.domainAttrs?.size).replace(/ /g, '').toUpperCase())
+      // 165/80 R14, then the 15-inch pair, then the 20-inch truck tyre
+      expect(sizes.indexOf('165/80R14')).toBeLessThan(sizes.indexOf('185/65R15'))
+      expect(sizes.indexOf('185/65R15')).toBeLessThan(sizes.indexOf('10.00R20'))
+      const chips = (await owner.api.get('/api/tyre/sizes')).data as Array<{ size: string }>
+      const order = chips.map((c) => c.size.replace(/ /g, '').toUpperCase())
+      expect(order.indexOf('165/80R14')).toBeLessThan(order.indexOf('185/65R15'))
+      expect(order.indexOf('185/65R15')).toBeLessThan(order.indexOf('10.00R20'))
+    })
+
     test.each(['185/65 R15', '185/65R15', '185 65 15', '1856515', '185/65-15', '185/65 ZR15'])('"%s" finds the 185/65 R15 tyres', async (size) => {
       const rows = await find(owner, { size })
       const names = rows.map((r) => r.name)

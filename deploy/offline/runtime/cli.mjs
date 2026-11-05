@@ -16,6 +16,7 @@ import os from 'node:os'
 import path from 'node:path'
 import net from 'node:net'
 import crypto from 'node:crypto'
+import readline from 'node:readline'
 import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
@@ -425,6 +426,9 @@ async function stop(withBackup = true) {
   for (const port of [PORT.api, PORT.redis]) for (const pid of listeningPids(port)) run('taskkill', ['/PID', pid, '/T', '/F'])
   // the job store may still be waiting to be let through by Windows (no port yet): find it by its own program path
   run('powershell', ['-NoProfile', '-Command', `Get-CimInstance Win32_Process -Filter "Name='redis-server.exe'" | Where-Object { $_.ExecutablePath -like '${dir.redis.replace(/'/g, "''")}\\*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }`])
+  // Windows can report the listening socket under process 0, so the port look-up above misses the server: end every program of this install's own
+  // Node (the app server and the workers), found by its program path - never the command that is running this very step.
+  run('powershell', ['-NoProfile', '-Command', `Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.ExecutablePath -like '${path.join(ROOT, 'node').replace(/'/g, "''")}\*' -and $_.ProcessId -ne ${process.pid} } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`])
   savePids({})
   if (fs.existsSync(path.join(dir.pgdata, 'PG_VERSION'))) run(exe('pg_ctl'), ['stop', '-D', dir.pgdata, '-m', 'fast', '-w', '-t', '60'])
   ok('Everything stopped')
@@ -478,6 +482,52 @@ async function unlock(quiet = false) {
 // ── erase the test data ──────────────────────────────────────────────────────────────────────────────────────────
 // For handing a shop over clean after trying it out. Needs --yes (ERASE-TEST-DATA.bat makes you type ERASE). Stops the app, takes a safety
 // backup, then erases bills, customers, stock, warranty, expenses, team … in one transaction (see src/lib/reset-test-data.ts).
+// ── load the shop's own old bill book (import-data\car.json, two_wheel.json) ───────────────────────────────────────
+// Used once, after ERASE-TEST-DATA, to put the client's real bills in. A bill number that already exists is skipped, so it can be run again.
+async function importBillBook() {
+  step("Loading the shop's old bill book")
+  const dataDir = path.join(ROOT, 'import-data')
+  const sets = ['car', 'two_wheel'].map((n) => path.join(dataDir, `${n}.json`)).filter((f) => fs.existsSync(f)).map((f) => JSON.parse(fs.readFileSync(f, 'utf8')))
+  if (!sets.length) fail('There is no bill book to load in this installation', "This step only works with an installer that was made together with the shop's bill book.")
+  await stop(false)                                  // a clean start: nothing half-running, then database, job store and app
+  await check(); await db(); await services(); await shop()
+  const ask = (question, hidden = false) => new Promise((resolve) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+    if (hidden) rl._writeToOutput = (s) => process.stdout.write(s.includes(question) ? s : '*')
+    rl.question(question, (a) => { rl.close(); if (hidden) process.stdout.write('\n'); resolve(a.trim()) })
+  })
+  const call = async (method, url, body, token) => {
+    const r = await fetch(`${URL_APP}${url}`, { method, headers: { 'content-type': 'application/json', 'x-setup-key': setupKey(), ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: body ? JSON.stringify(body) : undefined })
+    return { status: r.status, data: await r.json().catch(() => ({})) }
+  }
+  const pin = process.env.TWISHA_IMPORT_PIN || (await ask(`  PIN of ${cfg.ownerPhone} (the owner): `, true))
+  const login = await call('POST', '/api/auth/login', { tenantPhone: cfg.ownerPhone, phone: cfg.ownerPhone, pin })
+  if (login.status !== 200 || !login.data.accessToken) fail('Could not sign in', 'Check the PIN. Nothing was loaded.')
+  const token = login.data.accessToken
+  const branch = (await call('GET', '/api/branches', null, token)).data?.[0]
+  for (const s of sets) if (!branch?.domainConfig?.bill_series?.[s.series]) fail(`The "${s.series}" bill book is not set up in My Business`, 'Open My Business, set the bill book and its start number, then run this again.')
+  log('  Checking the bills first (nothing is saved yet) ...')
+  let total = 0
+  for (const s of sets) {
+    const r = await call('POST', '/api/tyre/import/register', { series: s.series, vehicleType: s.vehicleType, rows: s.rows, dryRun: true }, token)
+    if (r.status !== 200) fail(`The ${s.series} bills were refused`, JSON.stringify(r.data).slice(0, 300))
+    log(`    ${s.series}: ${s.rows.length} bills in the file, ${r.data.created} new, ${r.data.skipped} already in the app, ${r.data.failed} with a problem`)
+    for (const p of (r.data.problems ?? []).slice(0, 10)) log(`      - bill ${p.billNo}: ${p.error}`)
+    total += r.data.created
+  }
+  if (total === 0) { ok('Nothing new to load: every bill is already in the app'); return }
+  const sure = process.env.TWISHA_IMPORT_PIN ? 'IMPORT' : await ask(`\n  Type IMPORT to save ${total} bills (customers and vehicles are created from them): `)
+  if (sure !== 'IMPORT') { log('  Cancelled - nothing was saved.'); return }
+  let made = 0, bad = 0
+  for (const s of sets) {
+    const r = await call('POST', '/api/tyre/import/register', { series: s.series, vehicleType: s.vehicleType, rows: s.rows, dryRun: false }, token)
+    if (r.status !== 200) fail(`The ${s.series} bills were refused`, JSON.stringify(r.data).slice(0, 300))
+    made += r.data.created; bad += r.data.failed
+    for (const p of (r.data.problems ?? []).slice(0, 10)) log(`      - bill ${p.billNo}: ${p.error}`)
+  }
+  ok(`${made} bills loaded${bad ? `, ${bad} could not be loaded (see above)` : ''}. Open Twisha POS and look at All Bills.`)
+}
+
 async function resetData() {
   step('Erasing the test data')
   if (!process.argv.includes('--yes')) fail('This ERASES every bill, customer, stock entry … of this shop.', 'Run ERASE-TEST-DATA.bat, or add --yes to confirm.')
@@ -505,7 +555,7 @@ const [, , cmd, arg] = process.argv
 const table = {
   check, db, services, shop, open: async () => openApp(),
   start: async () => { await check(); await db(); await services(); await shop(); if (!process.argv.includes('--no-open')) openApp() },
-  stop: () => stop(!process.argv.includes('--no-backup')), status, backup: () => backup(), restore: () => restore(arg), 'reset-pin': () => resetPin(arg), unlock: () => unlock(), 'reset-data': resetData,
+  stop: () => stop(!process.argv.includes('--no-backup')), status, backup: () => backup(), restore: () => restore(arg), 'reset-pin': () => resetPin(arg), unlock: () => unlock(), 'reset-data': resetData, 'import-bill-book': importBillBook,
 }
-if (!table[cmd]) { console.log('Commands: check | db | services | shop | open | start | stop | status | backup | restore <file> --yes | reset-pin <1234> | unlock'); process.exit(cmd ? 1 : 0) }
+if (!table[cmd]) { console.log('Commands: check | db | services | shop | open | start | stop | status | backup | restore <file> --yes | reset-pin <1234> | unlock | import-bill-book'); process.exit(cmd ? 1 : 0) }
 try { await table[cmd](); process.exit(0) } catch (e) { log(`  ✘ ${e?.stack ?? e}`); process.exit(1) }

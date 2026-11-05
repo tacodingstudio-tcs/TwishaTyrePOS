@@ -195,6 +195,8 @@ export interface InvoicePdfData {
   paidAmt: number
   exchangeValue: number     // old-tyre allowance already settled against this bill
   exchangeQty: number
+  /** how the bill was settled, printed as "Paid by": "Cash", "UPI", "Cash + UPI", "Credit", "Cash + Credit" (unset on documents) */
+  paymentMode?: string
   notes?: string | null
   terms: string[]
   warranty: WarrantyCardRow[]
@@ -211,7 +213,7 @@ export async function renderInvoicePdf(b: InvoicePdfData, biz: BusinessHeader): 
   if (b.layout !== 'standard' && !b.isDocument && !b.docLabel && (balanceDue > 0.004 || biz.upiQrAlways !== false)) {
     const cfg = { upi_id: biz.upiId, upi_name: biz.upiName, upi_mcc: biz.upiMcc }
     const upi = upiSettings(cfg, biz.name)
-    const link = upi ? (balanceDue > 0.004 ? upiLink(upi, balanceDue, `Bill ${b.number}`) : upiPlainLink(upi)) : null
+    const link = upi ? (balanceDue > 0.004 ? upiLink(upi, balanceDue, `Bill ${b.number}`, String(b.number)) : upiPlainLink(upi)) : null
     if (upi && link) b = { ...b, payQr: { rows: await qrModules(link), amount: balanceDue > 0.004 ? balanceDue : 0, upiId: upi.id } }
   }
   const X = 30, W = doc.page.width - 60
@@ -297,6 +299,7 @@ export async function renderInvoicePdf(b: InvoicePdfData, biz: BusinessHeader): 
   if (b.cgstTotal > 0) trows.push(['CGST', rs(b.cgstTotal)], ['SGST', rs(b.sgstTotal)])
   if (b.roundOff) trows.push(['Round off', rs(b.roundOff)])
   trows.push(['Grand total', rs(b.grandTotal), true])
+  if (b.paymentMode && !b.isDocument) trows.push(['Paid by', b.paymentMode])
   if (b.exchangeValue > 0) trows.push([`Old tyre exchange${b.exchangeQty ? ` (${b.exchangeQty})` : ''}`, `- ${rs(b.exchangeValue)}`])
   const otherPaid = Math.max(0, b.paidAmt - b.exchangeValue)
   if (otherPaid > 0) trows.push(['Received', `- ${rs(otherPaid)}`])

@@ -1,6 +1,6 @@
 // "Scan & pay" card for one bill: the shop's own QR sheet (bank banner, shop name, SCAN & PAY, QR, UPI ID bar, UPI apps), but the QR carries the
 // bill amount, so the customer's phone opens with the amount already filled in. Shown full-screen over the bill; Esc or a click outside closes it.
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import { X } from 'lucide-react'
@@ -8,14 +8,16 @@ import { upiLink, type UpiSettings } from '@/lib/upi'
 
 const inr = (n: number) => `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
-export function UpiQrCard({ settings, amount, note, onClose }: { settings: UpiSettings; amount: number; note: string; onClose: () => void }) {
+export function UpiQrCard({ settings, amount, note, refId, onClose }: { settings: UpiSettings; amount: number; note: string; refId?: string; onClose: () => void }) {
+  // a bill passes its number; a sale not yet saved gets a reference made from the time the card was opened
+  const ref = useMemo(() => refId ?? `POS${Date.now().toString(36).toUpperCase()}`, [refId])
   useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', esc)
     return () => document.removeEventListener('keydown', esc)
   }, [onClose])
 
-  const link = upiLink(settings, amount, note)
+  const link = upiLink(settings, amount, note, ref)
   const base = import.meta.env.BASE_URL ?? '/'
   return createPortal(
     <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-3" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>

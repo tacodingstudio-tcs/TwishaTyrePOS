@@ -71,6 +71,18 @@ export async function loadInvoiceDoc(ctx: Ctx, invoiceId: string): Promise<{ dat
      JOIN ${tbl(ctx.schemaName, 'payments')} p ON p.id = pa."paymentId"
      WHERE pa."invoiceId" = $1::uuid AND p.method = 'exchange' AND p.status = 'active'`, invoiceId)
 
+  // how it was paid: the money methods actually received (old-tyre exchange is shown on its own line), plus Credit for a balance left
+  const paidBy = await q<{ method: string; amount: number }>(ctx,
+    `SELECT p.method, SUM(pa.amount)::float AS amount
+     FROM ${tbl(ctx.schemaName, 'payment_allocations')} pa
+     JOIN ${tbl(ctx.schemaName, 'payments')} p ON p.id = pa."paymentId"
+     WHERE pa."invoiceId" = $1::uuid AND p.method <> 'exchange' AND p.status = 'active'
+     GROUP BY p.method ORDER BY SUM(pa.amount) DESC`, invoiceId)
+  const METHOD = (m: string) => ({ cash: 'Cash', upi: 'UPI', card: 'Card', bank_transfer: 'Bank', cheque: 'Cheque' } as Record<string, string>)[m] ?? m
+  const owing = Number(inv.grandTotal) - Number(inv.paidAmt) > 0.5
+  const modeParts = [...paidBy.filter((p) => p.amount > 0).map((p) => METHOD(p.method)), ...(owing ? ['Credit'] : [])]
+  const paymentMode = inv.txnType === 'sale_invoice' && modeParts.length ? modeParts.join(' + ') : undefined
+
   const dd = (inv.domainData ?? {}) as Record<string, any>
   const { config } = await loadBusiness(ctx)
 
@@ -120,6 +132,7 @@ export async function loadInvoiceDoc(ctx: Ctx, invoiceId: string): Promise<{ dat
     cgstTotal: Number(inv.cgstTotal), sgstTotal: Number(inv.sgstTotal), igstTotal: Number(inv.igstTotal),
     roundOff: Number(inv.roundOff ?? 0), grandTotal: Number(inv.grandTotal), paidAmt: Number(inv.paidAmt),
     exchangeValue: Number(exch?.amount ?? 0), exchangeQty: Number(dd['exchange_qty'] ?? 0),
+    paymentMode,
     notes: inv.notes ?? null,
     terms: config['invoice_terms'] ? String(config['invoice_terms']).split('\n').filter(Boolean) : DEFAULT_TERMS,
     warranty: warranty.map((w) => ({

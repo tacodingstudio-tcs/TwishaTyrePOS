@@ -7,7 +7,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { Search, Plus, Minus, Trash2, Car, Wrench, Recycle, AlertTriangle, CircleDot, Wind, Gauge, RotateCw, Droplets, Settings2, Check } from 'lucide-react'
-import { tyreApi, branchApi, apiError } from '@/lib/api'
+import { tyreApi, branchApi, invoiceApi, apiError } from '@/lib/api'
 import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { PartyCombobox, type PickedParty } from '@/components/ui/PartyCombobox'
@@ -151,6 +151,52 @@ export function QuickSalePage() {
     queryKey: ['tyre-preload', addId], enabled: !!addId,
     queryFn: () => tyreApi.finder({ id: addId, kind: 'any', limit: 1 }),
   })
+  // Correct a bill: /tyre/sale?correct=<invoiceId> opens the old bill filled in; saving replaces it (same number and date)
+  const correctId = sp.get('correct')
+  const { data: orig, error: origError } = useQuery({
+    queryKey: ['correct-source', correctId], enabled: !!correctId, staleTime: 0, gcTime: 0,
+    queryFn: () => invoiceApi.get(correctId!),
+  })
+  const filled = useRef(false)
+  useEffect(() => {
+    if (!orig || filled.current) return
+    filled.current = true
+    const d = (orig.domainData ?? {}) as Record<string, any>
+    const pr = orig.party
+    setParty(pr ? { id: pr.id, name: pr.name, phone: pr.phone, gstin: pr.gstin } : { name: d.customer_name ?? '' })
+    setPhone(pr?.phone ?? '')
+    setGstin(String(pr?.gstin ?? '').toUpperCase())
+    setAddress(d.customer_address ?? '')
+    setRegNo(d.vehicle_no ?? ''); setVehicleType(d.vehicle_type ?? 'car'); setOdometer(d.odometer != null ? String(d.odometer) : '')
+    setFittedBy(d.fitted_by ?? ''); setMakeModel(d.vehicle_make ?? ''); setPoNo(d.po_no ?? ''); setNotes(orig.notes ?? '')
+    setWithGst(d.gst_bill !== false); setInclusive(!!d.prices_include_gst); setBillSeries(d.bill_series ?? '')
+    if (d.credit_days != null) setCreditDays(String(d.credit_days))
+    const chg: Record<string, string> = {}
+    const ls: Line[] = []
+    for (const it of orig.items as any[]) {
+      const m = (it.itemMeta ?? {}) as Record<string, any>
+      if (m.item_kind === 'charge' || !it.productId) { chg[it.description] = String(Number(it.rate)); continue }
+      const rate = Number(it.rate), disc = Number(it.discountPct ?? 0)
+      ls.push({
+        key: newKey(), productId: it.productId, name: it.description, kind: m.item_kind ?? 'tyre', unit: it.unit ?? 'pcs',
+        size: m.size, brand: m.brand, stock: null,                      // the server re-checks stock with the old bill's tyres counted back
+        qty: Number(it.qty), rate, discountPct: disc, price: Math.round(rate * (1 - disc / 100) * 100) / 100, gstRate: Number(it.gstRate ?? DEFAULT_GST),
+        serials: (m.serial_nos ?? []).join(', '), dots: (m.dot_codes ?? []).join(', '), positions: m.positions ?? [],
+        warrantyMonths: m.warranty_months || undefined, serviceType: m.service_type,
+        hsn: String(it.hsnSacCode ?? ''),
+        readingsBefore: m.readings?.before ?? {}, readingsAfter: m.readings?.after ?? {},
+      })
+    }
+    setLines(ls); setCharges(chg)
+    const ex = Number(d.exchange_value ?? 0)
+    if (ex > 0) { setExchValue(String(ex)); setExchQty(String(d.exchange_qty ?? 1)) }
+    const splits = ((d.payment_splits ?? []) as Array<{ method: string; amount: number }>).filter((p) => p.method !== 'credit' && Number(p.amount) > 0)
+    const paidSum = splits.reduce((s, p) => s + Number(p.amount), 0)
+    const first = splits[0]
+    if (!splits.length) setPayMode('credit')
+    else if (splits.length === 1 && first && (first.method === 'cash' || first.method === 'upi') && Math.abs(paidSum + ex - Number(orig.grandTotal)) < 1.01) setPayMode(first.method as 'cash' | 'upi')
+    else { setPayMode('split'); setPay(Object.fromEntries(splits.map((p) => [p.method, String(p.amount)]))) }
+  }, [orig])
   const preloaded = useRef(false)
   useEffect(() => {
     const p = preload?.data?.[0]
@@ -256,7 +302,8 @@ export function QuickSalePage() {
   const save = useMutation({
     mutationFn: () => {
       const payments = PAY_METHODS.map(([m]) => ({ method: m, amount: Number(effPay[m]) || 0 })).filter((p) => p.amount > 0)
-      return tyreApi.createSale({
+      const send = correctId ? (b: unknown, k: string) => tyreApi.correctSale(correctId, b, k) : (b: unknown, k: string) => tyreApi.createSale(b, k)
+      return send({
         partyId: party.id,
         customer: !party.id && party.name.trim() ? { name: party.name.trim(), phone: phone.replace(/\D/g, '') || undefined, address: address.trim() || undefined } : undefined,
         customerGstin: gstin.trim() || undefined,
@@ -285,11 +332,13 @@ export function QuickSalePage() {
         exchange: exch > 0 && Number(exchQty) > 0 ? { qty: Number(exchQty), value: exch } : undefined,
         payments,
         notes: notes.trim() || undefined,
+        // charges (alignment, balancing …) are lines of the bill too
+        charges: CHARGE_LABELS.map((k) => ({ label: k, amount: Number(charges[k]) || 0 })).filter((c) => c.amount > 0),
       }, attemptKey.current)
     },
     onSuccess: (r: any) => {
       attemptKey.current = crypto.randomUUID()
-      toast.success(`Bill ${r.invoice?.number ?? ''} saved`)
+      toast.success(correctId ? `Bill ${r.invoice?.number ?? ''} corrected — the old copy is kept as cancelled` : `Bill ${r.invoice?.number ?? ''} saved`)
       ;(r.warnings ?? []).forEach((w: string) => toast(w, { icon: '⚠️', duration: 6000 }))
       navigate(`/invoices/${r.invoice.id}`)
     },
@@ -317,7 +366,19 @@ export function QuickSalePage() {
 
   return (
     <div className="pb-4">
-      <PageHeader title="New bill" subtitle="Add tyres and tap the jobs done — one bill" />
+      <PageHeader title={correctId ? `Correct bill ${orig ? String(orig.number) : ''}` : 'New bill'}
+        subtitle={correctId ? 'Change what is wrong, then save — the bill keeps its number and date' : 'Add tyres and tap the jobs done — one bill'} />
+      {correctId && (
+        <div className="mx-4 sm:mx-6 mt-4 max-w-7xl xl:mx-auto rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          {origError ? <b>This bill could not be opened: {apiError(origError)}</b> : (
+            <>
+              <b>Correcting bill {orig ? String(orig.number) : '…'}.</b> Fix the tyres, prices or payment below and save. The new bill takes the same number and date;
+              the old copy stays on record as cancelled, and stock, the customer's balance and payments are put right automatically.
+              {orig && ['cancelled', 'converted'].includes(String(orig.status)) && <b className="block mt-1 text-red-700">This bill is already cancelled and cannot be corrected.</b>}
+            </>
+          )}
+        </div>
+      )}
       <div className="p-4 sm:p-6 max-w-7xl mx-auto grid grid-cols-1 xl:grid-cols-3 gap-4 items-start">
       <div className="xl:col-span-2 space-y-4 min-w-0">
 
@@ -621,7 +682,7 @@ export function QuickSalePage() {
           {lines.length > 0 && <UpiQrButton amount={amountDue} note={`Bill payment`} onOpen={() => setPayMode('upi')} className="btn-ghost border border-gray-200 w-full justify-center mt-3" label="Show QR to customer" />}
           {balance > 0.5 && <p className="text-xs text-amber-700 mt-2">Balance on credit {inr(balance, 2)}{!hasCustomer ? ' — add the customer name and mobile' : ''}</p>}
           <button type="button" className="btn-primary w-full justify-center py-3 text-base mt-4" disabled={!canSave} onClick={() => save.mutate()}>
-            {save.isPending ? 'Saving…' : 'Save bill'}
+            {save.isPending ? 'Saving…' : correctId ? 'Save corrected bill' : 'Save bill'}
           </button>
           {readOnly && <p className="text-xs text-gray-400 text-center mt-2">Read-only access — you cannot make bills.</p>}
         </section>
@@ -695,7 +756,7 @@ export function QuickSalePage() {
           <div className="flex items-center gap-3">
             {balance > 0.5 && <span className="text-xs text-amber-700">Balance {inr(balance, 2)}{!hasCustomer ? ' — add customer' : ''}</span>}
             <button type="button" className="btn-primary px-6 py-3 text-base" disabled={!canSave} onClick={() => save.mutate()}>
-              {save.isPending ? 'Saving…' : 'Save bill'}
+              {save.isPending ? 'Saving…' : correctId ? 'Save corrected bill' : 'Save bill'}
             </button>
           </div>
         </div>

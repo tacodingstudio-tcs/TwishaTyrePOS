@@ -20,19 +20,25 @@ export function upiAmount(n: number): string | null {
   return (Math.round(n * 100) / 100).toFixed(2)
 }
 
-export function upiLink(s: UpiSettings, amount: number, note: string): string | null {
+/** transaction reference (`tr`): letters and digits only, at most 35. A link that carries an amount for a merchant UPI ID needs one, or some
+ *  apps treat it as the shop's static QR and ask for the amount. It ties the QR to one bill and one balance. */
+export function upiRef(ref: string, amount: number): string {
+  return `${ref.replace(/[^A-Za-z0-9]/g, '').slice(0, 20)}${Math.round(amount * 100)}`
+}
+
+export function upiLink(s: UpiSettings, amount: number, note: string, ref: string): string | null {
   const am = upiAmount(amount)
   if (!am) return null
   const q = new URLSearchParams()
-  q.set('pa', s.id); q.set('pn', s.name); q.set('mc', s.mcc); q.set('am', am); q.set('cu', 'INR')
+  q.set('pa', s.id); q.set('pn', s.name); q.set('mc', s.mcc); q.set('tr', upiRef(ref, amount)); q.set('am', am); q.set('cu', 'INR')
   if (note.trim()) q.set('tn', note.trim().slice(0, 50))
   return `upi://pay?${q.toString().replace(/\+/g, '%20').replace(/%40/g, '@')}`
 }
 
-/** the shop's plain QR, with no amount (like the one on the bank's sheet): printed on fully paid bills so anyone can still scan and pay */
+/** the shop's plain QR, with no amount: the same form as the QR on the bank's own sheet, which every UPI app already scans. Printed on fully paid bills. */
 export function upiPlainLink(s: UpiSettings): string {
   const q = new URLSearchParams()
-  q.set('pa', s.id); q.set('pn', s.name); q.set('mc', s.mcc); q.set('cu', 'INR')
+  q.set('ver', '01'); q.set('mode', '01'); q.set('pa', s.id); q.set('pn', s.name); q.set('mc', s.mcc); q.set('qrMedium', '06')
   return `upi://pay?${q.toString().replace(/\+/g, '%20').replace(/%40/g, '@')}`
 }
 

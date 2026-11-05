@@ -47,6 +47,7 @@ export function InvoiceListPage() {
   const [search, setSearch]   = useState('')
   const [status, setStatus]   = useState('')
   const [txnType, setTxnType] = useState('')
+  const [sort, setSort]     = useState<'number' | 'date'>('date')   // new bills on top (newest number first)
   const [page, setPage]       = useState(1)
   const domainType = useAuthStore((s: any) => s.branch?.domainType ?? '')
   const isB2B = B2B_DOMAINS.has(domainType)
@@ -55,6 +56,7 @@ export function InvoiceListPage() {
     search:  search  || undefined,
     status:  status  || undefined,
     txnType: txnType || undefined,
+    sort,
     page,
     limit: 20,
   })
@@ -130,6 +132,10 @@ export function InvoiceListPage() {
             <option value="partial">Partially paid</option>
             <option value="converted">Converted</option>
             <option value="cancelled">Cancelled</option>
+          </select>
+          <select value={sort} onChange={e => { setSort(e.target.value as 'number' | 'date'); setPage(1) }} className="input w-52" title="Order of the list">
+            <option value="date">Newest first</option>
+            <option value="number">Bill number, oldest first</option>
           </select>
         </div>
 

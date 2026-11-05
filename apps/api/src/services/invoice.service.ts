@@ -452,6 +452,8 @@ export async function listInvoices(
     fromDate?: string
     toDate?:   string
     search?:   string
+    /** 'number' = by bill number, oldest first (the book order: 1, 2, 3 …; a series such as 2W- after the plain one); default newest date first, and the bills of one day newest number first (so the list reads 122, 121, 120 …) */
+    sort?:     'date' | 'number'
     page?:     number
     limit?:    number
   }
@@ -478,6 +480,10 @@ export async function listInvoices(
   // Search: bill number or customer name / mobile, each "starts with". Done as two index-driven look-ups merged in SQL —
   // the old single OR over a relation filter read every bill (1.5 s at a million bills). Uses the lower(...)
   // text_pattern_ops indexes from tyre-ddl.ts (idx_inv_number_lower, idx_parties_name_lower, idx_parties_phone_pat).
+  const byNumber = filters.sort === 'number'
+  // series prefix first, then the running number: "93" < "94" < "117", "2W-1" < "2W-2" (a plain text sort would put 117 before 93)
+  const numKey = Prisma.sql`regexp_replace(i.number, '[0-9]+$', ''), COALESCE(NULLIF(substring(i.number from '[0-9]{1,15}$'), '')::bigint, 0), i.number`
+  const orderBy = byNumber ? Prisma.sql`${numKey}, i.id` : Prisma.sql`i.date DESC, regexp_replace(i.number, '[0-9]+$', ''), COALESCE(NULLIF(substring(i.number from '[0-9]{1,15}$'), '')::bigint, 0) DESC, i.number DESC, i.id`
   const term = filters.search?.trim().slice(0, 60)
   let hitIds: string[] | null = null
   let hitTotal = 0
@@ -497,19 +503,33 @@ export async function listInvoices(
     // sorting every bill; the count is capped for the same reason (10,000 is "plenty — narrow it down").
     const K = skip + limit
     const side = (where: Prisma.Sql, n: number, ordered: boolean) => Prisma.sql`
-      SELECT i.id, i.date FROM invoices i WHERE ${base} AND ${where} ${ordered ? Prisma.sql`ORDER BY i.date DESC, i.id` : Prisma.empty} LIMIT ${n}`
+      SELECT i.id, i.date, i.number FROM invoices i WHERE ${base} AND ${where} ${ordered ? Prisma.sql`ORDER BY ${orderBy}` : Prisma.empty} LIMIT ${n}`
     const byNumber = Prisma.sql`lower(i.number) LIKE ${like}`
     const byCustomer = Prisma.sql`i."partyId" IN (${byParty})`
     const [rows, counted] = await Promise.all([
       ctx.db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
         WITH m AS ((${side(byNumber, K, true)}) UNION (${side(byCustomer, K, true)}))
-        SELECT id::text AS id FROM m ORDER BY date DESC, id LIMIT ${limit} OFFSET ${skip}`),
+        SELECT m.id::text AS id FROM m JOIN invoices i ON i.id = m.id ORDER BY ${orderBy} LIMIT ${limit} OFFSET ${skip}`),
       ctx.db.$queryRaw<Array<{ n: number }>>(Prisma.sql`
         SELECT COUNT(*)::int AS n FROM ((${side(byNumber, SEARCH_COUNT_CAP, false)}) UNION (${side(byCustomer, SEARCH_COUNT_CAP, false)})) x`),
     ])
     hitIds = rows.map((r) => r.id)
     hitTotal = Math.min(counted[0]?.n ?? 0, SEARCH_COUNT_CAP)
     hitCapped = (counted[0]?.n ?? 0) >= SEARCH_COUNT_CAP
+  }
+
+  // pick the page's ids first (newest date first, bills of one day in bill-number order — or purely by number), the rows follow below
+  if (!hitIds) {
+    const cond: Prisma.Sql[] = [Prisma.sql`i."branchId" = ${ctx.branchId}::uuid`]
+    if (filters.txnType) cond.push(Prisma.sql`i."txnType" = ${filters.txnType}`)
+    if (filters.status)  cond.push(Prisma.sql`i.status = ${filters.status}`)
+    if (filters.partyId) cond.push(Prisma.sql`i."partyId" = ${filters.partyId}::uuid`)
+    if (filters.fromDate) cond.push(Prisma.sql`i.date >= ${filters.fromDate}::date`)
+    if (filters.toDate)   cond.push(Prisma.sql`i.date <= ${filters.toDate}::date`)
+    const rows = await ctx.db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT i.id::text AS id FROM invoices i WHERE ${Prisma.join(cond, ' AND ')} ORDER BY ${orderBy} LIMIT ${limit} OFFSET ${skip}`)
+    hitIds = rows.map((r) => r.id)
+    hitTotal = await ctx.db.invoice.count({ where })
   }
 
   const [invoices, total] = await Promise.all([
@@ -532,6 +552,7 @@ export async function listInvoices(
     ? await ctx.db.invoiceItem.groupBy({ by: ['invoiceId'], where: { invoiceId: { in: invoices.map((i) => i.id) } }, _count: { _all: true } })
     : []
   const lines = new Map(counts.map((c) => [c.invoiceId, c._count._all]))
+  if (hitIds) { const at = new Map(hitIds.map((id, k) => [id, k])); invoices.sort((a, b) => (at.get(a.id) ?? 0) - (at.get(b.id) ?? 0)) }
 
   return {
     data: invoices.map((i) => ({ ...i, _count: { items: lines.get(i.id) ?? 0 } })),

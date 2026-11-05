@@ -598,6 +598,11 @@ export const tyreApi = {
   createSale: (data: unknown, idempotencyKey?: string) =>
     api.post('/tyre/sales', data, idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined).then((r) => r.data),
   getSale:  (invoiceId: string) => api.get(`/tyre/sales/${invoiceId}`).then((r) => r.data),
+  /** replace a wrong bill by a corrected one (same number and date); the old copy is kept, cancelled */
+  correctSale: (invoiceId: string, data: unknown, idempotencyKey?: string) =>
+    api.post(`/tyre/sales/${invoiceId}/correct`, data, idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined).then((r) => r.data),
+  /** fix words on a bill (vehicle, make, km, notes, a walk-in customer's name) — never money or stock */
+  editSaleDetails: (invoiceId: string, data: unknown) => api.patch(`/tyre/sales/${invoiceId}/details`, data).then((r) => r.data),
 
   // Vehicles + reminders
   listVehicles:  (params?: Record<string, unknown>) => api.get('/tyre/vehicles', { params }).then((r) => r.data),

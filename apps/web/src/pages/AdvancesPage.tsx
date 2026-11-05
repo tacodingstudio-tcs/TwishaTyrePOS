@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useAdvances, useRecordAdvance, useAllocateAdvance } from '@/hooks/useApi'
 import { PartyIdSelect } from '@/components/ui/PartyCombobox'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { tyreApi } from '@/lib/api'
+import { api, tyreApi, invoiceApi, apiError } from '@/lib/api'
 import { useAuthStore } from '@/store/auth.store'
 import { format } from 'date-fns'
 import { Plus, X, CreditCard, CheckCircle } from 'lucide-react'
@@ -100,12 +100,31 @@ function RecordAdvanceModal({ onClose }: { onClose: () => void }) {
   )
 }
 
+/** the customer's unpaid sale bills, oldest first, each with what is still due */
+async function openBillsOf(partyId: string): Promise<Array<{ id: string; number: string; date: string; due: number }>> {
+  const res = await invoiceApi.list({ partyId, txnType: 'sale_invoice', limit: 100 })
+  const list: any[] = Array.isArray(res) ? res : res?.data ?? res?.items ?? []
+  return list
+    .filter((i) => !['cancelled', 'draft'].includes(String(i.status)))
+    .map((i) => ({ id: String(i.id), number: String(i.number), date: String(i.date), due: Math.round((Number(i.grandTotal) - Number(i.paidAmt)) * 100) / 100 }))
+    .filter((i) => i.due > 0.004)
+    .sort((a, b) => a.date.localeCompare(b.date))
+}
+
 function AllocateModal({ advance, onClose }: { advance: any; onClose: () => void }) {
   const allocateMut = useAllocateAdvance()
   const [rows, setRows] = useState([{ invoiceId: '', amount: '' }])
 
   const remaining = Number(advance.unallocatedAmt)
   const totalEntered = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0)
+  const partyId = String(advance.partyId ?? advance.party?.id ?? '')
+  const { data: bills = [], isLoading: billsLoading } = useQuery({ queryKey: ['advance-open-bills', partyId], queryFn: () => openBillsOf(partyId), enabled: !!partyId })
+  // the amount that goes with a chosen bill: what it still needs, but never more than the advance has left
+  const suggest = (billId: string, rowIdx: number) => {
+    const due = bills.find((b) => b.id === billId)?.due ?? 0
+    const others = rows.reduce((sum, r, idx) => sum + (idx === rowIdx ? 0 : Number(r.amount) || 0), 0)
+    return String(Math.max(0, Math.min(due, Math.round((remaining - others) * 100) / 100)))
+  }
 
   function addRow() { setRows(r => [...r, { invoiceId: '', amount: '' }]) }
   function removeRow(i: number) { setRows(r => r.filter((_, idx) => idx !== i)) }
@@ -133,13 +152,22 @@ function AllocateModal({ advance, onClose }: { advance: any; onClose: () => void
           <button type="button" onClick={onClose}><X className="w-5 h-5 text-gray-400" /></button>
         </div>
         <form onSubmit={submit} className="p-5 space-y-4">
-          <p className="text-xs text-gray-500">Enter invoice IDs to allocate against. You can find an invoice ID in its detail page URL.</p>
+          {billsLoading ? <p className="text-sm text-gray-400">Loading this customer's bills…</p>
+            : bills.length === 0 ? <p className="text-sm text-amber-700">This customer has no unpaid bills to allocate against.</p>
+            : <p className="text-xs text-gray-500">Pick the bill to settle with this advance. The amount fills in with what the bill still needs.</p>}
           <div className="space-y-2">
             {rows.map((row, i) => (
               <div key={i} className="flex gap-2 items-center">
-                <input type="text" placeholder="Invoice ID (UUID)" value={row.invoiceId}
-                  onChange={e => setRows(r => r.map((x, idx) => idx === i ? { ...x, invoiceId: e.target.value } : x))}
-                  className="flex-1 border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-xs" />
+                <select value={row.invoiceId}
+                  onChange={e => { const id = e.target.value; setRows(r => r.map((x, idx) => idx === i ? { ...x, invoiceId: id, amount: id ? suggest(id, i) : '' } : x)) }}
+                  className="flex-1 border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">Choose a bill…</option>
+                  {bills.map((b) => (
+                    <option key={b.id} value={b.id} disabled={rows.some((x, idx) => idx !== i && x.invoiceId === b.id)}>
+                      {b.number} · {format(new Date(b.date), 'dd MMM yyyy')} · due {formatINR(b.due)}
+                    </option>
+                  ))}
+                </select>
                 <input type="number" placeholder="Amount" min={0.01} step="0.01" value={row.amount}
                   onChange={e => setRows(r => r.map((x, idx) => idx === i ? { ...x, amount: e.target.value } : x))}
                   className="w-28 border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
@@ -151,8 +179,9 @@ function AllocateModal({ advance, onClose }: { advance: any; onClose: () => void
               </div>
             ))}
           </div>
-          <button type="button" onClick={addRow}
-            className="text-sm text-blue-600 hover:underline">+ Add another invoice</button>
+          {bills.length > rows.length && (
+            <button type="button" onClick={addRow} className="text-sm text-blue-600 hover:underline">+ Add another bill</button>
+          )}
           <div className="flex items-center justify-between text-sm pt-1">
             <span className="text-gray-500">Total allocating:</span>
             <span className={`font-semibold ${totalEntered > remaining ? 'text-red-600' : 'text-gray-900'}`}>
@@ -176,9 +205,41 @@ function AllocateModal({ advance, onClose }: { advance: any; onClose: () => void
 export default function AdvancesPage() {
   const [showRecord, setShowRecord]   = useState(false)
   const [allocating, setAllocating]   = useState<any>(null)
+  const allocateMut = useAllocateAdvance()
+  // one unpaid bill: settle it straight away (after a yes/no); several or none: open the picker
+  async function startAllocate(adv: any) {
+    try {
+      const partyId = String(adv.partyId ?? adv.party?.id ?? '')
+      const bills = partyId ? await openBillsOf(partyId) : []
+      if (bills.length === 1) {
+        const bill = bills[0]!
+        const amount = Math.min(bill.due, Math.round(Number(adv.unallocatedAmt) * 100) / 100)
+        if (amount > 0 && window.confirm(`Allocate ${formatINR(amount)} of this advance to bill ${bill.number} (due ${formatINR(bill.due)})?`)) {
+          await allocateMut.mutateAsync({ id: adv.id, allocations: [{ invoiceId: bill.id, amount }] })
+          toast.success(`${formatINR(amount)} allocated to bill ${bill.number}`)
+          return
+        }
+        if (amount > 0) return
+      }
+    } catch { /* fall through to the picker */ }
+    setAllocating(adv)
+  }
   const { data, isLoading } = useAdvances()
   // salary advances given to the team live in Team & Salary; show who still owes one so they are not "missing" from here
   const canManage = useAuthStore((st) => st.canManage)
+  const qc = useQueryClient()
+  // An advance entered by mistake: cancelled (kept in the payment records as "voided", with the reason) and the customer's balance goes back.
+  // Only while no bill has used it; one already allocated is first taken off the bill from its payments.
+  async function deleteAdvance(adv: any) {
+    if (!confirm(`Delete this advance of ${formatINR(Number(adv.amount))} from ${adv.party?.name ?? 'the customer'}?
+
+Use this only for an entry made by mistake.`)) return
+    try {
+      await api.post(`/payments/${adv.id}/void`, { reason: 'Advance entered by mistake' })
+      await qc.invalidateQueries()
+      toast.success('Advance deleted')
+    } catch (e) { toast.error(apiError(e)) }
+  }
   const { data: staffData } = useQuery({ queryKey: ['team-staff-advances'], queryFn: () => tyreApi.teamStaff(), retry: false, enabled: canManage() })
   const staffAdv: any[] = (Array.isArray(staffData) ? staffData : staffData?.data ?? []).filter((p: any) => Number(p.advanceOutstanding) > 0)
   const advances = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : []
@@ -281,16 +342,24 @@ export default function AdvancesPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {fullyAllocated ? (
-                        <span className="inline-flex items-center gap-1 text-xs text-green-600">
-                          <CheckCircle className="w-3.5 h-3.5" /> Done
-                        </span>
-                      ) : (
-                        <button type="button" onClick={() => setAllocating(adv)}
-                          className="inline-flex items-center gap-1 text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700">
-                          <CreditCard className="w-3 h-3" /> Allocate
-                        </button>
-                      )}
+                      <div className="inline-flex items-center gap-2 justify-end">
+                        {fullyAllocated ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-green-600">
+                            <CheckCircle className="w-3.5 h-3.5" /> Done
+                          </span>
+                        ) : (
+                          <button type="button" onClick={() => void startAllocate(adv)}
+                            className="inline-flex items-center gap-1 text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700">
+                            <CreditCard className="w-3 h-3" /> Allocate
+                          </button>
+                        )}
+                        {canManage() && Number(adv.allocatedAmt) === 0 && (
+                          <button type="button" onClick={() => void deleteAdvance(adv)} title="Delete this advance (entered by mistake)"
+                            className="inline-flex items-center gap-1 text-xs text-red-600 border border-red-200 px-2.5 py-1.5 rounded hover:bg-red-50">
+                            Delete
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 )

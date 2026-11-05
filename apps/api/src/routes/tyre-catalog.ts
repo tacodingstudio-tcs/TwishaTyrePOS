@@ -16,6 +16,12 @@ import { tbl, q, branchConfig } from '../lib/tyre-helpers.js'
 const SIZE_KEY = `UPPER(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(COALESCE(p."domainAttrs"->>'size',''),
   '(?i)[zvhst]r', 'R', 'g'), '-r?', 'R', 'gi'), '[^A-Za-z0-9./]', '', 'g'))`
 const SIZE_DIGITS = `REGEXP_REPLACE(COALESCE(p."domainAttrs"->>'size',''), '[^0-9]', '', 'g')`
+// Size order for lists and chips: rim, then width, then profile (145/80 R12, 155/65 R13, 155/70 R13, 165/80 R14 ...). Anything that does not
+// parse (an odd spelling, no size) goes last. `key` is a canonical size such as 205/55R16, 90/90R17, 10.00R20 or 295/80R22.5.
+const sizeNum = (e: string) => `(CASE WHEN ${e} ~ '^[0-9]+([.][0-9]+)?$' THEN (${e})::numeric END)`
+const sizeOrder = (key: string) =>
+  `${sizeNum(`substring(${key} from 'R([0-9.]+)$')`)} NULLS LAST, ${sizeNum(`substring(${key} from '^([0-9.]+)')`)} NULLS LAST, ` +
+  `${sizeNum(`substring(${key} from '^[0-9.]+/([0-9.]+)')`)} NULLS LAST`
 
 export const tyreCatalogRoutes: FastifyPluginAsync = async (app) => {
 
@@ -71,7 +77,7 @@ export const tyreCatalogRoutes: FastifyPluginAsync = async (app) => {
        ${where}
        GROUP BY p.id
        ${having}
-       ORDER BY (COALESCE(SUM(sl.qty), 0) > 0) DESC, p."domainAttrs"->>'brand', p."salePrice"
+       ORDER BY ${sizeOrder(SIZE_KEY)}, p."domainAttrs"->>'brand', p."salePrice"
        LIMIT $${params.length}`, ...params)
 
     return {
@@ -99,7 +105,7 @@ export const tyreCatalogRoutes: FastifyPluginAsync = async (app) => {
                    WHERE "branchId" = $1::uuid GROUP BY "productId") sl ON sl."productId" = p.id
        WHERE p."branchId" = $1::uuid AND p."isActive" = true AND p."itemType" <> 'service'
          AND COALESCE(p."domainAttrs"->>'item_kind','tyre') = 'tyre'
-       GROUP BY ${SIZE_DIGITS} ORDER BY stock DESC, size LIMIT 200`, req.branchId)
+       GROUP BY ${SIZE_DIGITS} ORDER BY ${sizeOrder(`MIN(${SIZE_KEY})`)}, size LIMIT 200`, req.branchId)
   })
 
   // GET /api/tyre/brands — brands in the catalogue (for pickers)

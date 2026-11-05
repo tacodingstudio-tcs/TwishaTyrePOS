@@ -56,6 +56,7 @@ for (const [w, h] of [[1400, 900], [1024, 576], [390, 844]] as Array<[number, nu
   const u = new URL(link.replace('upi://', 'http://x/'))
   check(u.searchParams.get('pa') === 'shaktienterprise@gscb', `${size}: pays shaktienterprise@gscb`)
   check(u.searchParams.get('am') === due.toFixed(2), `${size}: amount ${u.searchParams.get('am')} = balance ${due.toFixed(2)}`)
+  check(/^[A-Za-z0-9]{1,35}$/.test(u.searchParams.get('tr') ?? ''), `${size}: has a transaction reference (tr) ${u.searchParams.get('tr')}`)
   check(u.searchParams.get('cu') === 'INR' && /Bill/.test(u.searchParams.get('tn') ?? ''), `${size}: INR and the bill number in the note`)
   const fits = await page.evaluate(() => { const d = document.querySelector('[role="dialog"]'); if (!d) return false; const r = d.getBoundingClientRect(); return r.top >= 0 && r.left >= 0 && r.right <= innerWidth + 1 && (r.bottom <= innerHeight + 1 || getComputedStyle(d).overflowY === 'auto') })
   check(fits, `${size}: the card is inside the window (or scrolls)`)

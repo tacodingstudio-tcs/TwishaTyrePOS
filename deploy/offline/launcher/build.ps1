@@ -21,5 +21,7 @@ if ($LASTEXITCODE -ne 0) { throw "compile failed (TwishaPOS.exe)" }
 & $csc /nologo /target:winexe /optimize+ "/out:$Out\Backup.exe" "/win32icon:$PSScriptRoot\twisha.ico" "/win32manifest:$manifest" `
   /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll "$PSScriptRoot\Backup.cs"
 if ($LASTEXITCODE -ne 0) { throw "compile failed (Backup.exe)" }
+& $csc /nologo /target:winexe /optimize+ "/out:$Out\TwishaKill.exe" "$PSScriptRoot\TwishaKill.cs"
+if ($LASTEXITCODE -ne 0) { throw "compile failed (TwishaKill.exe)" }
 Remove-Item $manifest
 "built $Out\TwishaPOS.exe ($([math]::Round((Get-Item $Out\TwishaPOS.exe).Length/1KB)) KB) and Backup.exe ($([math]::Round((Get-Item $Out\Backup.exe).Length/1KB)) KB)"
