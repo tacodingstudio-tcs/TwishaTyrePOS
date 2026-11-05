@@ -4,7 +4,7 @@ import { ValidatedInput } from '@/components/ui/ValidatedInput'
 import { check, firstError } from '@/lib/validate'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { Search, Plus, Minus, Trash2, Car, Wrench, Recycle, AlertTriangle, CircleDot, Wind, Gauge, RotateCw, Droplets, Settings2, Check } from 'lucide-react'
 import { tyreApi, branchApi, invoiceApi, apiError } from '@/lib/api'
@@ -100,6 +100,7 @@ function serviceIcon(s: any): React.ElementType {
 export function QuickSalePage() {
   const navigate = useNavigate()
   const [sp] = useSearchParams()
+  const corrReason = (useLocation().state as { reason?: string } | null)?.reason
   const role = useAuthStore((s) => s.user?.role)
   const readOnly = role === 'viewer'
   void sp                                               // an old ?mode=service link simply opens this same page
@@ -332,6 +333,7 @@ export function QuickSalePage() {
         exchange: exch > 0 && Number(exchQty) > 0 ? { qty: Number(exchQty), value: exch } : undefined,
         payments,
         notes: notes.trim() || undefined,
+        reason: correctId ? corrReason : undefined,
         // charges (alignment, balancing …) are lines of the bill too
         charges: CHARGE_LABELS.map((k) => ({ label: k, amount: Number(charges[k]) || 0 })).filter((c) => c.amount > 0),
       }, attemptKey.current)

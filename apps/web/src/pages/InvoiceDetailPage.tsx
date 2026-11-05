@@ -94,6 +94,8 @@ export function InvoiceDetailPage() {
   const [showDetails, setShowDetails] = useState(false)
   const [det, setDet] = useState({ vehicleNo: '', makeModel: '', odometer: '', notes: '', customerName: '', customerAddress: '' })
   const [savingDet, setSavingDet] = useState(false)
+  const [showCorrect, setShowCorrect] = useState(false)
+  const [corrReason, setCorrReason] = useState('')
 
   if (isLoading) return <div className="p-8 text-gray-400">Loading...</div>
   if (!invoice)  return <div className="p-8 text-gray-400">Invoice not found</div>
@@ -301,7 +303,7 @@ export function InvoiceDetailPage() {
               </button>
             )}
             {canCorrect && (
-              <button type="button" onClick={() => navigate(`/tyre/sale?correct=${id}`)} className="btn-primary bg-amber-600 hover:bg-amber-700"
+              <button type="button" onClick={() => (Number(invoice.paidAmt) > 0 ? setShowCorrect(true) : navigate(`/tyre/sale?correct=${id}`))} className="btn-primary bg-amber-600 hover:bg-amber-700"
                 title="Wrong tyre or amount? Make the right bill — same number and date">
                 <Pencil className="w-4 h-4" /> Correct bill
               </button>
@@ -495,6 +497,28 @@ export function InvoiceDetailPage() {
               <button type="button" onClick={handleSendReceipt} disabled={sendReceipt.isPending || !shareTo || !!check(shareChannel === 'whatsapp' ? 'mobile' : 'email', shareTo)} className="btn-primary flex-1 justify-center">
                 <Send className="w-4 h-4" /> {sendReceipt.isPending ? 'Sending…' : 'Send'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCorrect && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl space-y-3">
+            <h3 className="text-base font-semibold text-gray-900">Correct bill {String(invoice.number)}?</h3>
+            <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded p-3">
+              This bill {Number(invoice.paidAmt) >= Number(invoice.grandTotal) - 0.5 ? 'is fully paid' : 'has a payment'} ({formatINR(Number(invoice.paidAmt))}).
+              Correcting it <b>replaces the payment record</b>: the old payment is cancelled, stock and the customer's balance are put right,
+              and you enter the payment again on the corrected bill. The old copy stays on record as cancelled.
+            </p>
+            <div>
+              <label className="label" htmlFor="corr-reason">Why is it being corrected? <span className="text-red-500">*</span></label>
+              <input id="corr-reason" className="input" maxLength={200} autoFocus placeholder="e.g. wrong tyre picked" value={corrReason} onChange={(e) => setCorrReason(e.target.value)} />
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setShowCorrect(false)} className="btn-ghost flex-1 justify-center">Not now</button>
+              <button type="button" disabled={corrReason.trim().length < 3} className="btn-primary bg-amber-600 hover:bg-amber-700 flex-1 justify-center"
+                onClick={() => navigate(`/tyre/sale?correct=${id}`, { state: { reason: corrReason.trim() } })}>Continue to correct</button>
             </div>
           </div>
         </div>

@@ -454,6 +454,8 @@ export async function listInvoices(
     search?:   string
     /** 'number' = by bill number, oldest first (the book order: 1, 2, 3 …; a series such as 2W- after the plain one); default newest date first, and the bills of one day newest number first (so the list reads 122, 121, 120 …) */
     sort?:     'date' | 'number'
+    /** how it was paid: a method that took part in the payment, or 'credit' = a balance is still due (sale bills) */
+    payMode?:  'cash' | 'upi' | 'card' | 'bank_transfer' | 'cheque' | 'credit'
     page?:     number
     limit?:    number
   }
@@ -484,6 +486,11 @@ export async function listInvoices(
   // series prefix first, then the running number: "93" < "94" < "117", "2W-1" < "2W-2" (a plain text sort would put 117 before 93)
   const numKey = Prisma.sql`regexp_replace(i.number, '[0-9]+$', ''), COALESCE(NULLIF(substring(i.number from '[0-9]{1,15}$'), '')::bigint, 0), i.number`
   const orderBy = byNumber ? Prisma.sql`${numKey}, i.id` : Prisma.sql`i.date DESC, regexp_replace(i.number, '[0-9]+$', ''), COALESCE(NULLIF(substring(i.number from '[0-9]{1,15}$'), '')::bigint, 0) DESC, i.number DESC, i.id`
+  const payCond: Prisma.Sql | null = !filters.payMode ? null
+    : filters.payMode === 'credit'
+      ? Prisma.sql`(i."txnType" = 'sale_invoice' AND i.status NOT IN ('cancelled', 'draft') AND i."grandTotal" - i."paidAmt" > 0.5)`
+      : Prisma.sql`EXISTS (SELECT 1 FROM payment_allocations pa JOIN payments p ON p.id = pa."paymentId"
+                           WHERE pa."invoiceId" = i.id AND p.status = 'active' AND p.method = ${filters.payMode})`
   const term = filters.search?.trim().slice(0, 60)
   let hitIds: string[] | null = null
   let hitTotal = 0
@@ -497,6 +504,7 @@ export async function listInvoices(
     if (filters.partyId) cond.push(Prisma.sql`i."partyId" = ${filters.partyId}::uuid`)
     if (filters.fromDate) cond.push(Prisma.sql`i.date >= ${filters.fromDate}::date`)
     if (filters.toDate)   cond.push(Prisma.sql`i.date <= ${filters.toDate}::date`)
+    if (payCond) cond.push(payCond)
     const base = Prisma.join(cond, ' AND ')
     const byParty = Prisma.sql`SELECT p.id FROM parties p WHERE lower(p.name) LIKE ${like} ${phoneLike ? Prisma.sql`OR p.phone LIKE ${phoneLike}` : Prisma.empty}`
     // Each side only needs its newest (skip + limit) rows, so a very broad word ("LT-", "Customer") stops early instead of
@@ -526,10 +534,13 @@ export async function listInvoices(
     if (filters.partyId) cond.push(Prisma.sql`i."partyId" = ${filters.partyId}::uuid`)
     if (filters.fromDate) cond.push(Prisma.sql`i.date >= ${filters.fromDate}::date`)
     if (filters.toDate)   cond.push(Prisma.sql`i.date <= ${filters.toDate}::date`)
+    if (payCond) cond.push(payCond)
     const rows = await ctx.db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT i.id::text AS id FROM invoices i WHERE ${Prisma.join(cond, ' AND ')} ORDER BY ${orderBy} LIMIT ${limit} OFFSET ${skip}`)
     hitIds = rows.map((r) => r.id)
-    hitTotal = await ctx.db.invoice.count({ where })
+    hitTotal = payCond
+      ? Number((await ctx.db.$queryRaw<Array<{ n: number }>>(Prisma.sql`SELECT COUNT(*)::int AS n FROM invoices i WHERE ${Prisma.join(cond, ' AND ')}`))[0]?.n ?? 0)
+      : await ctx.db.invoice.count({ where })
   }
 
   const [invoices, total] = await Promise.all([
@@ -552,10 +563,26 @@ export async function listInvoices(
     ? await ctx.db.invoiceItem.groupBy({ by: ['invoiceId'], where: { invoiceId: { in: invoices.map((i) => i.id) } }, _count: { _all: true } })
     : []
   const lines = new Map(counts.map((c) => [c.invoiceId, c._count._all]))
+  // how each bill was paid, for the list: the methods that took part (largest first), plus Credit while a balance is due
+  const methods = invoices.length
+    ? await ctx.db.paymentAllocation.findMany({
+        where: { invoiceId: { in: invoices.map((i) => i.id) }, payment: { status: 'active', method: { not: 'exchange' } } },
+        select: { invoiceId: true, amount: true, payment: { select: { method: true } } },
+      })
+    : []
+  const NAME: Record<string, string> = { cash: 'Cash', upi: 'UPI', card: 'Card', bank_transfer: 'Bank', cheque: 'Cheque' }
+  const modeOf = (inv: { id: string; txnType: string; status: string; grandTotal: unknown; paidAmt: unknown }): string | null => {
+    if (inv.txnType !== 'sale_invoice' || inv.status === 'cancelled' || inv.status === 'draft') return null
+    const by = new Map<string, number>()
+    for (const m of methods) if (m.invoiceId === inv.id) by.set(m.payment.method, (by.get(m.payment.method) ?? 0) + Number(m.amount))
+    const parts = [...by.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => NAME[k] ?? k)
+    if (Number(inv.grandTotal) - Number(inv.paidAmt) > 0.5) parts.push('Credit')
+    return parts.length ? parts.join(' + ') : null
+  }
   if (hitIds) { const at = new Map(hitIds.map((id, k) => [id, k])); invoices.sort((a, b) => (at.get(a.id) ?? 0) - (at.get(b.id) ?? 0)) }
 
   return {
-    data: invoices.map((i) => ({ ...i, _count: { items: lines.get(i.id) ?? 0 } })),
+    data: invoices.map((i) => ({ ...i, paymentMode: modeOf(i), _count: { items: lines.get(i.id) ?? 0 } })),
     meta: { page, limit, total, totalPages: Math.ceil(total / limit), ...(hitCapped ? { capped: true } : {}) },
   }
 }

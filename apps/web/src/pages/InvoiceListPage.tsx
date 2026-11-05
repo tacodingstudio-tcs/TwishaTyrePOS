@@ -47,6 +47,7 @@ export function InvoiceListPage() {
   const [search, setSearch]   = useState('')
   const [status, setStatus]   = useState('')
   const [txnType, setTxnType] = useState('')
+  const [payMode, setPayMode] = useState('')
   const [sort, setSort]     = useState<'number' | 'date'>('date')   // new bills on top (newest number first)
   const [page, setPage]       = useState(1)
   const domainType = useAuthStore((s: any) => s.branch?.domainType ?? '')
@@ -57,6 +58,7 @@ export function InvoiceListPage() {
     status:  status  || undefined,
     txnType: txnType || undefined,
     sort,
+    payMode: payMode || undefined,
     page,
     limit: 20,
   })
@@ -133,6 +135,15 @@ export function InvoiceListPage() {
             <option value="converted">Converted</option>
             <option value="cancelled">Cancelled</option>
           </select>
+          <select value={payMode} onChange={e => { setPayMode(e.target.value); setPage(1) }} className="input w-44" title="How it was paid">
+            <option value="">Paid by: all</option>
+            <option value="cash">Cash</option>
+            <option value="upi">UPI</option>
+            <option value="card">Card</option>
+            <option value="bank_transfer">Bank</option>
+            <option value="cheque">Cheque</option>
+            <option value="credit">Credit (balance due)</option>
+          </select>
           <select value={sort} onChange={e => { setSort(e.target.value as 'number' | 'date'); setPage(1) }} className="input w-52" title="Order of the list">
             <option value="date">Newest first</option>
             <option value="number">Bill number, oldest first</option>
@@ -149,13 +160,14 @@ export function InvoiceListPage() {
                 <th className="text-left px-3 lg:px-5 py-3 font-medium text-gray-500">Party</th>
                 <th className="text-left px-3 lg:px-5 py-3 font-medium text-gray-500">Date</th>
                 <th className="text-right px-3 lg:px-5 py-3 font-medium text-gray-500">Amount</th>
+                <th className="text-left px-3 lg:px-5 py-3 font-medium text-gray-500">Paid by</th>
                 <th className="text-left px-3 lg:px-5 py-3 font-medium text-gray-500">Status</th>
                 <th className="text-right px-3 lg:px-5 py-3 font-medium text-gray-500">Print</th>
               </tr>
             </thead>
             <tbody>
               {isLoading && (
-                <tr><td colSpan={7} className="text-center py-12 text-gray-400">Loading…</td></tr>
+                <tr><td colSpan={8} className="text-center py-12 text-gray-400">Loading…</td></tr>
               )}
               {!isLoading && data?.data?.length === 0 && (
                 <tr><td colSpan={7} className="text-center py-12 text-gray-400">No documents found</td></tr>
@@ -179,6 +191,7 @@ export function InvoiceListPage() {
                   <td className="px-3 lg:px-5 py-3 text-right font-semibold text-gray-900 whitespace-nowrap">
                     {formatINR(Number(inv.grandTotal))}
                   </td>
+                  <td className="px-3 lg:px-5 py-3 whitespace-nowrap text-gray-700">{inv.paymentMode ?? <span className="text-gray-300">—</span>}</td>
                   <td className="px-3 lg:px-5 py-3"><StatusBadge status={inv.status} /></td>
                   <td className="px-3 lg:px-5 py-3 text-right whitespace-nowrap">
                     {inv.txnType === 'sale_invoice' && inv.status !== 'cancelled' && inv.status !== 'draft'

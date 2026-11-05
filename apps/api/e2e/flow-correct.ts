@@ -35,6 +35,11 @@ await page.waitForFunction(() => !location.pathname.startsWith('/login'), { time
 await page.goto(`${WEB}/invoices/${id}`, { waitUntil: 'networkidle2' })
 const clickBtn = async (re: RegExp) => { for (const h of await page.$$('button')) { if (re.test(await h.evaluate((e) => e.textContent ?? ''))) { await h.click(); return true } } return false }
 check('Correct bill button is on the bill', await clickBtn(/Correct bill/))
+// a paid bill: a warning appears first and a reason is required
+await page.waitForFunction(() => document.body.innerText.includes('replaces the payment record'), { timeout: 8000 }).then(() => check('a paid bill shows the warning first', true), () => check('a paid bill shows the warning first', false))
+check('Continue is disabled until a reason is typed', await page.evaluate(() => Array.from(document.querySelectorAll('button')).find((b) => /Continue to correct/.test(b.textContent ?? ''))?.hasAttribute('disabled') ?? false))
+await page.type('#corr-reason', 'e2e: wrong tyre picked')
+await clickBtn(/Continue to correct/)
 await page.waitForFunction(() => location.pathname === '/tyre/sale', { timeout: 10000 })
 await page.waitForFunction((n) => document.body.innerText.includes('Correcting bill ' + n), { timeout: 10000 }, number)
 await sleep(800)
@@ -70,5 +75,10 @@ check('same number, same date', fresh.number === number && String(fresh.date).sl
 check('old copy cancelled and renamed', old.status === 'cancelled' && old.number === `${number}-OLD`, `${old.status} ${old.number}`)
 check('stock follows (old tyre back, new tyre out)', (await stock(a.id)) === sA + 1 && (await stock(b.id)) === sB - 1)
 check('no page errors', errs.length === 0, errs.join(' | ').slice(0, 200))
+await page.goto(`${WEB}/invoices`, { waitUntil: 'networkidle2' })
+await sleep(800)
+const listText = await page.evaluate(() => document.body.innerText)
+check('the bills list has a Paid by column and filter', /Paid by/.test(listText) && /Cash|UPI|Credit/.test(listText))
+await page.screenshot({ path: `${OUT}/correct-4-list.png` })
 await browser.close()
 console.log(bad ? `\n${bad} check(s) failed` : '\nAll checks passed'); process.exit(bad ? 1 : 0)

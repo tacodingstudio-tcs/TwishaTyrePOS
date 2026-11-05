@@ -203,4 +203,32 @@ describe('Correct this bill', () => {
     const adv2 = await owner.api.post('/api/invoices/advances', { partyId, amount: 100, method: 'cash' }, { headers: { 'Idempotency-Key': crypto.randomUUID() } })
     expect((await u.api.post(`/api/payments/${adv2.data.id}/void`, { reason: 'x' })).status).toBe(403)         // a cashier cannot
   })
+
+  test('All Bills shows how each bill was paid and can be filtered by it (cash, UPI, credit …)', async () => {
+    const mk = async (tag: string, payments: unknown[]) => (await sale({ customer: { name: `Mode ${tag}`, phone: phone() }, items: [{ productId: a.id, qty: 1 }], payments })).data.invoice
+    const cashB = await mk('cash', cash(5900)), upiB = await mk('upi', [{ method: 'upi', amount: 5900 }])
+    const splitB = await mk('split', [{ method: 'cash', amount: 3000 }, { method: 'upi', amount: 2900 }])
+    const creditB = await mk('credit', []), partB = await mk('part', cash(2000))
+    const list = async (payMode?: string) => (await owner.api.get('/api/invoices', { params: { limit: 100, txnType: 'sale_invoice', ...(payMode ? { payMode } : {}) } })).data
+    const all = (await list()).data as any[]
+    const mode = (b: any) => all.find((x) => x.id === b.id)?.paymentMode
+    expect(mode(cashB)).toBe('Cash'); expect(mode(upiB)).toBe('UPI'); expect(mode(splitB)).toMatch(/^(Cash \+ UPI|UPI \+ Cash)$/)
+    expect(mode(creditB)).toBe('Credit'); expect(mode(partB)).toBe('Cash + Credit')
+    const ids = async (m: string) => new Set(((await list(m)).data as any[]).map((x) => x.id))
+    const cashIds = await ids('cash'), upiIds = await ids('upi'), creditIds = await ids('credit')
+    expect(cashIds.has(cashB.id) && cashIds.has(splitB.id) && cashIds.has(partB.id)).toBe(true)
+    expect(cashIds.has(upiB.id) || cashIds.has(creditB.id)).toBe(false)
+    expect(upiIds.has(upiB.id) && upiIds.has(splitB.id)).toBe(true); expect(upiIds.has(cashB.id)).toBe(false)
+    expect(creditIds.has(creditB.id) && creditIds.has(partB.id)).toBe(true); expect(creditIds.has(cashB.id)).toBe(false)
+    // the filter keeps the count honest and combines with search and the number order
+    const m = (await list('credit')).meta; expect(m.total).toBe(creditIds.size)
+    expect(((await owner.api.get('/api/invoices', { params: { payMode: 'credit', search: 'Mode cred', sort: 'number' } })).data.data as any[]).map((x) => x.id)).toEqual([creditB.id])
+    expect((await owner.api.get('/api/invoices', { params: { payMode: 'bogus' } })).status).toBe(422)
+    // a cancelled (corrected) bill shows no mode
+    const fixed = await correct(cashB.id, { customer: { name: 'Mode cash', phone: phone() }, items: [{ productId: a.id, qty: 1 }], payments: [{ method: 'upi', amount: 5900 }], reason: 'paid by UPI actually' })
+    expect(fixed.status).toBe(201)
+    const after = (await list()).data as any[]
+    expect(after.find((x) => x.id === cashB.id)?.paymentMode ?? null).toBeNull()
+    expect(after.find((x) => x.id === fixed.data.invoice.id)?.paymentMode).toBe('UPI')
+  })
 })
