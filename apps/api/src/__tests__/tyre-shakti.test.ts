@@ -308,7 +308,7 @@ describe('Reminder rules: 0 days switches a reminder off', () => {
 })
 
 describe('Excel product import', () => {
-  test('preview changes nothing; import creates, then a second sheet updates prices and ADDS stock', async () => {
+  test('preview changes nothing; import creates, then a second sheet updates prices and adds stock ONLY when asked', async () => {
     const { addStaff } = await import('./helpers')
     const owner = await newShopTenant('Shakti Product Import')
     const cashier = await addStaff(owner, 'cashier')
@@ -335,13 +335,17 @@ describe('Excel product import', () => {
     expect([y.stock, y.salePrice, y.lowStockQty]).toEqual([8, 6900, 4])
     expect(y.domainAttrs).toMatchObject({ size: '195/65 R15', brand: 'Yokohama', vehicle_type: 'car' })
 
-    // a second delivery: same item, new price, 6 more received
-    const again = (await imp(owner, { rows: [{ brand: 'Yokohama', size: '195/65 R15', salePrice: 7100, stock: 6 }] })).data
+    // the SAME sheet again must not double the shelf: prices update, stock does not move, and the report says what was held back
+    const twice = (await imp(owner, { rows })).data
+    expect(twice).toMatchObject({ created: 0, updated: 3, failed: 1, stockAdded: 0, stockSkipped: 38 })
+    expect((await stockOf('Yokohama 195/65 R15')).stock).toBe(8)
+    // a second delivery: same item, new price, 6 more received - added only when the owner ticks "add to existing stock"
+    const again = (await imp(owner, { rows: [{ brand: 'Yokohama', size: '195/65 R15', salePrice: 7100, stock: 6 }], addToExisting: true })).data
     expect(again).toMatchObject({ created: 0, updated: 1, failed: 0, stockAdded: 6 })
     const y2 = await stockOf('Yokohama 195/65 R15')
     expect([y2.stock, y2.salePrice]).toEqual([14, 7100])
     // the same tyre typed another way is recognised, not duplicated
-    const alt = (await imp(owner, { rows: [{ brand: 'yokohama', size: '195/65R15', stock: 1 }] })).data
+    const alt = (await imp(owner, { rows: [{ brand: 'yokohama', size: '195/65R15', stock: 1 }], addToExisting: true })).data
     expect(alt).toMatchObject({ created: 0, updated: 1 })
     expect((await stockOf('Yokohama 195/65 R15')).stock).toBe(15)
     // categorised, so the Tyres & Items chips find them

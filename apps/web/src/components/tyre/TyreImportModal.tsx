@@ -147,8 +147,10 @@ export function TyreImportModal({ onClose }: { onClose: () => void }) {
     onError: (e) => toast.error(apiError(e)),
   })
 
+  // false (default): a tyre that is already in the list gets its prices updated but its Stock column is NOT added again
+  const [addToExisting, setAddToExisting] = useState(false)
   const run = useMutation({
-    mutationFn: (dryRun: boolean) => api.post('/tyre/import/products', { rows: rows.map(toPayload), dryRun }).then((r) => r.data),
+    mutationFn: (dryRun: boolean) => api.post('/tyre/import/products', { rows: rows.map(toPayload), dryRun, addToExisting }).then((r) => r.data),
     onSuccess: (d, dryRun) => {
       setReport(d)
       if (!dryRun) {
@@ -171,7 +173,7 @@ export function TyreImportModal({ onClose }: { onClose: () => void }) {
           <div>
             <h3 className="text-base font-semibold text-gray-900">Add many tyres at once</h3>
             <p className="text-xs text-gray-500 mt-0.5">
-              New tyres are created. A tyre that already exists gets its prices updated and the Stock column <b>added</b> to what is on the shelf.
+              New tyres are created with their stock. A tyre that is already in your list gets its prices updated — its stock is <b>not</b> added again, unless you tick the box below.
             </p>
           </div>
           <button type="button" onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600" aria-label="Close"><X className="w-5 h-5" /></button>
@@ -254,7 +256,7 @@ export function TyreImportModal({ onClose }: { onClose: () => void }) {
                           {res && (res.action === 'error'
                             ? <span className="text-red-600">{res.error}</span>
                             : <span className={res.action === 'create' ? 'text-green-700' : 'text-blue-700'}>
-                                {res.action === 'create' ? 'New tyre' : 'Update'}{res.stockAdded ? ` · +${res.stockAdded} stock` : ''}
+                                {res.action === 'create' ? 'New tyre' : 'Already in list'}{res.stockAdded ? ` · +${res.stockAdded} stock` : ''}{res.stockSkipped ? ` · stock ${res.stockSkipped} not added` : ''}
                               </span>)}
                         </td>
                         <td className="p-1"><button type="button" className="text-gray-400 hover:text-red-600" title="Remove row"
@@ -270,7 +272,8 @@ export function TyreImportModal({ onClose }: { onClose: () => void }) {
           {report && (
             <div className={`text-sm rounded-lg p-3 border ${report.failed ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-green-50 border-green-200 text-green-800'}`}>
               {report.dryRun ? 'Preview (nothing saved yet): ' : 'Done: '}
-              <b>{report.created}</b> new, <b>{report.updated}</b> updated, <b>{report.stockAdded}</b> tyres of stock{' '}
+              <b>{report.created}</b> new, <b>{report.updated}</b> already in the list (prices updated), <b>{report.stockAdded}</b> tyres of stock added{' '}
+              {report.stockSkipped > 0 && <span className="block text-xs mt-1">{report.stockSkipped} tyres of stock were <b>not</b> added because those tyres are already in your list — tick "Add this sheet's stock to tyres already in my list" if this sheet is a new delivery.</span>}
               {report.failed ? <>· <b>{report.failed}</b> row{report.failed === 1 ? '' : 's'} need fixing (shown in red)</> : '· all rows look good'}
               {!report.dryRun && report.created + report.updated > 0 && (
                 <span className="block text-xs mt-1">Stock Levels, Tyres &amp; Items and the New Sale search are already up to date.</span>
@@ -280,7 +283,15 @@ export function TyreImportModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="p-4 border-t border-gray-100 flex items-center justify-between gap-3">
-          <span className="text-xs text-gray-500">{rows.length ? `${rows.length} row${rows.length === 1 ? '' : 's'}` : 'Choose a file or scan a bill to begin'}</span>
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-gray-500">{rows.length ? `${rows.length} row${rows.length === 1 ? '' : 's'}` : 'Choose a file or scan a bill to begin'}</span>
+            {!imported && rows.length > 0 && (
+              <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer select-none">
+                <input type="checkbox" checked={addToExisting} onChange={(e) => { setAddToExisting(e.target.checked); setReport(null) }} />
+                Add this sheet's stock to tyres already in my list <span className="text-gray-400">(a new delivery — leave off when loading the same list again)</span>
+              </label>
+            )}
+          </div>
           <div className="flex gap-2">
             <button type="button" className="btn-ghost border border-gray-200" onClick={onClose}>{imported ? 'Close' : 'Cancel'}</button>
             {!imported && (

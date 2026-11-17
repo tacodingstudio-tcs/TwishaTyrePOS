@@ -63,7 +63,9 @@ export function errorHandler(
 
   // Known HTTP errors pass through as-is
   if (err.statusCode && err.statusCode < 500) {
-    reply.status(err.statusCode).send({ error: err.message })
+    // a coded answer (DUPLICATE_TYRE, BELOW_COST ...) tells the screen to ask "save anyway?" instead of just showing an error
+    const code = (err as { code?: unknown }).code
+    reply.status(err.statusCode).send({ error: err.message, ...(typeof code === 'string' && /^[A-Z][A-Z_]{2,40}$/.test(code) ? { code } : {}) })
     return
   }
 

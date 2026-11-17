@@ -68,6 +68,7 @@ export const reportRoutes: FastifyPluginAsync = async (app) => {
         LEFT JOIN parties p ON p.id = py."partyId"
         WHERE py."branchId"   = ${branchId}::uuid
           AND py."paymentDate" = ${dateStr}::date
+          AND py.method <> 'discount'
         ORDER BY py."createdAt" ASC
       `,
 

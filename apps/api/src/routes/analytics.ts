@@ -166,6 +166,7 @@ async function paymentMethodBreakdown(
     WHERE "branchId" = ${branchId}::uuid
       AND "paymentDate" >= ${from}::date
       AND "paymentDate" <= ${to}::date
+      AND method <> 'discount'
     GROUP BY method
     ORDER BY amount DESC
   `
@@ -548,7 +549,7 @@ export const analyticsRoutes: FastifyPluginAsync = async (app) => {
         SELECT method,
                COALESCE(SUM(amount),0)::float AS amount,
                COUNT(*)::int AS count
-        FROM payments WHERE "branchId" = ${branchId}::uuid
+        FROM payments WHERE "branchId" = ${branchId}::uuid AND method <> 'discount'
           AND "paymentDate" >= ${fromStr}::date AND "paymentDate" <= ${toStr}::date
         GROUP BY method ORDER BY amount DESC
       `,
@@ -556,7 +557,7 @@ export const analyticsRoutes: FastifyPluginAsync = async (app) => {
         SELECT "paymentDate"::text AS day,
                COALESCE(SUM(amount) FILTER (WHERE method = 'cash'),0)::float    AS cash,
                COALESCE(SUM(amount) FILTER (WHERE method != 'cash'),0)::float   AS digital
-        FROM payments WHERE "branchId" = ${branchId}::uuid
+        FROM payments WHERE "branchId" = ${branchId}::uuid AND method <> 'discount'
           AND "paymentDate" >= ${fromStr}::date AND "paymentDate" <= ${toStr}::date
         GROUP BY "paymentDate" ORDER BY day ASC
       `,
@@ -565,7 +566,7 @@ export const analyticsRoutes: FastifyPluginAsync = async (app) => {
           COALESCE(SUM(amount) FILTER (WHERE method = 'cash'),0)::float    AS cash,
           COALESCE(SUM(amount) FILTER (WHERE method != 'cash'),0)::float   AS digital,
           COALESCE(SUM(amount),0)::float                                    AS total
-        FROM payments WHERE "branchId" = ${branchId}::uuid
+        FROM payments WHERE "branchId" = ${branchId}::uuid AND method <> 'discount'
           AND "paymentDate" >= ${fromStr}::date AND "paymentDate" <= ${toStr}::date
       `,
     ])

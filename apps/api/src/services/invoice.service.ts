@@ -85,6 +85,8 @@ export interface RequestCtx {
   numberSeries?:    NumberSeries
   /** exact bill number to use (historic import) — must not already exist */
   fixedNumber?:     string
+  /** an old (back-dated) bill keyed in from the paper book: the goods left long ago, so today's stock is not touched */
+  skipStock?:       boolean
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -241,7 +243,7 @@ export async function createInvoice(
   const invoice = await ctx.db.$transaction(
     async (tx) => {
       // 5a. Stock availability check — only for outgoing stock movements
-      if (input.txnType === 'sale_invoice' || input.txnType === 'delivery_challan') {
+      if (!ctx.skipStock && (input.txnType === 'sale_invoice' || input.txnType === 'delivery_challan')) {
         await checkStockAvailability(tx, enrichedItems, ctx)
       }
 
@@ -314,7 +316,7 @@ export async function createInvoice(
       // 5g. Update stock ledger
       // proforma / quotation / sales_order = commitment only, no physical movement
       const skipStock = ['proforma', 'quotation', 'sales_order'].includes(input.txnType)
-      if (!skipStock) {
+      if (!skipStock && !ctx.skipStock) {
         await updateStockLedger(tx, createdInvoice.id, enrichedItems, input.txnType, ctx)
       }
 
@@ -456,6 +458,17 @@ export async function listInvoices(
     sort?:     'date' | 'number'
     /** how it was paid: a method that took part in the payment, or 'credit' = a balance is still due (sale bills) */
     payMode?:  'cash' | 'upi' | 'card' | 'bank_transfer' | 'cheque' | 'credit'
+    /** leave cancelled bills (incl. the "-OLD" copies a correction leaves) out of the list; ignored when a status is chosen */
+    hideCancelled?: boolean
+    /** bill total between these two amounts (inclusive) */
+    minAmount?: number
+    maxAmount?: number
+    /** only bills that still have a balance due */
+    pending?: boolean
+    /** vehicle number, "starts with" (spaces and dashes ignored) */
+    vehicleNo?: string
+    /** bill register, e.g. 'car' or 'two_wheel' */
+    series?: string
     page?:     number
     limit?:    number
   }
@@ -468,6 +481,7 @@ export async function listInvoices(
     branchId: ctx.branchId,
     ...(filters.txnType  && { txnType: filters.txnType }),
     ...(filters.status   && { status:  filters.status  }),
+    ...(!filters.status && filters.hideCancelled && { status: { not: 'cancelled' } }),
     ...(filters.partyId  && { partyId: filters.partyId }),
     ...(filters.fromDate || filters.toDate
       ? {
@@ -491,6 +505,13 @@ export async function listInvoices(
       ? Prisma.sql`(i."txnType" = 'sale_invoice' AND i.status NOT IN ('cancelled', 'draft') AND i."grandTotal" - i."paidAmt" > 0.5)`
       : Prisma.sql`EXISTS (SELECT 1 FROM payment_allocations pa JOIN payments p ON p.id = pa."paymentId"
                            WHERE pa."invoiceId" = i.id AND p.status = 'active' AND p.method = ${filters.payMode})`
+  const extra: Prisma.Sql[] = []
+  if (filters.minAmount != null) extra.push(Prisma.sql`i."grandTotal" >= ${filters.minAmount}`)
+  if (filters.maxAmount != null) extra.push(Prisma.sql`i."grandTotal" <= ${filters.maxAmount}`)
+  if (filters.pending) extra.push(Prisma.sql`(i.status NOT IN ('cancelled', 'draft') AND i."grandTotal" - i."paidAmt" > 0.5)`)
+  const veh = filters.vehicleNo?.toUpperCase().replace(/[^A-Z0-9]/g, '')
+  if (veh) extra.push(Prisma.sql`regexp_replace(upper(COALESCE(i."domainData"->>'vehicle_no', '')), '[^A-Z0-9]', '', 'g') LIKE ${veh + '%'}`)
+  if (filters.series) extra.push(Prisma.sql`i."domainData"->>'bill_series' = ${filters.series}`)
   const term = filters.search?.trim().slice(0, 60)
   let hitIds: string[] | null = null
   let hitTotal = 0
@@ -501,10 +522,12 @@ export async function listInvoices(
     const cond: Prisma.Sql[] = [Prisma.sql`i."branchId" = ${ctx.branchId}::uuid`]
     if (filters.txnType) cond.push(Prisma.sql`i."txnType" = ${filters.txnType}`)
     if (filters.status)  cond.push(Prisma.sql`i.status = ${filters.status}`)
+    else if (filters.hideCancelled) cond.push(Prisma.sql`i.status <> 'cancelled'`)
     if (filters.partyId) cond.push(Prisma.sql`i."partyId" = ${filters.partyId}::uuid`)
     if (filters.fromDate) cond.push(Prisma.sql`i.date >= ${filters.fromDate}::date`)
     if (filters.toDate)   cond.push(Prisma.sql`i.date <= ${filters.toDate}::date`)
     if (payCond) cond.push(payCond)
+    cond.push(...extra)
     const base = Prisma.join(cond, ' AND ')
     const byParty = Prisma.sql`SELECT p.id FROM parties p WHERE lower(p.name) LIKE ${like} ${phoneLike ? Prisma.sql`OR p.phone LIKE ${phoneLike}` : Prisma.empty}`
     // Each side only needs its newest (skip + limit) rows, so a very broad word ("LT-", "Customer") stops early instead of
@@ -531,16 +554,16 @@ export async function listInvoices(
     const cond: Prisma.Sql[] = [Prisma.sql`i."branchId" = ${ctx.branchId}::uuid`]
     if (filters.txnType) cond.push(Prisma.sql`i."txnType" = ${filters.txnType}`)
     if (filters.status)  cond.push(Prisma.sql`i.status = ${filters.status}`)
+    else if (filters.hideCancelled) cond.push(Prisma.sql`i.status <> 'cancelled'`)
     if (filters.partyId) cond.push(Prisma.sql`i."partyId" = ${filters.partyId}::uuid`)
     if (filters.fromDate) cond.push(Prisma.sql`i.date >= ${filters.fromDate}::date`)
     if (filters.toDate)   cond.push(Prisma.sql`i.date <= ${filters.toDate}::date`)
     if (payCond) cond.push(payCond)
+    cond.push(...extra)
     const rows = await ctx.db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT i.id::text AS id FROM invoices i WHERE ${Prisma.join(cond, ' AND ')} ORDER BY ${orderBy} LIMIT ${limit} OFFSET ${skip}`)
     hitIds = rows.map((r) => r.id)
-    hitTotal = payCond
-      ? Number((await ctx.db.$queryRaw<Array<{ n: number }>>(Prisma.sql`SELECT COUNT(*)::int AS n FROM invoices i WHERE ${Prisma.join(cond, ' AND ')}`))[0]?.n ?? 0)
-      : await ctx.db.invoice.count({ where })
+    hitTotal = Number((await ctx.db.$queryRaw<Array<{ n: number }>>(Prisma.sql`SELECT COUNT(*)::int AS n FROM invoices i WHERE ${Prisma.join(cond, ' AND ')}`))[0]?.n ?? 0)
   }
 
   const [invoices, total] = await Promise.all([
@@ -566,7 +589,7 @@ export async function listInvoices(
   // how each bill was paid, for the list: the methods that took part (largest first), plus Credit while a balance is due
   const methods = invoices.length
     ? await ctx.db.paymentAllocation.findMany({
-        where: { invoiceId: { in: invoices.map((i) => i.id) }, payment: { status: 'active', method: { not: 'exchange' } } },
+        where: { invoiceId: { in: invoices.map((i) => i.id) }, payment: { status: 'active', method: { notIn: ['exchange', 'discount'] } } },
         select: { invoiceId: true, amount: true, payment: { select: { method: true } } },
       })
     : []

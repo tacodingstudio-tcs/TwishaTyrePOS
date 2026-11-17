@@ -7,7 +7,7 @@ import toast from 'react-hot-toast'
 import {
   invoiceApi, productApi, partyApi, stockApi, tenantApi, aiApi,
   supplierApi, purchaseOrderApi, grnApi, stockAdjustmentApi, stockTransferApi, stockSummaryApi,
-  expenseApi, branchApi, analyticsApi, reportsApi, usersApi, advanceApi, approvalApi, discountRulesApi, } from '@/lib/api'
+  expenseApi, branchApi, analyticsApi, reportsApi, usersApi, advanceApi, approvalApi, discountRulesApi, apiError, } from '@/lib/api'
 import { useAuthStore } from '@/store/auth.store'
 
 // ── Query keys ──────────────────────────────────────────────────────────────
@@ -229,6 +229,9 @@ export function useCreateProduct() {
       qc.invalidateQueries({ queryKey: ['stock'] })
       toast.success('Product added')
     },
+    // the server's answer ("Tyre size … is not recognised", a duplicate SKU …) must reach the screen — a silent refusal looks like a dead button
+    // a coded "are you sure?" answer (same tyre twice, buying price above the selling price) is asked by the form itself
+    onError: (err) => { const c = (err as any)?.response?.data?.code; if (c === 'DUPLICATE_TYRE' || c === 'BELOW_COST') return; toast.error(apiError(err, 'The product could not be saved')) },
   })
 }
 
@@ -242,6 +245,7 @@ export function useUpdateProduct() {
       qc.invalidateQueries({ queryKey: ['products'] })
       toast.success('Product updated')
     },
+    onError: (err) => toast.error(apiError(err, 'The product could not be saved')),
   })
 }
 

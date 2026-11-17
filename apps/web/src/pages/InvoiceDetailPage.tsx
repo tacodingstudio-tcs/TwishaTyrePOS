@@ -74,6 +74,12 @@ export function InvoiceDetailPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('cash')
+  const [showDisc, setShowDisc] = useState(false)
+  const [discPay, setDiscPay] = useState('')       // what the customer actually pays
+  const [discAmt, setDiscAmt] = useState('')       // the discount in rupees
+  const [discPct, setDiscPct] = useState('')       // the same discount as a percent of the balance
+  const [discReason, setDiscReason] = useState('')
+  const [discBusy, setDiscBusy] = useState(false)
   // PDC fields
   const [chequeNo, setChequeNo]           = useState('')
   const [chequeDueDate, setChequeDueDate] = useState('')
@@ -92,7 +98,7 @@ export function InvoiceDetailPage() {
   const role = useAuthStore((s) => s.user?.role)
   const qc = useQueryClient()
   const [showDetails, setShowDetails] = useState(false)
-  const [det, setDet] = useState({ vehicleNo: '', makeModel: '', odometer: '', notes: '', customerName: '', customerAddress: '' })
+  const [det, setDet] = useState({ vehicleNo: '', makeModel: '', odometer: '', notes: '', customerName: '', customerAddress: '', gstinAddress: '' })
   const [savingDet, setSavingDet] = useState(false)
   const [showCorrect, setShowCorrect] = useState(false)
   const [corrReason, setCorrReason] = useState('')
@@ -111,11 +117,12 @@ export function InvoiceDetailPage() {
   const canCorrect = isSale && isActive && (role === 'owner' || role === 'manager')
   const canEditDetails = isSale && isActive && role !== 'viewer'
   const noParty = !invoice.partyId
+  const hasGstin = !!((invoice as any).party?.gstin || (invoice as any).partyGstin)
   function openDetails() {
     const d = (invoice.domainData ?? {}) as Record<string, any>
     setDet({
       vehicleNo: d.vehicle_no ?? '', makeModel: d.vehicle_make ?? '', odometer: d.odometer != null ? String(d.odometer) : '',
-      notes: invoice.notes ?? '', customerName: d.customer_name ?? '', customerAddress: d.customer_address ?? '',
+      notes: invoice.notes ?? '', customerName: d.customer_name ?? '', customerAddress: d.customer_address ?? '', gstinAddress: d.gstin_address ?? '',
     })
     setShowDetails(true)
   }
@@ -125,6 +132,7 @@ export function InvoiceDetailPage() {
       await tyreApi.editSaleDetails(id!, {
         vehicleNo: det.vehicleNo.trim(), makeModel: det.makeModel.trim(), notes: det.notes,
         odometer: det.odometer.trim() ? Number(det.odometer) : null,
+        ...(hasGstin ? { gstinAddress: det.gstinAddress.trim() } : {}),
         ...(noParty && det.customerName.trim() ? { customerName: det.customerName.trim(), customerAddress: det.customerAddress.trim() } : {}),
       })
       await qc.invalidateQueries()
@@ -435,6 +443,13 @@ export function InvoiceDetailPage() {
                 <IndianRupee className="w-4 h-4" /> {isPurchase ? 'Pay Supplier' : 'Record Payment'}
               </button>
             )}
+            {balanceDue > 0.01 && isActive && isSale && (role === 'owner' || role === 'manager') && (
+              <button type="button" className="btn-ghost border border-gray-200 w-full justify-center mt-2"
+                title="The customer pays a little less and you let the rest go"
+                onClick={() => { setDiscPay(''); setDiscAmt(''); setDiscPct(''); setDiscReason(''); setShowDisc(true) }}>
+                Settle with discount
+              </button>
+            )}
             {balanceDue > 0.01 && isActive && !isPurchase && (
               <UpiQrButton amount={balanceDue} note={`Bill ${invoice.number}`} refId={String(invoice.number)} className="btn-ghost border border-gray-200 w-full justify-center mt-2" label="Show QR to customer" />
             )}
@@ -535,6 +550,7 @@ export function InvoiceDetailPage() {
                 <div><label className="label">Customer address</label><input className="input" value={det.customerAddress} onChange={(e) => setDet({ ...det, customerAddress: e.target.value })} /></div>
               </>
             )}
+            {hasGstin && <div><label className="label">GSTIN address</label><input className="input" maxLength={300} value={det.gstinAddress} onChange={(e) => setDet({ ...det, gstinAddress: e.target.value })} /></div>}
             <div className="grid grid-cols-2 gap-3">
               <div><label className="label">Vehicle number</label><input className="input" value={det.vehicleNo} onChange={(e) => setDet({ ...det, vehicleNo: e.target.value.toUpperCase() })} /></div>
               <div><label className="label">Make / model</label><input className="input" value={det.makeModel} onChange={(e) => setDet({ ...det, makeModel: e.target.value })} /></div>
@@ -550,6 +566,42 @@ export function InvoiceDetailPage() {
       )}
 
       {/* Payment modal with PDC support */}
+      {showDisc && (() => {
+        // the three boxes always agree: change one and the others are worked out
+        const due = Math.round(balanceDue * 100) / 100
+        const r2 = (n: number) => String(Math.round(n * 100) / 100)
+        const setFromAmt = (d: number) => { setDiscAmt(Number.isFinite(d) && d > 0 ? r2(d) : ''); setDiscPct(Number.isFinite(d) && d > 0 ? r2((d / due) * 100) : ''); setDiscPay(Number.isFinite(d) && d > 0 ? r2(due - d) : '') }
+        const d = Number(discAmt) || 0
+        const bad = d <= 0 ? 'Enter what the customer pays, or the discount' : d > due + 0.01 ? `The discount is more than the balance (${formatINR(due)})` : ''
+        return (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl space-y-3">
+              <h3 className="text-base font-semibold text-gray-900">Settle bill {String(invoice.number)} with a discount</h3>
+              <p className="text-sm text-gray-600">Balance due <b>{formatINR(due)}</b>. The customer pays less and the rest is let go: the bill becomes paid and the amount is booked as the expense "Discount allowed". Money received is not changed.</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div><label className="label">Customer pays ₹</label><input className="input" inputMode="decimal" value={discPay} onChange={(e) => { const v = e.target.value; setDiscPay(v); const n = Number(v); if (v === '' || !Number.isFinite(n)) { setDiscAmt(''); setDiscPct('') } else setFromAmt(due - n) }} /></div>
+                <div><label className="label">Discount ₹</label><input className="input" inputMode="decimal" value={discAmt} onChange={(e) => setFromAmt(Number(e.target.value))} /></div>
+                <div><label className="label">Discount %</label><input className="input" inputMode="decimal" value={discPct} onChange={(e) => { const p = Number(e.target.value); setDiscPct(e.target.value); const a = Number.isFinite(p) && p > 0 ? Math.round(due * p) / 100 : 0; setDiscAmt(a ? r2(a) : ''); setDiscPay(a ? r2(due - a) : '') }} /></div>
+              </div>
+              <div><label className="label">Reason <span className="text-gray-400 font-normal">(optional)</span></label><input className="input" value={discReason} onChange={(e) => setDiscReason(e.target.value)} placeholder="e.g. customer rounded off" /></div>
+              {d > 0 && !bad && <p className="text-xs text-gray-500">After this the balance on the bill is {formatINR(Math.max(0, due - d))}{due - d <= 0.5 ? ' — fully settled.' : '.'}</p>}
+              {bad && discAmt !== '' && <p className="text-xs text-red-600">{bad}</p>}
+              <div className="flex justify-end gap-2">
+                <button type="button" className="btn-ghost" onClick={() => setShowDisc(false)}>Cancel</button>
+                <button type="button" className="btn-primary" disabled={!!bad || discBusy}
+                  onClick={async () => {
+                    setDiscBusy(true)
+                    try {
+                      await tyreApi.settleWithDiscount(id!, { amount: Math.round(d * 100) / 100, reason: discReason.trim() || undefined })
+                      await qc.invalidateQueries(); setShowDisc(false); toast.success('Bill settled with the discount')
+                    } catch (e) { toast.error(apiError(e, 'Could not settle the bill')) } finally { setDiscBusy(false) }
+                  }}>Settle bill</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {showPaymentModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl space-y-3">

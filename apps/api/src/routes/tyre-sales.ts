@@ -66,6 +66,8 @@ const SaleBody = z.object({
   }).optional(),
   /** GSTIN of the customer on this bill; a saved customer who had none gets it stored */
   customerGstin: gstinField.optional(),
+  /** the address registered with that GSTIN; kept on the bill (not the customer record) */
+  customerGstinAddress: z.string().trim().max(300).optional(),
   vehicleNo:  z.string().trim().max(20).optional(),
   vehicleType: z.enum(TYRE_VEHICLE_TYPES).optional(),
   makeModel:  z.string().trim().max(60).optional(),
@@ -178,7 +180,7 @@ export const tyreSalesRoutes: FastifyPluginAsync = async (app) => {
       const sub: any = Object.create(req)
       sub.db = nestTx(tx)
       const rev = await reverseBill(sub, id, reason)
-      const out = await createSale(sub, { ...body, date: rev.date, billSeries: rev.billSeries ?? body.billSeries }, cfg, { correction: { number: rev.number } })
+      const out = await createSale(sub, { ...body, date: rev.date, billSeries: rev.billSeries ?? body.billSeries }, cfg, { correction: { number: rev.number, stockUntouched: rev.stockUntouched } })
       return { ...out, corrected: { number: rev.number, oldBillRenamedTo: rev.renamedTo, oldBillId: rev.oldId } }
     }, { maxWait: 5000, timeout: 30000 })
 
@@ -206,6 +208,7 @@ export const tyreSalesRoutes: FastifyPluginAsync = async (app) => {
       notes:           z.string().max(500).optional(),
       customerName:    z.string().trim().min(1).max(120).optional(),
       customerAddress: z.string().trim().max(300).optional(),
+      gstinAddress:    z.string().trim().max(300).optional(),
     }).strict().parse(req.body)
     const inv = await q1<any>(req,
       `SELECT id, number, status, "txnType", "partyId", "domainData" FROM ${tbl(req.schemaName, 'invoices')}
@@ -222,6 +225,7 @@ export const tyreSalesRoutes: FastifyPluginAsync = async (app) => {
     if (b.odometer !== undefined) patch['odometer'] = b.odometer
     if (b.customerName !== undefined) patch['customer_name'] = b.customerName
     if (b.customerAddress !== undefined) patch['customer_address'] = b.customerAddress || null
+    if (b.gstinAddress !== undefined) patch['gstin_address'] = b.gstinAddress || null
     await run(req,
       `UPDATE ${tbl(req.schemaName, 'invoices')}
        SET "domainData" = (COALESCE("domainData", '{}'::jsonb) || $2::jsonb),
@@ -254,17 +258,19 @@ export const tyreSalesRoutes: FastifyPluginAsync = async (app) => {
 
 /** `correction`: the bill is written inside the correction transaction — it keeps the old bill's number, any
  *  failure aborts the whole thing (no "warnings"), and no customer message is sent. */
-interface SaleOpts { correction?: { number: string } }
+interface SaleOpts { correction?: { number: string; stockUntouched?: boolean } }
 
 async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<string, any>, opts: SaleOpts = {}) {
   const defaults = DOMAIN_REGISTRY.tyre.defaultDomainConfig as Record<string, any>
   const conf = (k: string) => cfg[k] ?? defaults[k]
   const date = body.date ?? todayStr()
+  // a bill dated before today is an old bill being keyed in: the tyres left the shop then, so today's stock is neither checked nor reduced
+  const backdated = opts.correction ? !!opts.correction.stockUntouched : (!!body.date && body.date < todayStr())
   // a mistyped year (2016 for 2026) or a day that has not happened would file the bill in the wrong GST month
   if (body.date && !opts.correction) {
     const today = todayStr()
     if (body.date > today) throw httpError(422, `The bill date ${body.date} is in the future — check it`)
-    if (body.date < addDays(today, -366)) throw httpError(422, `The bill date ${body.date} is more than a year ago — check the year`)
+    // no limit on how far back: the shop keys in earlier years' bills from the paper book
   }
   const warnings: string[] = []
   const ctx: Ctx = req
@@ -289,7 +295,7 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
   for (const [pid, qty] of wanted) {
     const p = byId.get(pid)
     if (p.itemType === 'service' || !p.trackStock) continue
-    if (p.stock < qty) throw httpError(409, `Only ${p.stock} of "${p.name}" in stock — ${qty} requested`)
+    if (!backdated && p.stock < qty) throw httpError(409, `Only ${p.stock} of "${p.name}" in stock — ${qty} requested`)
   }
 
   // ── Serials ─────────────────────────────────────────────────────────────────
@@ -442,8 +448,9 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
     dueDate: creditDays != null ? addDays(date, creditDays) : undefined,
     notes: body.notes,
     domainData: {
-      sale_kind: body.saleKind,
+      sale_kind: body.saleKind, stock_untouched: backdated || undefined,
       customer_name: !partyId ? body.customer?.name : undefined, customer_address: !partyId ? body.customer?.address : undefined,
+      gstin_address: body.customerGstinAddress || undefined,
       vehicle_no: regNo, vehicle_type: vehicleType, odometer: body.odometer, fitted_by: body.fittedBy,
       exchange_qty: body.exchange?.qty ?? 0, exchange_value: exchangeValue,
       next_service_km: body.nextServiceKm ?? (body.odometer && due && due.km > 0 ? body.odometer + due.km : undefined),
@@ -481,7 +488,7 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
   } as Parameters<typeof createInvoice>[0], {
     db: req.db, branchId: req.branchId, schemaName: req.schemaName,
     userId: req.userId, role: req.role, branchDomainType: 'tyre', numberSeries,
-    fixedNumber: opts.correction?.number,
+    fixedNumber: opts.correction?.number, skipStock: backdated,
   })
   } catch (err) {
     // Two counters sold the last unit at the same moment: the core's row lock lets one through and
@@ -569,7 +576,9 @@ async function createSale(req: any, body: z.infer<typeof SaleBody>, cfg: Record<
       const scrap = await q1<any>(req,
         `SELECT id FROM ${tbl(req.schemaName, 'products')} WHERE "branchId" = $1::uuid AND "isActive" = true
            AND "domainAttrs"->>'item_kind' = 'scrap' ORDER BY "createdAt" LIMIT 1`, req.branchId)
-      if (scrap) {
+      if (backdated) {
+        // an old bill: the old tyres were taken in back then, not today
+      } else if (scrap) {
         await run(req,
           `INSERT INTO ${tbl(req.schemaName, 'stock_ledger')} ("id","branchId","productId","txnType",qty,rate,"refType","refId",notes,"createdBy","createdAt")
            VALUES (gen_random_uuid(), $1::uuid, $2::uuid, 'adjustment', $3, $4, 'old_tyre_exchange', $5::uuid, $6, $7::uuid, NOW())`,

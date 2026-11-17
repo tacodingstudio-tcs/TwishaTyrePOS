@@ -137,6 +137,46 @@ describe('Tyre size on the product', () => {
     }
   })
 
+  test('stock and price typos are a clear 422, never a server error: too large, fractional tyres, negative, text', async () => {
+    const t = (extra: Record<string, unknown>) => owner.api.post('/api/products', {
+      itemType: 'product', gstRate: 18, unit: 'pcs', trackStock: true, name: `Qty ${Math.random()}`, salePrice: 1000,
+      domainAttrs: { item_kind: 'tyre', brand: 'MRF', vehicle_type: 'car', size: '185/65 R15' }, ...extra,
+    })
+    for (const [what, body] of [['stock 99,999,999', { openingStock: 99999999 }], ['price 99,999,999,999', { salePrice: 99999999999 }],
+      ['stock 2.5 tyres', { openingStock: 2.5 }], ['stock -3', { openingStock: -3 }], ['stock "abc"', { openingStock: 'abc' }], ['mrp 1e12', { mrp: 1e12 }]] as const) {
+      const r = await t(body as Record<string, unknown>)
+      expect([what, r.status]).toEqual([what, 422])
+    }
+    expect((await t({ openingStock: 12 })).status).toBe(201)
+  })
+
+  test('the same tyre twice asks first; a price of 0 is refused; a buying price above the selling price asks first', async () => {
+    const t = (extra: Record<string, unknown>, attrs: Record<string, unknown> = {}) => owner.api.post('/api/products', {
+      itemType: 'product', gstRate: 18, unit: 'pcs', trackStock: true, name: 'BKT 80/100-17 Zenova', salePrice: 1630,
+      domainAttrs: { item_kind: 'tyre', brand: 'BKT', pattern: 'Zenova', vehicle_type: 'two_wheeler', size: '80/100-17', ...attrs }, ...extra,
+    })
+    expect((await t({})).status).toBe(201)
+    const dup = await t({})                                                         // identical
+    expect(dup.status).toBe(409); expect(dup.data.code).toBe('DUPLICATE_TYRE'); expect(dup.data.error).toMatch(/already in your list/)
+    const other = await t({ name: 'Zenova 80/100 R17 BKT' }, { size: '80/100R17' })  // another name, same brand + pattern + size
+    expect(other.status).toBe(409); expect(other.data.code).toBe('DUPLICATE_TYRE')
+    expect((await t({ name: 'BKT 90/100-10 Zenova' }, { size: '90/100-10' })).status).toBe(201)            // a different size is a different tyre
+    expect((await t({ name: 'MRF Zapper 80/100-17' }, { brand: 'MRF', pattern: 'Zapper' })).status).toBe(201) // a different brand / pattern is too
+    expect((await t({ allowDuplicate: true })).status).toBe(201)                                            // after "add anyway"
+    // prices
+    const zero = await t({ name: 'Zero price tyre', salePrice: 0 }, { size: '90/90-17', pattern: 'Z0' })
+    expect(zero.status).toBe(422); expect(zero.data.error).toMatch(/selling price/)
+    const loss = await t({ name: 'Loss tyre', salePrice: 1000, purchasePrice: 1500 }, { size: '100/90-17', pattern: 'L1' })
+    expect(loss.status).toBe(409); expect(loss.data.code).toBe('BELOW_COST')
+    expect((await t({ name: 'Loss tyre', salePrice: 1000, purchasePrice: 1500, confirmBelowCost: true }, { size: '100/90-17', pattern: 'L1' })).status).toBe(201)
+    expect((await t({ name: 'Fine tyre', salePrice: 1500, purchasePrice: 1500 }, { size: '110/90-17', pattern: 'F1' })).status).toBe(201)  // equal is not a loss
+    // an existing tyre cannot be changed to a price of 0 either; a service and scrap may be free
+    const made = (await t({ name: 'To edit', salePrice: 900 }, { size: '120/80-17', pattern: 'E1' })).data
+    expect((await owner.api.patch(`/api/products/${made.id}`, { salePrice: 0 })).status).toBe(422)
+    expect((await owner.api.patch(`/api/products/${made.id}`, { salePrice: 950 })).status).toBe(200)
+    expect((await owner.api.post('/api/products', { itemType: 'product', name: 'Old tyre scrap', salePrice: 0, gstRate: 0, unit: 'pcs', domainAttrs: { item_kind: 'scrap' } })).status).toBe(201)
+  })
+
   test('a typo is refused with a clear message instead of becoming a tyre nobody can find', async () => {
     for (const s of ['185/65 R5', 'abc', '185', 'R15', '185/65 R99', '12345678']) {
       const r = await mk(s)
@@ -164,10 +204,18 @@ describe('Tyre size on the product', () => {
 
   describe('tyre sizes as they are printed on the tyre and written in the bill book', () => {
     const good = ['215/60R16 95H', '195/65 R15 91V', '225/45 ZR17 94W', '7.00-15 12PR', '10.00 R20 16PR', '295/80 R22.5 152/148M',
-      '155 R13 LT', '155R13C', '195/70R15C', '4.00-8', '3.50-10', '13.6-28', '14.9 R30', '9.5-24', '2.75-18', '90/90-17', '205/65/16']
+      '155 R13 LT', '155R13C', '195/70R15C', '4.00-8', '3.50-10', '13.6-28', '14.9 R30', '9.5-24', '2.75-18', '90/90-17', '205/65/16',
+      '80/100-17', '90/100-10', '100/100-18', '110/100-17', '80 100 17']      // bikes: a 3-digit profile is normal
     test('load / speed / ply / LT ratings, single-digit rims and tractor sizes are accepted', async () => {
       let n = 0
       for (const sz of good) { const r = await mkSize(sz, ++n); expect([sz, r.status]).toEqual([sz, 201]) }
+    })
+    test('a bike tyre with a 100 profile (80/100-17) is found however the size is typed — the saved spelling and the finder agree', async () => {
+      const r = await mkSize('80/100-17', 200); expect(r.status).toBe(201)
+      for (const q of ['80/100-17', '80/100R17', '80 100 17', '80/100/17', '8010017']) {
+        const f = (await owner.api.get('/api/tyre/finder', { params: { kind: 'tyre', size: q } })).data
+        expect([q, (f.data as any[]).some((p) => p.name === 'Size test 200')]).toEqual([q, true])
+      }
     })
     test('a rated size is found by its plain size, and the plain size by the rated one', async () => {
       await mkSize('215/60R16 95H', 100); await mkSize('185 R14 8PR', 101)

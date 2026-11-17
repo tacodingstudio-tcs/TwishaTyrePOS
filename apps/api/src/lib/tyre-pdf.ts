@@ -178,6 +178,8 @@ export interface InvoicePdfData {
   partyPhone?: string | null
   partyGstin?: string | null
   partyAddress?: string | null
+  /** address registered with the customer's GSTIN: printed only when the shop typed one */
+  partyGstinAddress?: string | null
   vehicleNo?: string | null
   vehicleMake?: string | null
   poNo?: string | null
@@ -231,6 +233,7 @@ export async function renderInvoicePdf(b: InvoicePdfData, biz: BusinessHeader): 
   if (b.partyAddress) doc.text(b.partyAddress, X + 5, doc.y, { width: W * 0.58 - 10 })
   if (b.partyPhone) doc.text(`Ph: ${b.partyPhone}`, X + 5, doc.y, { width: W * 0.58 - 10 })
   if (b.partyGstin) doc.text(`GSTIN: ${b.partyGstin}`, X + 5, doc.y, { width: W * 0.58 - 10 })
+  if (b.partyGstinAddress) doc.text(`GSTIN address: ${b.partyGstinAddress}`, X + 5, doc.y, { width: W * 0.58 - 10 })
   const mx = X + W * 0.58 + 6, mw = W * 0.42 - 12
   const meta: Array<[string, string]> = [
     ['Invoice no.', b.number], ['Date', date(b.date)],

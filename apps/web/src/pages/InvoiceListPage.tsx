@@ -5,6 +5,7 @@ import { useInvoices } from '@/hooks/useApi'
 import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { StatusBadge } from '@/components/ui/StatusBadge'
+import { PartyIdSelect } from '@/components/ui/PartyCombobox'
 import { Plus, Search, Printer } from 'lucide-react'
 import { format } from 'date-fns'
 import { ReprintMenu } from '@/components/tyre/ReprintMenu'
@@ -49,6 +50,14 @@ export function InvoiceListPage() {
   const [txnType, setTxnType] = useState('')
   const [payMode, setPayMode] = useState('')
   const [sort, setSort]     = useState<'number' | 'date'>('date')   // new bills on top (newest number first)
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate]     = useState('')
+  const [minAmount, setMinAmount] = useState('')
+  const [maxAmount, setMaxAmount] = useState('')
+  const [pending, setPending]   = useState(false)
+  const [vehicleNo, setVehicleNo] = useState('')
+  const [series, setSeries]     = useState('')
+  const [partyId, setPartyId]   = useState('')
   const [page, setPage]       = useState(1)
   const domainType = useAuthStore((s: any) => s.branch?.domainType ?? '')
   const isB2B = B2B_DOMAINS.has(domainType)
@@ -59,9 +68,32 @@ export function InvoiceListPage() {
     txnType: txnType || undefined,
     sort,
     payMode: payMode || undefined,
+    fromDate: fromDate || undefined, toDate: toDate || undefined,
+    minAmount: minAmount.trim() !== '' && Number.isFinite(Number(minAmount)) ? Number(minAmount) : undefined,
+    maxAmount: maxAmount.trim() !== '' && Number.isFinite(Number(maxAmount)) ? Number(maxAmount) : undefined,
+    pending: pending ? 'true' : undefined,
+    vehicleNo: vehicleNo.trim() || undefined,
+    series: series || undefined,
+    partyId: partyId || undefined,
+    hideCancelled: true,        // cancelled bills (and the -OLD copies a correction leaves) show only when "Cancelled" is picked
     page,
     limit: 20,
   })
+
+  // quick date ranges (the shop's own calendar day; the financial year runs 1 April - 31 March)
+  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  function quick(kind: 'today' | 'yesterday' | 'month' | 'lastMonth' | 'fy' | 'clear') {
+    const n = new Date(), y = n.getFullYear(), m = n.getMonth()
+    const set = (a: Date | null, b: Date | null) => { setFromDate(a ? iso(a) : ''); setToDate(b ? iso(b) : ''); setPage(1) }
+    if (kind === 'today') set(n, n)
+    else if (kind === 'yesterday') { const d = new Date(y, m, n.getDate() - 1); set(d, d) }
+    else if (kind === 'month') set(new Date(y, m, 1), new Date(y, m + 1, 0))
+    else if (kind === 'lastMonth') set(new Date(y, m - 1, 1), new Date(y, m, 0))
+    else if (kind === 'fy') { const fy = m >= 3 ? y : y - 1; set(new Date(fy, 3, 1), new Date(fy + 1, 2, 31)) }
+    else set(null, null)
+  }
+  const anyFilter = !!(fromDate || toDate || minAmount || maxAmount || pending || vehicleNo || series || partyId || payMode || status || search)
+  function clearAll() { setSearch(''); setStatus(''); setPayMode(''); setFromDate(''); setToDate(''); setMinAmount(''); setMaxAmount(''); setPending(false); setVehicleNo(''); setSeries(''); setPartyId(''); setPage(1) }
 
   function handleTabChange(key: string) {
     setTxnType(key)
@@ -128,7 +160,7 @@ export function InvoiceListPage() {
             className="input w-44"
             title="Filter by status"
           >
-            <option value="">All statuses</option>
+            <option value="">All (cancelled hidden)</option>
             <option value="confirmed">Confirmed</option>
             <option value="paid">Paid</option>
             <option value="partial">Partially paid</option>
@@ -148,6 +180,30 @@ export function InvoiceListPage() {
             <option value="date">Newest first</option>
             <option value="number">Bill number, oldest first</option>
           </select>
+        </div>
+
+        {/* more filters: dates, amount, customer, vehicle, register, pending */}
+        <div className="flex flex-wrap items-end gap-3">
+          <div><label className="label text-xs">From</label><input type="date" className="input w-40" value={fromDate} max={toDate || undefined} onChange={(e) => { setFromDate(e.target.value); setPage(1) }} /></div>
+          <div><label className="label text-xs">To</label><input type="date" className="input w-40" value={toDate} min={fromDate || undefined} onChange={(e) => { setToDate(e.target.value); setPage(1) }} /></div>
+          <div className="flex flex-wrap gap-1 pb-0.5">
+            {([['today', 'Today'], ['yesterday', 'Yesterday'], ['month', 'This month'], ['lastMonth', 'Last month'], ['fy', 'This financial year']] as const).map(([k, l]) => (
+              <button key={k} type="button" onClick={() => quick(k)} className="px-2.5 py-1.5 rounded text-xs bg-white border border-gray-200 text-gray-600 hover:border-gray-300">{l}</button>
+            ))}
+          </div>
+          <div><label className="label text-xs">Amount from ₹</label><input className="input w-28" inputMode="decimal" value={minAmount} onChange={(e) => { setMinAmount(e.target.value); setPage(1) }} /></div>
+          <div><label className="label text-xs">to ₹</label><input className="input w-28" inputMode="decimal" value={maxAmount} onChange={(e) => { setMaxAmount(e.target.value); setPage(1) }} /></div>
+          <div><label className="label text-xs">Vehicle no.</label><input className="input w-36 uppercase" placeholder="GJ05…" maxLength={20} value={vehicleNo} onChange={(e) => { setVehicleNo(e.target.value); setPage(1) }} /></div>
+          <div><label className="label text-xs">Register</label>
+            <select className="input w-36" value={series} onChange={(e) => { setSeries(e.target.value); setPage(1) }}>
+              <option value="">All registers</option><option value="car">Car</option><option value="two_wheel">Two wheeler</option>
+            </select></div>
+          <div className="w-64"><label className="label text-xs">Customer</label>
+            <PartyIdSelect value={partyId} onChange={(id) => { setPartyId(id ?? ''); setPage(1) }} type="customer" placeholder="Any customer" /></div>
+          <label className="flex items-center gap-2 text-sm text-gray-700 pb-2 select-none cursor-pointer">
+            <input type="checkbox" checked={pending} onChange={(e) => { setPending(e.target.checked); setPage(1) }} /> Balance pending only
+          </label>
+          {anyFilter && <button type="button" onClick={clearAll} className="text-sm text-primary-600 hover:underline pb-2">Clear all filters</button>}
         </div>
 
         {/* Table */}

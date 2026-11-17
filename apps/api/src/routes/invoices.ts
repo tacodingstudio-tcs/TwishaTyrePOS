@@ -43,6 +43,12 @@ export const invoiceRoutes: FastifyPluginAsync = async (app) => {
       search:   z.string().optional(),
       sort:     z.enum(['date', 'number']).optional(),
       payMode:  z.enum(['cash', 'upi', 'card', 'bank_transfer', 'cheque', 'credit']).optional(),
+      hideCancelled: z.enum(['true','false']).optional().transform((v) => v === 'true'),
+      minAmount: z.coerce.number().min(0).max(1e9).optional(),
+      maxAmount: z.coerce.number().min(0).max(1e9).optional(),
+      pending:   z.enum(['true','false']).optional().transform((v) => v === 'true'),
+      vehicleNo: z.string().trim().max(20).optional(),
+      series:    z.string().trim().max(40).optional(),
       page:     z.coerce.number().int().min(1).default(1),
       limit:    z.coerce.number().int().min(1).max(100).default(20),
     }).parse(req.query)

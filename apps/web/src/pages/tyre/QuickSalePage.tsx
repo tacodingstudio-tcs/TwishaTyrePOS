@@ -128,6 +128,9 @@ export function QuickSalePage() {
   const [billSeries, setBillSeries] = useState('')
   const [makeModel, setMakeModel] = useState('')
   const [address, setAddress] = useState('')
+  const [billDate, setBillDate] = useState('')               // blank = today; set it to key in an older bill from the paper book
+  const todayLocal = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}` })()
+  const [gstinAddress, setGstinAddress] = useState('')        // optional: the address registered with the GSTIN (separate from the customer address)
   const [poNo, setPoNo] = useState('')
   const [charges, setCharges] = useState<Record<string, string>>({})
   const { data: branches } = useQuery({ queryKey: ['branches'], queryFn: () => branchApi.list(), staleTime: 60_000 })
@@ -168,6 +171,7 @@ export function QuickSalePage() {
     setPhone(pr?.phone ?? '')
     setGstin(String(pr?.gstin ?? '').toUpperCase())
     setAddress(d.customer_address ?? '')
+    setGstinAddress(d.gstin_address ?? '')
     setRegNo(d.vehicle_no ?? ''); setVehicleType(d.vehicle_type ?? 'car'); setOdometer(d.odometer != null ? String(d.odometer) : '')
     setFittedBy(d.fitted_by ?? ''); setMakeModel(d.vehicle_make ?? ''); setPoNo(d.po_no ?? ''); setNotes(orig.notes ?? '')
     setWithGst(d.gst_bill !== false); setInclusive(!!d.prices_include_gst); setBillSeries(d.bill_series ?? '')
@@ -307,7 +311,9 @@ export function QuickSalePage() {
       return send({
         partyId: party.id,
         customer: !party.id && party.name.trim() ? { name: party.name.trim(), phone: phone.replace(/\D/g, '') || undefined, address: address.trim() || undefined } : undefined,
+        ...(!correctId && billDate && billDate < todayLocal ? { date: billDate } : {}),      // a correction keeps the old bill's own date
         customerGstin: gstin.trim() || undefined,
+        customerGstinAddress: gstinAddress.trim() || undefined,
         withGst,
         pricesIncludeGst: isInclusive,
         billSeries: billSeries || undefined,
@@ -411,6 +417,21 @@ export function QuickSalePage() {
         {/* 2 · customer + vehicle */}
         <section className="card p-4">
           <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">
+            {!correctId && (
+              <div className="sm:col-span-6 flex flex-wrap items-end gap-3">
+                <div>
+                  <label className="label" htmlFor="billdate">Bill date <span className="text-gray-400 font-normal">(today unless you change it)</span></label>
+                  <input id="billdate" type="date" className="input w-44" max={todayLocal} value={billDate || todayLocal}
+                    onChange={(e) => setBillDate(e.target.value >= todayLocal ? '' : e.target.value)} />
+                </div>
+                {billDate && billDate < todayLocal && (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 mb-0.5">
+                    Older bill: it is dated {billDate.split('-').reverse().join('-')} but still takes the next bill number. Today's stock is not changed.
+                    <button type="button" className="underline ml-2" onClick={() => setBillDate('')}>Use today</button>
+                  </p>
+                )}
+              </div>
+            )}
             <div className="sm:col-span-3">
               <PartyCombobox label="Customer" type="customer" value={party}
                 placeholder="Name or mobile"
@@ -434,6 +455,10 @@ export function QuickSalePage() {
                 </span>
               )}
               {gstinOk && <span className="text-green-700 inline-flex items-center gap-1"><Check className="w-3.5 h-3.5" /> Valid GSTIN · {gstinState ?? `state code ${gstinText.slice(0, 2)}`} — business (B2B) bill</span>}
+            </div>
+            <div className="sm:col-span-6">
+              <label className="label" htmlFor="gaddr">GSTIN address <span className="text-gray-400 font-normal">(optional — the address registered with this GSTIN)</span></label>
+              <input id="gaddr" className="input" placeholder="Address as registered with the GSTIN" maxLength={300} value={gstinAddress} onChange={(e) => setGstinAddress(e.target.value)} />
             </div>
             <div className="sm:col-span-2">
               <label className="label" htmlFor="reg">Vehicle no.</label>

@@ -91,6 +91,17 @@ pnpm provision:all                  # re-apply tenant DDL to existing tenants af
     `PATCH /api/tyre/sales/:id/details` fixes words only (vehicle, make, km, notes, a walk-in customer's name). Screen: bill page → "Correct
     bill" opens `/tyre/sale?correct=<id>` prefilled. Browser check: `npx tsx e2e/flow-correct.ts`.
 
+    **Back-dated bills** (date before today, New Sale "Bill date" box): `createSale` sets `domainData.stock_untouched` and passes
+    `skipStock` to `createInvoice` - no stock check, no ledger rows, no scrap from an exchange; correcting such a bill keeps that.
+    **Settle with discount** (`POST /api/payments/settle-discount`, owner/manager): a payment of method `discount` clears part/all of the
+    balance and the same amount is booked as expense category `discount_allowed` (`referenceNo` = the payment id; voiding the payment
+    deletes it). Excluded from money-received sums (analytics, day book, CA payments sheet, "Paid by"). Sales/GST still show the full bill.
+    **Bills list**: `hideCancelled` (the web list always sends it; picking status Cancelled shows them), `minAmount/maxAmount`, `pending`,
+    `vehicleNo` (starts-with, spaces ignored), `series`, `partyId`, dates. **Paid by** prints on the Note line (never as a totals row - an extra
+    row made 6-row credit bills spill onto page 2). Optional `gstin_address` per bill (printed under GST.NO only when typed).
+    **Product rules**: duplicate tyre / buying price above selling price ask first (409 `DUPLICATE_TYRE` / `BELOW_COST`, retry with
+    `allowDuplicate` / `confirmBelowCost`); the sheet import adds stock to an existing tyre only with `addToExisting`.
+
     **Installer safety** (`deploy/offline/installer/TwishaPOS.iss`): `PrepareToInstall` runs the installed `TwishaPOS.exe --backup` first
     (starts the database just for that if the app is closed) and REFUSES to install if the backup fails; then `--stop`; then
     `TwishaKill.exe` (window-less, unpacked from the installer to {tmp}) ends anything still running from the install folder. Never run
@@ -126,7 +137,7 @@ to exercise replay behaviour.
   checks totals / taxable / GST against the sheet's own formulas. The data file holds real customers, so it lives in
   `apps/api/e2e/data/` (git-ignored); without it the suite is skipped. `tyre-client-edge.test.ts` covers dates,
   name-only customers, repeat returns, credit instalments, big bills, forgotten PIN.
-* Rules these checks introduced: a bill date must be a real day, not in the future and not older than a year; a
+* Rules these checks introduced: a bill date must be a real day and not in the future (any past date is allowed - the shop keys in earlier years' bills); a
   customer typed without a mobile keeps the name in `domainData.customer_name` (no party record); returns are totalled
   against the original bill; two bill books cannot share a prefix; sizes may carry load/speed/ply/LT ratings (dropped
   by `normalizeTyreSize`), single-digit rims and tractor sizes.

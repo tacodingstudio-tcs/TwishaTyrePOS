@@ -76,7 +76,7 @@ export async function loadInvoiceDoc(ctx: Ctx, invoiceId: string): Promise<{ dat
     `SELECT p.method, SUM(pa.amount)::float AS amount
      FROM ${tbl(ctx.schemaName, 'payment_allocations')} pa
      JOIN ${tbl(ctx.schemaName, 'payments')} p ON p.id = pa."paymentId"
-     WHERE pa."invoiceId" = $1::uuid AND p.method <> 'exchange' AND p.status = 'active'
+     WHERE pa."invoiceId" = $1::uuid AND p.method NOT IN ('exchange', 'discount') AND p.status = 'active'
      GROUP BY p.method ORDER BY SUM(pa.amount) DESC`, invoiceId)
   const METHOD = (m: string) => ({ cash: 'Cash', upi: 'UPI', card: 'Card', bank_transfer: 'Bank', cheque: 'Cheque' } as Record<string, string>)[m] ?? m
   const owing = Number(inv.grandTotal) - Number(inv.paidAmt) > 0.5
@@ -102,6 +102,7 @@ export async function loadInvoiceDoc(ctx: Ctx, invoiceId: string): Promise<{ dat
     gstBill: dd['gst_bill'] === false ? false : true, date: inv.date, dueDate: inv.dueDate, status: inv.status,
     partyName: inv.partyName ?? dd['customer_name'] ?? '', partyPhone: inv.partyPhone ?? null, partyGstin: inv.partyGstin ?? null,
     partyAddress: addrText(inv.partyAddress) || dd['customer_address'] || null,
+    partyGstinAddress: dd['gstin_address'] || null,
     vehicleNo: dd['vehicle_no'] ?? null, vehicleMake: dd['vehicle_make'] ?? null,
     poNo: dd['po_no'] ?? null, poDate: dd['po_date'] ?? null, odometer: dd['odometer'] ?? null, fittedBy: dd['fitted_by'] ?? null,
     lines: items.map((it) => {

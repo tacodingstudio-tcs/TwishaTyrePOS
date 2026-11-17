@@ -166,7 +166,7 @@ export function drawShaktiBill(doc: PDFKit.PDFDocument, b: InvoicePdfData, biz: 
     sums.push(['Round Off', money(b.roundOff)])
   } else if (b.discountTotal > 0) sums.push(['Discount', money(b.discountTotal)])
   const after: Array<[string, string]> = []
-  if (b.paymentMode && !b.isDocument) after.push(['Paid by', b.paymentMode])
+  const paidBy = b.paymentMode && !b.isDocument ? b.paymentMode : ''      // printed on the Note line, so it never makes the totals box taller
   if (b.exchangeValue > 0 && !b.isDocument) after.push([`Old tyre exchange${b.exchangeQty ? ` (${b.exchangeQty})` : ''}`, `- ${money(b.exchangeValue)}`])
   const received = Math.max(0, b.paidAmt - b.exchangeValue)
   const balance = Math.max(0, b.grandTotal - b.paidAmt)
@@ -242,6 +242,8 @@ export function drawShaktiBill(doc: PDFKit.PDFDocument, b: InvoicePdfData, biz: 
       ['GST.NO', gst ? (b.partyGstin ?? '') : ''], ['Customer Name:', b.partyName || 'Walk-in customer'],
       ['Mobile Number', b.partyPhone ?? ''], ['Address', b.partyAddress ?? ''], ['Vehicle Number:', b.vehicleNo ?? ''],
     ]
+    // only when the shop typed a GSTIN address: one extra line under GST.NO, so bills without it look exactly as before
+    if (b.partyGstinAddress) rows.splice(5, 0, ['GSTIN Address', b.partyGstinAddress])
     const rh = 15
     const h = 8 + rows.length * rh + 4
     doc.rect(custX, top, R - custX, h).fill(GREY)
@@ -389,7 +391,8 @@ export function drawShaktiBill(doc: PDFKit.PDFDocument, b: InvoicePdfData, biz: 
   const afterH = after.length * 15 + (after.length ? 4 : 0)
   const gtTop = fBottom - 32 - afterH                                // the Grand Total band and the Note strip share this line
   hline(L, R, gtTop, 0.8)
-  put(`Note :${note ? ` ${note}` : ''}`, L + 8, gtTop + 9, splitX - L - 16, { size: 11 })
+  put(`Note :${note ? ` ${note}` : ''}`, L + 8, gtTop + 9, splitX - L - 16 - (paidBy ? 150 : 0), { size: 11 })
+  if (paidBy) put(`Paid by: ${paidBy}`, L + 8, gtTop + 9, splitX - L - 16, { size: 11, bold: true, align: 'right' })
   if (gst) {
     doc.rect(splitX, fTop, R - splitX, 24).fill(GREY)
     put('Sub total', splitX + 10, fTop + 5, 90, { bold: true, size: 12 })

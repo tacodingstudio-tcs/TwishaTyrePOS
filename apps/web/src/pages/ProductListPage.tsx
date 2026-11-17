@@ -1071,7 +1071,12 @@ function AddProductModal({
 
   async function handleSubmit() {
     if (formError) return
-    const product = await createProduct.mutateAsync({
+    let product: any
+    // the server may ask "this tyre is already in your list — add anyway?" / "buying price is above the selling price — save anyway?":
+    // each question is put to the owner once, and the save is repeated with that answer
+    const answers: Record<string, boolean> = {}
+    for (let attempt = 0; attempt < 3; attempt++) {
+    try { product = await createProduct.mutateAsync({ ...answers,
       name:          form.name,
       salePrice:     Number(form.salePrice),
       purchasePrice: form.purchasePrice ? Number(form.purchasePrice) : undefined,
@@ -1085,7 +1090,16 @@ function AddProductModal({
       brandId:       form.brandId || undefined,
       isConsumable:  form.isConsumable,
       domainAttrs:   Object.keys(domainAttrs).length ? domainAttrs : undefined,
-    })
+    }); break } catch (e) {
+      const d = (e as any)?.response?.data
+      if (d?.code === 'DUPLICATE_TYRE' || d?.code === 'BELOW_COST') {
+        if (!window.confirm(d.error)) return                // "No": nothing is saved and the form stays open
+        answers[d.code === 'DUPLICATE_TYRE' ? 'allowDuplicate' : 'confirmBelowCost'] = true
+        continue
+      }
+      return                                                // the hook already showed the reason; keep the form open so nothing typed is lost
+    }
+    }
     if (imageFile && product?.id) {
       const base64 = await new Promise<string>((resolve) => {
         const reader = new FileReader()

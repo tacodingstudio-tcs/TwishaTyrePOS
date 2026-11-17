@@ -24,10 +24,14 @@ describe('Client edge cases', () => {
   }, 60_000)
 
   describe('bill date', () => {
-    test('a date in the future, or more than a year back, is refused with a plain message (a typo would land the bill in the wrong GST month)', async () => {
-      for (const [d, re] of [[ymd(1), /in the future/], ['2099-01-01', /in the future/], ['2016-02-27', /more than a year ago/], [ymd(-400), /more than a year ago/]] as const) {
+    test('a date in the future is refused with a plain message; earlier years are allowed (the shop keys in old bills)', async () => {
+      for (const d of [ymd(1), '2099-01-01']) {
         const r = await sale({ customer: { name: 'Date Check' }, date: d, items: [{ productId: tyre.id, qty: 1 }], payments: cash(5900) })
-        expect([d, r.status]).toEqual([d, 422]); expect(JSON.stringify(r.data)).toMatch(re)
+        expect([d, r.status]).toEqual([d, 422]); expect(JSON.stringify(r.data)).toMatch(/in the future/)
+      }
+      for (const d of [ymd(-400), '2024-02-27']) {
+        const r = await sale({ customer: { name: 'Old Bill' }, date: d, items: [{ productId: tyre.id, qty: 1 }], payments: cash(5900) })
+        expect([d, r.status]).toEqual([d, 201])
       }
     })
     test('today and yesterday are fine; a date that does not exist is a clear 422, never a crash', async () => {

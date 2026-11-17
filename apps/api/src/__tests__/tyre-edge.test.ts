@@ -641,8 +641,8 @@ describe('Tyre edge cases', () => {
       const d = (await owner.api.get('/api/tyre/dead-stock', { params: { days: 90 } })).data
       const row = d.data.find((x: any) => x.id === p.id)
       expect(row).toBeTruthy()
-      expect(row.stock).toBe(9)
-      expect(row.stockValue).toBe(9 * 700)
+      expect(row.stock).toBe(10)                                    // an old bill keyed in later leaves today's stock alone
+      expect(row.stockValue).toBe(10 * 700)
       expect(row.idleDays).toBeGreaterThanOrEqual(199)
       expect(row.neverSold).toBe(false)
       expect((await owner.api.get('/api/tyre/dead-stock', { params: { days: 365 } })).data.data.some((x: any) => x.id === p.id)).toBe(false)

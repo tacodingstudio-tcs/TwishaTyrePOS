@@ -107,7 +107,7 @@ export async function buildWorkbook(ctx: Ctx, from: string, to: string, only?: S
     SELECT COUNT(*)::int AS n, COALESCE(SUM(i."taxableAmt"), 0)::float AS taxable, COALESCE(SUM(i."cgstTotal" + i."sgstTotal" + i."igstTotal"), 0)::float AS tax
       FROM ${I} i WHERE ${live} AND i."txnType" = 'purchase_invoice'`, ctx.branchId, from, to)) ?? {}
   const rcv = (await q1<any>(ctx, `
-    SELECT COALESCE(SUM(amount), 0)::float AS s FROM ${tbl(S, 'payments')} WHERE "branchId" = $1::uuid AND status = 'active' AND "paymentDate" BETWEEN $2::date AND $3::date`, ctx.branchId, from, to))?.s ?? 0
+    SELECT COALESCE(SUM(amount), 0)::float AS s FROM ${tbl(S, 'payments')} WHERE "branchId" = $1::uuid AND status = 'active' AND method <> 'discount' AND "paymentDate" BETWEEN $2::date AND $3::date`, ctx.branchId, from, to))?.s ?? 0
   const exp = (await q1<any>(ctx, `
     SELECT COALESCE(SUM(amount), 0)::float AS s FROM ${tbl(S, 'expenses')} WHERE "branchId" = $1::uuid AND date BETWEEN $2::date AND $3::date`, ctx.branchId, from, to))?.s ?? 0
 
@@ -265,7 +265,7 @@ export async function buildWorkbook(ctx: Ctx, from: string, to: string, only?: S
     ], paged(`
       SELECT to_char(pm."paymentDate", 'YYYY-MM-DD') AS date, COALESCE(p.name, 'Walk-in') AS customer, pm.method, pm.amount::float AS amount, COALESCE(pm."refNo", '') AS ref
         FROM ${tbl(S, 'payments')} pm LEFT JOIN ${P} p ON p.id = pm."partyId"
-       WHERE pm."branchId" = $1::uuid AND pm.status = 'active' AND pm."paymentDate" BETWEEN $2::date AND $3::date ORDER BY pm."paymentDate", pm."createdAt", pm.id`, ctx.branchId, from, to))
+       WHERE pm."branchId" = $1::uuid AND pm.status = 'active' AND pm.method <> 'discount' AND pm."paymentDate" BETWEEN $2::date AND $3::date ORDER BY pm."paymentDate", pm."createdAt", pm.id`, ctx.branchId, from, to))
 
     // ── customers who still owe money (as of today) ────────────────────────────────────────────────────────────────
     if (want('receivables')) await streamSheet(wb, 'Receivables', `Customers who owe money — as on ${todayStr()} — ${header.name}`, [

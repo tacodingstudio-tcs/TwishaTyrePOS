@@ -602,6 +602,8 @@ export const tyreApi = {
   correctSale: (invoiceId: string, data: unknown, idempotencyKey?: string) =>
     api.post(`/tyre/sales/${invoiceId}/correct`, data, idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined).then((r) => r.data),
   /** fix words on a bill (vehicle, make, km, notes, a walk-in customer's name) — never money or stock */
+  /** the customer pays less than the balance and the shop lets the rest go: balance cleared, the amount booked as the expense "Discount allowed" */
+  settleWithDiscount: (invoiceId: string, data: { amount?: number; percent?: number; reason?: string }) => api.post('/payments/settle-discount', { invoiceId, ...data }).then((r) => r.data),
   editSaleDetails: (invoiceId: string, data: unknown) => api.patch(`/tyre/sales/${invoiceId}/details`, data).then((r) => r.data),
 
   // Vehicles + reminders

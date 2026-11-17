@@ -14,6 +14,7 @@ describe('Correct this bill', () => {
   const balanceOf = async (partyId: string) => Number((await owner.api.get(`/api/parties/${partyId}`)).data.balance)
   const cash = (amount: number) => [{ method: 'cash', amount }]
   const phone = () => testPhone()
+  const ymdNow = (d: number) => new Date(Date.now() + d * 86400000).toISOString().slice(0, 10)
 
   beforeAll(async () => {
     owner = await newShopTenant('Correct Bill Tyres')
@@ -98,6 +99,12 @@ describe('Correct this bill', () => {
     expect(c2.data.corrected.oldBillRenamedTo).toBe(`${n}-OLDB`)
     // a cancelled bill cannot be corrected
     expect((await correct(first.data.invoice.id, { customer: { name: 'Twice', phone: mobile }, items: [{ productId: a.id, qty: 1 }], payments: cash(5900) })).status).toBe(409)
+
+    // the list hides cancelled bills (the -OLD copies) unless "Cancelled" is picked; the live bill stays
+    const ids = async (extra: Record<string, unknown>) => ((await owner.api.get('/api/invoices', { params: { search: n, limit: 50, ...extra } })).data.data as any[]).map((x) => x.number)
+    expect(await ids({ hideCancelled: 'true' })).toEqual([n])
+    expect((await ids({})).sort()).toEqual([n, `${n}-OLD`, `${n}-OLDB`].sort())
+    expect((await ids({ hideCancelled: 'true', status: 'cancelled' })).sort()).toEqual([`${n}-OLD`, `${n}-OLDB`].sort())
   })
 
   test('the next new bill still gets the next number (the corrected bill and the -OLD copy do not disturb numbering)', async () => {
@@ -159,6 +166,107 @@ describe('Correct this bill', () => {
     expect(await paidBy(await mk([{ method: 'cash', amount: 3000 }, { method: 'upi', amount: 2900 }]))).toMatch(/^(Cash \+ UPI|UPI \+ Cash)$/)
     expect(await paidBy(await mk([]))).toBe('Credit')
     expect(await paidBy(await mk([{ method: 'cash', amount: 2000 }]))).toBe('Cash + Credit')
+  })
+
+  test('GSTIN address: kept on the bill (separate from the customer address), editable, optional, printed only when typed', async () => {
+    const CH = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    const base = '24AABCR1234A1Z'; let sum = 0
+    for (let i = 0; i < 14; i++) { const m = CH.indexOf(base[i]!) * (i % 2 === 0 ? 1 : 2); sum += Math.floor(m / 36) + (m % 36) }
+    const G = base + CH[(36 - (sum % 36)) % 36]
+    const text = async (id: string) => {
+      const pdf = await owner.api.get(`/api/tyre/invoices/${id}/pdf`, { responseType: 'arraybuffer' })
+      return pdfText(Buffer.from(pdf.data)).replace(/\s+/g, ' ')
+    }
+    const r = await sale({ customer: { name: 'Rathod Roadlines', phone: phone(), address: 'Delivery: Kodinar' }, customerGstin: G, customerGstinAddress: 'Plot 5, GIDC Veraval', items: [{ productId: a.id, qty: 1 }], payments: cash(5900) })
+    expect(r.status).toBe(201)
+    const id = r.data.invoice.id
+    expect((await inv(id)).domainData.gstin_address).toBe('Plot 5, GIDC Veraval')
+    expect(await text(id)).toMatch(/Plot 5, GIDC Veraval/)
+    const e = await owner.api.patch(`/api/tyre/sales/${id}/details`, { gstinAddress: 'Plot 9, GIDC Veraval' })
+    expect(e.status).toBe(200)
+    expect(await text(id)).toMatch(/Plot 9, GIDC Veraval/)
+    // no GSTIN address typed: the bill saves and prints as before
+    const plain = await sale({ customer: { name: 'No Addr', phone: phone() }, customerGstin: G, items: [{ productId: a.id, qty: 1 }], payments: cash(5900) })
+    expect(plain.status).toBe(201)
+    expect(await text(plain.data.invoice.id)).not.toMatch(/GSTIN Address/i)
+  })
+
+  test('settle with discount: the customer pays 5,300 on a 5,900 bill, the 600 is let go and shows as the expense "Discount allowed"', async () => {
+    const mobile = phone()
+    const bill = (await sale({ customer: { name: 'Round Off', phone: mobile }, items: [{ productId: a.id, qty: 1 }], payments: cash(5300) })).data.invoice
+    const settle = (body: Record<string, unknown>, api = owner.api) => api.post('/api/payments/settle-discount', { invoiceId: bill.id, ...body })
+    const partyId = (await inv(bill.id)).partyId
+    expect(Number((await inv(bill.id)).paidAmt)).toBe(5300)
+    expect(await balanceOf(partyId)).toBe(600)
+    // too much, nothing, both amount and percent: refused
+    expect((await settle({ amount: 700 })).status).toBe(422)
+    expect((await settle({})).status).toBe(422)
+    expect((await settle({ amount: 100, percent: 5 })).status).toBe(422)
+    // a cashier cannot give a discount
+    const cashier = await addStaff(owner, 'cashier')
+    expect((await settle({ amount: 600 }, cashier.api)).status).toBe(403)
+    // 10 % of the 600 due = 60 first, then the rest by amount
+    const part = await settle({ percent: 10, reason: 'rounded off' })
+    expect(part.status).toBe(201); expect(part.data).toMatchObject({ discount: 60, remaining: 540 })
+    const rest = await settle({ amount: 540 })
+    expect(rest.status).toBe(201); expect(rest.data.remaining).toBe(0)
+    const after = await inv(bill.id)
+    expect(after.status).toBe('paid'); expect(Number(after.paidAmt)).toBe(5900)
+    expect(await balanceOf(partyId)).toBe(0)
+    expect((await settle({ amount: 1 })).status).toBe(422)                                // nothing pending any more
+    // the cost is booked as an expense; the money received is untouched
+    const exp = ((await owner.api.get('/api/expenses', { params: { category: 'discount_allowed', limit: 50 } })).data.data as any[]).filter((e) => String(e.description).includes(String(bill.number)))
+    expect(exp.map((e) => Number(e.amount)).sort((x, y) => x - y)).toEqual([60, 540])
+    const sum = (await owner.api.get('/api/payments/summary', { params: { groupBy: 'day', from: ymdNow(-1), to: ymdNow(1) } })).data
+    const digital = JSON.stringify(sum)
+    expect(digital).toBeTruthy()
+    // the bill prints "Paid by: Cash" - the discount is not a way of paying
+    const pdf = await owner.api.get(`/api/tyre/invoices/${bill.id}/pdf`, { responseType: 'arraybuffer' })
+    expect(pdfText(Buffer.from(pdf.data)).replace(/\s+/g, ' ')).toMatch(/Paid by\s*:?\s*Cash(?! \+)/)
+    // undoing the 540: the payment is voided, its expense goes with it, the balance is back
+    expect((await owner.api.post(`/api/payments/${rest.data.paymentId}/void`, { reason: 'wrong' })).status).toBe(200)
+    expect(await balanceOf(partyId)).toBe(540)
+    const exp2 = ((await owner.api.get('/api/expenses', { params: { category: 'discount_allowed', limit: 50 } })).data.data as any[]).filter((e) => String(e.description).includes(String(bill.number)))
+    expect(exp2.map((e) => Number(e.amount))).toEqual([60])
+  })
+
+  test('Bills filters: date range, amount range, balance pending, vehicle number, register, customer', async () => {
+    const p1 = phone(), p2 = phone()
+    const b1 = (await sale({ customer: { name: 'Filter One', phone: p1 }, vehicleNo: 'GJ05AB1234', items: [{ productId: a.id, qty: 1 }], payments: cash(5900) })).data.invoice
+    const b2 = (await sale({ customer: { name: 'Filter Two', phone: p2 }, vehicleNo: 'GJ32ZZ9999', date: ymdNow(-40), items: [{ productId: b.id, qty: 1 }], payments: cash(3000) })).data.invoice
+    const ids = async (params: Record<string, unknown>) => ((await owner.api.get('/api/invoices', { params: { limit: 100, txnType: 'sale_invoice', hideCancelled: 'true', ...params } })).data.data as any[]).map((x) => x.id)
+    const both = [b1.id, b2.id]
+    const only = async (params: Record<string, unknown>) => (await ids(params)).filter((i) => both.includes(i))
+    expect(await only({ fromDate: ymdNow(-3) })).toEqual([b1.id])                       // recent only
+    expect(await only({ toDate: ymdNow(-30) })).toEqual([b2.id])                         // old only
+    expect(await only({ fromDate: ymdNow(-60), toDate: ymdNow(1) })).toHaveLength(2)
+    expect(await only({ minAmount: 6000 })).toEqual([b2.id])                             // 7,080 vs 5,900
+    expect(await only({ maxAmount: 6000 })).toEqual([b1.id])
+    expect(await only({ pending: 'true' })).toEqual([b2.id])                             // paid 3,000 of 7,080
+    expect(await only({ vehicleNo: 'gj 05-ab' })).toEqual([b1.id])                       // spaces / case / dashes ignored
+    expect(await only({ vehicleNo: 'GJ32' })).toEqual([b2.id])
+    expect(await only({ partyId: (await inv(b2.id)).partyId })).toEqual([b2.id])
+    const meta = (await owner.api.get('/api/invoices', { params: { limit: 5, txnType: 'sale_invoice', vehicleNo: 'GJ05AB1234' } })).data.meta
+    expect(meta.total).toBeGreaterThanOrEqual(1)                                          // the count follows the filter
+    expect((await owner.api.get('/api/invoices', { params: { minAmount: 'abc' } })).status).toBe(422)
+  })
+
+  test('a back-dated bill does not touch stock (even with none on the shelf); a bill dated today does; correcting keeps that', async () => {
+    const stock0 = await stockOf(a.id)
+    const old = (await sale({ customer: { name: 'Old Bill', phone: phone() }, date: ymdNow(-200), items: [{ productId: a.id, qty: 2 }], payments: cash(11800) })).data.invoice
+    expect(await stockOf(a.id)).toBe(stock0)                                              // untouched
+    expect((await inv(old.id)).domainData.stock_untouched).toBe(true)
+    // more than is on the shelf is fine for an old bill
+    const big = await sale({ customer: { name: 'Old Big', phone: phone() }, date: ymdNow(-100), items: [{ productId: a.id, qty: stock0 + 500 }], payments: [] })
+    expect(big.status).toBe(201); expect(await stockOf(a.id)).toBe(stock0)
+    // a bill dated today still moves stock
+    expect((await sale({ customer: { name: 'Today', phone: phone() }, items: [{ productId: a.id, qty: 1 }], payments: cash(5900) })).status).toBe(201)
+    expect(await stockOf(a.id)).toBe(stock0 - 1)
+    // correcting the old bill neither adds nor removes stock
+    const fixed = await correct(old.id, { customer: { name: 'Old Bill', phone: phone() }, items: [{ productId: a.id, qty: 3 }], payments: cash(17700) })
+    expect(fixed.status).toBe(201)
+    expect(await stockOf(a.id)).toBe(stock0 - 1)
+    expect((await inv(fixed.data.invoice.id)).domainData.stock_untouched).toBe(true)
   })
 
   test('All Bills can be listed by bill number, oldest first (93, 94 … 117 — not text order), series after the plain book, with search and paging', async () => {

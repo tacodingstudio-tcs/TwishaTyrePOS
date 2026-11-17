@@ -5,7 +5,8 @@
 //
 // One row = one item. Rows that match an existing item (same SKU, else same name) are UPDATED
 // (prices, reorder level) and the Stock column is ADDED to what is on the shelf; new rows are
-// created with that stock as opening stock. dryRun returns the same report without saving, so the
+// created with that stock as opening stock. A tyre that is ALREADY in the list is updated, but its stock is only added when the
+// request says addToExisting: true (so loading the same sheet twice cannot double the shelf). dryRun returns the same report without saving, so the
 // screen can show a preview before anything changes.
 
 import type { FastifyPluginAsync } from 'fastify'
@@ -42,6 +43,8 @@ const Row = z.object({
 const Body = z.object({
   rows:   z.array(Row).min(1).max(500),
   dryRun: z.boolean().default(false),
+  /** false (default): a tyre already in the list gets its prices updated but NO stock - running the same sheet twice must not double the shelf */
+  addToExisting: z.boolean().default(false),
 })
 
 // ── AI scan of a supplier bill ──────────────────────────────────────────────────
@@ -114,7 +117,7 @@ export const tyreProductImportRoutes: FastifyPluginAsync = async (app) => {
     const P = tbl(req.schemaName, 'products')
 
     const results: Array<{
-      row: number; name: string; action: 'create' | 'update' | 'error'; stockAdded: number; error?: string; productId?: string
+      row: number; name: string; action: 'create' | 'update' | 'error'; stockAdded: number; stockSkipped?: number; error?: string; productId?: string
     }> = []
     const seen = new Set<string>()
 
@@ -156,9 +159,10 @@ export const tyreProductImportRoutes: FastifyPluginAsync = async (app) => {
             if (r.mrp !== undefined) patch['mrp'] = r.mrp
             if (r.reorderLevel !== undefined) patch['lowStockQty'] = r.reorderLevel
             if (Object.keys(patch).length) await updateProduct(existing.id, patch as any, ctx as any)
-            if (stock > 0) await adjustStock({ productId: existing.id, qty: stock, reason: 'Stock received', notes: 'Excel import' }, ctx as any)
+            if (stock > 0 && body.addToExisting) await adjustStock({ productId: existing.id, qty: stock, reason: 'Stock received', notes: 'Excel import' }, ctx as any)
           }
-          results.push({ row: i + 1, name: existing.name, action: 'update', stockAdded: stock, productId: existing.id })
+          const added = body.addToExisting ? stock : 0
+          results.push({ row: i + 1, name: existing.name, action: 'update', stockAdded: added, ...(stock > added ? { stockSkipped: stock - added } : {}), productId: existing.id })
           continue
         }
 
@@ -174,7 +178,7 @@ export const tyreProductImportRoutes: FastifyPluginAsync = async (app) => {
           const created = await createProduct({
             itemType: 'product', name, sku, unit: 'pcs', trackStock: true, gstRate: gst, gstExempt: false,
             hsnSacCode: r.hsn || defaultHsn(r.kind, r.vehicleType), salePrice: r.salePrice, purchasePrice: r.purchasePrice, mrp: r.mrp,
-            lowStockQty: r.reorderLevel ?? 0, openingStock: stock > 0 ? stock : undefined,
+            lowStockQty: r.reorderLevel ?? 0, openingStock: stock > 0 ? stock : undefined, allowDuplicate: true,
             openingRate: r.purchasePrice, categoryId: cat?.id, domainAttrs: attrs,
           } as any, ctx as any)
           results.push({ row: i + 1, name, action: 'create', stockAdded: stock, productId: created.id })
@@ -191,6 +195,7 @@ export const tyreProductImportRoutes: FastifyPluginAsync = async (app) => {
       dryRun: body.dryRun,
       created: count('create'), updated: count('update'), failed: count('error'),
       stockAdded: results.filter((x) => x.action !== 'error').reduce((s, x) => s + x.stockAdded, 0),
+      stockSkipped: results.reduce((s, x) => s + (x.stockSkipped ?? 0), 0),
       rows: results,
     }
   })

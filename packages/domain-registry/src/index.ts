@@ -102,6 +102,10 @@ const TyreInvoiceData = z.object({
   /** a customer typed by name with no mobile number: no customer record is made, the bill keeps the name */
   customer_name:       z.string().max(120).optional(),
   customer_address:    z.string().max(300).optional(),
+  /** the address registered with the customer's GSTIN (separate from the delivery / customer address) */
+  gstin_address:       z.string().max(300).optional(),
+  /** an old (back-dated) bill keyed in from the paper book: it never moved today's stock, and correcting it does not either */
+  stock_untouched:     z.boolean().optional(),
   vehicle_type:        z.enum(TYRE_VEHICLE_TYPES).optional(),
   customer_vehicle_id: z.string().uuid().optional(),
   odometer:            z.number().int().nonnegative().optional(),
@@ -263,6 +267,7 @@ const UNIVERSAL: ExpenseCategory[] = [
   { code: 'staff',        label: 'Staff Salary',       icon: '👤', affectsStock: false },
   { code: 'staff_advance', label: 'Staff Advances',     icon: '💸', affectsStock: false },
   { code: 'maintenance',  label: 'Maintenance',        icon: '🔧', affectsStock: false },
+  { code: 'discount_allowed', label: 'Discount allowed (bill settled for less)', icon: '🏷️', affectsStock: false },
   { code: 'misc',         label: 'Miscellaneous',      icon: '📎', affectsStock: false },
 ]
 
@@ -346,10 +351,11 @@ export function normalizeTyreSize(raw: string | null | undefined): string {
   if (m7) return `${m7[1]}/${m7[2]}R${m7[3]}`
   s = s.replace(/[\s-]+/g, ' ').replace(/\s*\/\s*/g, '/').trim()
   // "205 55 16" → "205/55R16"
-  const m3 = s.match(/^(\d{2,3}) (\d{2}) R?(\d{2})$/)
+  const m3 = s.match(/^(\d{2,3}) (\d{2,3}) R?(\d{2})$/)
   if (m3) return `${m3[1]}/${m3[2]}R${m3[3]}`
   // "205/55 16" / "205/55 R16" / "205/55R16" / "90/90 17"
-  const mw = s.match(/^(\d{2,3})\/(\d{2}) ?R?(\d{2})$/)
+  // (a 3-digit profile is normal on bikes: 80/100-17, 90/100-10, 100/100-18, 110/100-17)
+  const mw = s.match(/^(\d{2,3})\/(\d{2,3}) ?R?(\d{2})$/)
   if (mw) return `${mw[1]}/${mw[2]}R${mw[3]}`
   // no profile: "155 R13" / "155/R13" / "165-14" (older and light-commercial sizes) → "155R13"
   const mnp = s.match(/^(\d{3})(?:\/| ?)R(\d{2})$/)

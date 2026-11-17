@@ -20,7 +20,7 @@
 
 import { Prisma } from '@billing/db'
 import type { PrismaClient } from '@billing/db'
-import { DOMAIN_REGISTRY, validateProductAttrs, tyreCategorySlug, defaultHsn, isRecognisedTyreSize, type DomainType } from '@billing/domain-registry'
+import { DOMAIN_REGISTRY, validateProductAttrs, tyreCategorySlug, defaultHsn, isRecognisedTyreSize, normalizeTyreSize, type DomainType } from '@billing/domain-registry'
 import { z } from 'zod'
 import { optionalHsn } from '../lib/validators.js'
 import { ai, parseAIJson } from '../lib/ai-provider.js'
@@ -116,18 +116,22 @@ export const CreateProductSchema = z.object({
   gstRate:      z.number().min(0).max(100).default(0),
   gstExempt:    z.boolean().default(false),
   unit:         z.string().default('pcs'),
-  purchasePrice:z.number().nonnegative().optional(),
-  salePrice:    z.number().nonnegative().default(0),
-  mrp:          z.number().nonnegative().optional(),
+  // (the limits sit inside the database columns - Decimal(12,2) money, Decimal(10,3) quantities - so a typo is a clear message, not a server error)
+  purchasePrice:z.number().nonnegative().max(1e8, 'The price is too large - check it').optional(),
+  salePrice:    z.number().nonnegative().max(1e8, 'The price is too large - check it').default(0),
+  mrp:          z.number().nonnegative().max(1e8, 'The price is too large - check it').optional(),
   trackStock:   z.boolean().default(true),
-  lowStockQty:  z.number().nonnegative().default(0),
+  lowStockQty:  z.number().nonnegative().max(1e6, 'The quantity is too large - check it').default(0),
   hasVariants:  z.boolean().optional(),
   // domainAttrs accepts the JSON object directly, OR individual domain fields
   // are provided at top level and get merged in by buildDomainAttrs().
   domainAttrs:  z.record(z.unknown()).default({}),
   // Opening stock (optional — creates first stock_ledger entry)
-  openingStock: z.number().nonnegative().optional(),
-  openingRate:  z.number().nonnegative().optional(),
+  /** the owner has seen "this tyre is already in your list" / "buying price is above the selling price" and chose to save anyway */
+  allowDuplicate:   z.boolean().optional(),
+  confirmBelowCost: z.boolean().optional(),
+  openingStock: z.number().nonnegative().max(1e6, 'The quantity is too large - check it').optional(),
+  openingRate:  z.number().nonnegative().max(1e8, 'The price is too large - check it').optional(),
 }).merge(domainFieldsSchema)
 
 export const UpdateProductSchema = CreateProductSchema.partial().omit({ openingStock: true, openingRate: true })
@@ -201,10 +205,51 @@ function assertTyreSize(domainType: string | undefined, attrs: Record<string, un
   }
 }
 
+/** Goods the shop sells for money: a price of 0 is a typo (services, scrap and charges may be free). */
+const PRICED_KINDS = ['tyre', 'tube', 'flap', 'alloy_wheel', 'valve', 'battery', 'accessory']
+const TWIN_KINDS = ['tyre', 'tube', 'flap', 'alloy_wheel']
+
+/**
+ * Tyre shop only. (1) A sale price of 0 is refused. (2) A buying price above the selling price asks "save anyway?" (409 BELOW_COST).
+ * (3) The same tyre twice (same brand + pattern + size, or the same name) asks "add again?" (409 DUPLICATE_TYRE): two list entries for
+ * one tyre split its stock and its sales, and nobody notices until the count is wrong.
+ */
+async function assertSanePricesAndNoTwin(input: CreateProductInput, attrs: Record<string, unknown>, ctx: RequestCtx) {
+  if (ctx.branchDomainType !== 'tyre' || (input as any).itemType === 'service') return
+  const kind = String(attrs['item_kind'] ?? 'tyre')
+  const fail = (statusCode: number, message: string, code?: string) => Object.assign(new Error(message), { statusCode, ...(code ? { code } : {}) })
+  const money = (n: number) => `Rs ${n.toLocaleString('en-IN')}`
+  if (PRICED_KINDS.includes(kind) && !(input.salePrice > 0)) throw fail(422, 'Enter the selling price - a price of 0 would give the goods away')
+  if (input.purchasePrice != null && input.purchasePrice > input.salePrice && PRICED_KINDS.includes(kind) && !input.confirmBelowCost) {
+    throw fail(409, `The buying price (${money(input.purchasePrice)}) is more than the selling price (${money(input.salePrice)}) - every sale would lose money. Save it anyway?`, 'BELOW_COST')
+  }
+  if (TWIN_KINDS.includes(kind) && !input.allowDuplicate) {
+    const pattern = String(attrs['pattern'] ?? '').trim().toLowerCase()
+    const want = normalizeTyreSize(String(attrs['size'] ?? ''))
+    const rows = await ctx.db.$queryRaw<Array<{ name: string; attrs: any }>>(Prisma.sql`
+      SELECT name, "domainAttrs" AS attrs FROM products
+      WHERE "isActive" = true AND "domainAttrs"->>'item_kind' = ${kind}
+        AND (lower(name) = lower(${input.name.trim()})
+             OR (${pattern !== '' && want !== ''} AND lower("domainAttrs"->>'pattern') = ${pattern}))
+      LIMIT 50`)
+    const twin = rows.find((r) => r.name.toLowerCase() === input.name.trim().toLowerCase()
+      || (pattern !== '' && want !== '' && normalizeTyreSize(String(r.attrs?.size ?? '')) === want
+          && String(r.attrs?.brand ?? '').trim().toLowerCase() === String(attrs['brand'] ?? '').trim().toLowerCase()))
+    if (twin) throw fail(409, `This tyre is already in your list as "${twin.name}". Add it again anyway? (Two entries split its stock and sales.)`, 'DUPLICATE_TYRE')
+  }
+}
+
 export async function createProduct(input: CreateProductInput, ctx: RequestCtx) {
   const mergedAttrs = buildDomainAttrs(input)
   const validatedAttrs = validateProductAttrs(ctx.branchDomainType, mergedAttrs)
   assertTyreSize(ctx.branchDomainType, validatedAttrs as Record<string, unknown>)
+  // a tyre, tube or wheel is counted in whole pieces (2.5 tyres on the shelf is a typo)
+  if (ctx.branchDomainType === 'tyre' && input.openingStock && !Number.isInteger(input.openingStock)
+      && ['tyre', 'tube', 'flap', 'alloy_wheel'].includes(String((validatedAttrs as Record<string, unknown>)['item_kind'] ?? 'tyre'))) {
+    throw Object.assign(new Error('Stock for a tyre is counted in whole pieces - enter 2 or 3, not 2.5'), { statusCode: 422 })
+  }
+
+  await assertSanePricesAndNoTwin(input, validatedAttrs as Record<string, unknown>, ctx)
 
   // Check for duplicate barcode within this tenant's schema
   if (input.barcode) {
@@ -296,6 +341,10 @@ export async function updateProduct(
     where: { id: productId },
   })
   if (!existing) throw Object.assign(new Error('Product not found'), { statusCode: 404 })
+  if (ctx.branchDomainType === 'tyre' && (input as any).salePrice !== undefined && !((input as any).salePrice > 0)
+      && existing.itemType !== 'service' && PRICED_KINDS.includes(String((existing.domainAttrs as any)?.item_kind ?? 'tyre'))) {
+    throw Object.assign(new Error('Enter the selling price - a price of 0 would give the goods away'), { statusCode: 422 })
+  }
 
   // Merge top-level domain fields + domainAttrs into existing JSON, then validate
   const incomingAttrs = buildDomainAttrs(input)

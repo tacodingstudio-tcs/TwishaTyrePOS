@@ -15,8 +15,10 @@ import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 
 // 'exchange' = allowance for an old tyre handed in against the bill; no cash arrives.
+// 'discount' = the shop let go of the last few rupees of a bill ("Settle with discount"): clears the balance, no money arrives,
+//              and the same amount is booked as the expense 'Discount allowed'.
 // 'tds' = tax deducted at source by the customer: settles part of a bill without any cash arriving
-const METHODS = ['cash', 'upi', 'card', 'cheque', 'bank_transfer', 'credit', 'tds', 'exchange'] as const
+const METHODS = ['cash', 'upi', 'card', 'cheque', 'bank_transfer', 'credit', 'tds', 'exchange', 'discount'] as const
 const TYPES   = ['receipt', 'advance', 'expense'] as const
 
 // Lock an invoice row with SELECT ... FOR UPDATE so that concurrent payment
@@ -244,9 +246,9 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
     }>>`
       SELECT
         TO_CHAR("paymentDate", 'YYYY-MM-DD')                       AS day,
-        SUM(amount::float)                                          AS total,
+        SUM(CASE WHEN method = 'discount' THEN 0 ELSE amount::float END) AS total,
         SUM(CASE WHEN method = 'cash' THEN amount::float ELSE 0 END) AS cash,
-        SUM(CASE WHEN method != 'cash' THEN amount::float ELSE 0 END) AS digital,
+        SUM(CASE WHEN method NOT IN ('cash', 'discount') THEN amount::float ELSE 0 END) AS digital,
         COUNT(*)::int                                               AS count
       FROM payments
       WHERE "branchId" = ${branchId}::uuid
@@ -402,6 +404,57 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
     return { ...payment, allocated, unallocated }
   })
 
+  // ── POST /settle-discount — settle a bill for less than its balance ─────────
+  // The customer pays 51,000 on a 51,600 bill and the shop lets the 600 go. The balance is cleared by a payment of method
+  // 'discount' (no money arrives) and the same amount is booked as the expense "Discount allowed" — so the books show a 600
+  // discount cost instead of a bill that stays pending for ever. Give the amount OR a percent of what is still due.
+  app.post('/settle-discount', async (req, reply) => {
+    if (req.role !== 'owner' && req.role !== 'manager')
+      return reply.status(403).send({ error: 'Only the owner or a manager can give a discount on a bill' })
+    const body = z.object({
+      invoiceId: z.string().uuid(),
+      amount:    z.number().positive().max(1e8).optional(),
+      percent:   z.number().positive().max(100).optional(),
+      reason:    z.string().trim().max(300).optional(),
+    }).refine((b) => (b.amount != null) !== (b.percent != null), 'Give either the discount amount or the percent')
+      .parse(req.body)
+    const branchId = req.branchId
+    const r2 = (n: number) => Math.round(n * 100) / 100
+
+    const out = await req.db.$transaction(async (tx) => {
+      const inv = await lockInvoice(tx, body.invoiceId, branchId)
+      const full = await tx.invoice.findFirst({ where: { id: inv.id }, select: { number: true, txnType: true, date: true } })
+      if (full?.txnType !== 'sale_invoice') throw Object.assign(new Error('A discount can be given on a sale bill only'), { statusCode: 422 })
+      if (inv.status === 'cancelled' || inv.status === 'draft') throw Object.assign(new Error('This bill is cancelled'), { statusCode: 409 })
+      const due = r2(inv.grand_total - inv.paid_amt)
+      if (due <= 0.5) throw Object.assign(new Error('Nothing is pending on this bill'), { statusCode: 422 })
+      const discount = body.amount != null ? r2(body.amount) : r2(due * body.percent! / 100)
+      if (discount <= 0) throw Object.assign(new Error('The discount is too small'), { statusCode: 422 })
+      if (discount > due + 0.01) throw Object.assign(new Error(`The discount (Rs ${discount}) is more than what is pending (Rs ${due})`), { statusCode: 422 })
+
+      const today = new Date()
+      const payment = await tx.payment.create({
+        data: {
+          branchId, partyId: inv.party_id, amount: discount, method: 'discount', type: 'receipt', paymentDate: today, status: 'active',
+          notes: `Discount on bill ${full.number}${body.reason ? ` - ${body.reason}` : ''}`, createdBy: req.userId,
+        },
+      })
+      await tx.paymentAllocation.create({ data: { paymentId: payment.id, invoiceId: inv.id, amount: discount } })
+      const newPaid = r2(inv.paid_amt + discount)
+      await tx.invoice.update({ where: { id: inv.id }, data: { paidAmt: newPaid, status: newPaid >= inv.grand_total - 0.01 ? 'paid' : 'partial' } })
+      if (inv.party_id) await tx.party.updateMany({ where: { id: inv.party_id, branchId }, data: { balance: { decrement: discount } } })
+      // the cost of the discount, for the profit and CA reports; referenceNo ties it to the payment so voiding one removes the other
+      await tx.expense.create({
+        data: {
+          branchId, date: today, category: 'discount_allowed', amount: discount, paymentMode: 'discount', partyId: inv.party_id,
+          description: `Discount on bill ${full.number}`, referenceNo: payment.id, notes: body.reason ?? null, createdBy: req.userId,
+        },
+      })
+      return { paymentId: payment.id, number: full.number, discount, due, remaining: r2(due - discount), percent: r2(discount / due * 100) }
+    })
+    return reply.status(201).send(out)
+  })
+
   // ── POST /:id/void — void a payment, reverse all invoice allocations ───────
   app.post('/:id/void', async (req, reply) => {
     if (req.role !== 'owner' && req.role !== 'manager')
@@ -473,6 +526,8 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
         where: { id },
         data:  { status: 'voided', voidedAt: new Date(), voidReason: body.reason },
       })
+      // a settle-with-discount payment booked an expense: take it back with the payment
+      await tx.expense.deleteMany({ where: { branchId, category: 'discount_allowed', referenceNo: id } })
     })
 
     return reply.send({ success: true, paymentId: id, reason: body.reason })

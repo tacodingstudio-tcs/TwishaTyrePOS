@@ -102,7 +102,7 @@ maybe('Shakti bill book replayed through the app', () => {
         res = await post(body)
       }
       if (res.status !== 201) { refused.push({ sheet, row, status: res.status, message: JSON.stringify(res.data).slice(0, 200) }); continue }
-      made.push({ sheet, row, id: res.data.invoice.id, number: String(res.data.invoice.number), expectTotal })
+      made.push({ sheet, row, id: res.data.invoice.id, number: String(res.data.invoice.number), expectTotal, billedDate: body.date } as any)
     }
   }
 
@@ -156,9 +156,12 @@ maybe('Shakti bill book replayed through the app', () => {
     expect(off).toEqual([])
   }, 300_000)
 
-  test('stock fell by exactly what the book sold', async () => {
+  test('stock fell by exactly what the book sold (an old-dated bill is keyed in from the book and leaves the current stock alone)', async () => {
     const sold = new Map<string, number>()
+    const todayIso = new Date().toISOString().slice(0, 10)
     for (const m of made) {
+      const billedOn = String((m as any).billedDate ?? m.row.date ?? '').slice(0, 10)
+      if (billedOn && billedOn < todayIso) continue            // back-dated: no stock movement
       const vt = m.sheet === 'CAR' ? 'car' : 'two_wheeler'
       const p = products.get(`${clean(m.row.brand).toUpperCase() || 'UNBRANDED'}|${sizeKey(m.row.desc)}|${vt}`)
       sold.set(p.id, (sold.get(p.id) ?? 0) + Number(m.row.qty))

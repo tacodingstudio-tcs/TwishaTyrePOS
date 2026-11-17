@@ -29,6 +29,8 @@ export interface Reversed {
   billSeries?: string
   partyId?: string
   paid: number
+  /** the old bill was a back-dated one that never moved stock: its replacement must not either */
+  stockUntouched?: boolean
 }
 
 /** `req.db` must already be the transaction client (see nestTx). */
@@ -115,5 +117,6 @@ export async function reverseBill(req: Ctx, invoiceId: string, why: string): Pro
   return {
     oldId: invoiceId, number: inv.number, renamedTo, date: ymd(inv.date),
     billSeries: dd['bill_series'] || undefined, partyId: inv.partyId ?? undefined, paid,
+    stockUntouched: dd['stock_untouched'] === true,
   }
 }
